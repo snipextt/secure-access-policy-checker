@@ -40,105 +40,82 @@
     s.textContent = `
 
       /* ================================================================== */
-      /* TESTER PANEL — two-column card                                      */
+      /* TESTER PANEL                                                       */
       /* ================================================================== */
       #psc-panel {
         background: var(--hbr-color-bg-card);
         backdrop-filter: var(--glass-blur);
         -webkit-backdrop-filter: var(--glass-blur);
-        border-bottom: 1px solid var(--hbr-color-border);
         display: flex;
         flex-direction: column;
       }
 
-      /* Panel title row */
       #psc-panel-title {
-        padding: 14px 18px 6px;
-        font-size: 17px;
-        font-weight: 600;
+        padding: 18px 20px 4px;
+        font-size: 15px;
+        font-weight: 700;
         color: var(--hbr-color-text-heading);
         letter-spacing: -0.01em;
       }
       #psc-panel-desc {
-        padding: 0 18px 12px;
+        padding: 0 20px 14px;
         font-size: 11.5px;
         color: var(--hbr-color-text-weak);
         line-height: 1.55;
         border-bottom: 1px solid var(--hbr-color-border);
       }
       #psc-panel-desc a { color: var(--hbr-color-accent); text-decoration: none; }
+      #psc-panel-desc a:hover { text-decoration: underline; }
 
-      /* Stacked body: Source/Destination row on top, results full-width below */
       #psc-panel-body {
         display: flex;
         flex-direction: column;
       }
 
-      /* Source + Destination side-by-side row, roughly equal width */
       #psc-form-row {
         display: flex;
         gap: 14px;
-        padding: 16px 18px 0;
+        padding: 16px 20px 0;
       }
       #psc-form-row .psc-panel-section {
         flex: 1 1 0;
         min-width: 0;
       }
 
-      /* Error line + Reset/Run Test — below the Source/Destination row,
-         still full width, above the results panel */
       #psc-form-footer {
-        padding: 10px 18px 14px;
+        padding: 12px 20px 16px;
         border-bottom: 1px solid var(--hbr-color-border);
       }
 
-      /* Source/Destination panel vertical rhythm.
-         ------------------------------------------------------------------
-         Previously .psc-panel-section used display:flex + gap:10px between
-         its DIRECT children — but the Application/Protocol/Category fields
-         are wrapped in an extra plain <div> (dropdownContainer, in
-         buildTesterPanel), so from the section's point of view that whole
-         trio counted as ONE flex child. The 10px gap applied once before
-         the wrapper, while the 3 field groups inside it had zero spacing
-         between each other — producing exactly the "SOURCE feels sparse,
-         DESTINATION feels cramped in spots" mismatch: Source's one field
-         got a full gap it didn't need, while three of Destination's five
-         fields got none.
-
-         Fix: don't use flex/gap for this at all — drive every gap with a
-         single-direction margin-top on .psc-field-group itself. Because
-         that rule targets the field-group element directly (not its
-         parent), it applies identically whether the field-group is a
-         direct child of the panel or nested inside the dropdown wrapper —
-         the wrapper becomes spacing-transparent. Nothing in this panel
-         sets margin-bottom, so gaps are never doubled by two adjoining
-         elements each contributing their own margin. */
+      /* Source / Destination cards */
       .psc-panel-section {
         border: 1px solid var(--hbr-color-border);
         border-radius: var(--hbr-radius-lg);
-        padding: 12px;
+        padding: 14px;
         background: var(--hbr-color-bg-subtle);
-        backdrop-filter: var(--glass-blur);
-        -webkit-backdrop-filter: var(--glass-blur);
+        box-shadow: var(--glass-shadow-sm);
+        transition: box-shadow 0.2s;
+      }
+      .psc-panel-section:hover {
         box-shadow: var(--glass-shadow);
       }
       .psc-panel-section-title {
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--hbr-color-text-heading);
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--hbr-color-accent);
         margin: 0;
         text-transform: uppercase;
-        letter-spacing: 0.04em;
+        letter-spacing: 0.06em;
         border-bottom: 1px solid var(--hbr-color-border);
-        padding-bottom: 6px;
+        padding-bottom: 8px;
       }
 
       .psc-field-group { margin: 0; }
-      .psc-field-group--first { margin-top: var(--hbr-space-lg); } /* title → first field group */
-      .psc-field-group:not(.psc-field-group--first) { margin-top: var(--hbr-space-md); } /* every subsequent field group */
+      .psc-field-group--first { margin-top: var(--hbr-space-lg); }
+      .psc-field-group:not(.psc-field-group--first) { margin-top: var(--hbr-space-md); }
 
       .psc-field-label {
-        font-size: 12px;
+        font-size: 11.5px;
         font-weight: 600;
         color: var(--hbr-color-text-heading);
         margin: 0 0 var(--hbr-space-xs) 0;
@@ -153,13 +130,10 @@
         display: block;
       }
 
-      /* Divider marking the Application/Protocol/Category dropdowns as
-         secondary refinements of the primary Destination IP/CIDR field —
-         see buildTesterPanel(). Functionality/matching weight unaffected. */
       .psc-refine-divider {
         margin-top: var(--hbr-space-md);
         padding-top: var(--hbr-space-sm);
-        border-top: 1px solid var(--hbr-color-border);
+        border-top: 1px dashed var(--hbr-color-border);
         font-size: 10px;
         font-weight: 600;
         text-transform: uppercase;
@@ -172,92 +146,89 @@
         letter-spacing: normal;
         font-style: italic;
       }
-      /* Slightly reduced label weight for the three refinement dropdowns
-         relative to the primary IP/CIDR field's bold label — reinforces
-         visual hierarchy without hiding or disabling anything; inputs
-         remain fully styled/usable. */
       #psc-refine-group .psc-field-label {
         font-weight: 500;
         color: var(--hbr-color-text-weak);
       }
 
+      /* Inputs */
       .psc-field-group input,
       .psc-field-group select {
         width: 100%;
-        padding: 6px 10px;
-        border: 1px solid var(--hbr-color-border);
+        padding: 7px 10px;
+        border: 1px solid rgba(0,0,0,0.12);
         border-radius: var(--hbr-radius-md);
         font-size: 12px;
         font-family: inherit;
         font-weight: 400;
         color: var(--hbr-color-text-body);
-        background: var(--hbr-color-bg-card);
+        background: #fff;
         outline: none;
-        transition: border-color 0.12s, background 0.12s;
+        transition: border-color 0.2s, box-shadow 0.2s;
       }
       .psc-field-group input:focus,
       .psc-field-group select:focus {
         border-color: var(--hbr-color-accent);
-        background: var(--hbr-color-bg-card);
-        box-shadow: 0 0 0 2px rgba(39,116,217,0.14);
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
       }
-      .psc-field-group input::placeholder { color: var(--hbr-color-text-weak); }
+      .psc-field-group input::placeholder { color: #9ca3af; }
 
-      /* Form actions row */
+      /* Form actions */
       #psc-form-actions {
         display: flex;
         align-items: center;
         justify-content: flex-end;
-        gap: 14px;
+        gap: 12px;
       }
       #psc-reset-btn {
         background: none;
         border: none;
-        color: var(--hbr-color-accent);
+        color: var(--hbr-color-text-weak);
         font-size: 12px;
-        font-weight: 600;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
+        font-weight: 500;
         cursor: pointer;
-        padding: 4px 0;
+        padding: 6px 10px;
         font-family: inherit;
-        transition: color 0.12s;
+        border-radius: var(--hbr-radius-md);
+        transition: color 0.15s, background 0.15s;
       }
-      #psc-reset-btn:hover { color: var(--hbr-color-accent-hover); }
+      #psc-reset-btn:hover { color: var(--hbr-color-text-heading); background: var(--hbr-color-bg-subtle); }
       #psc-run-btn {
-        background: var(--hbr-color-accent);
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
         color: #fff;
         border: none;
         border-radius: var(--hbr-radius-md);
-        padding: 7px 20px;
+        padding: 8px 22px;
         font-size: 12px;
         font-weight: 600;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
+        letter-spacing: 0.02em;
         cursor: pointer;
         font-family: inherit;
-        transition: background 0.12s;
+        transition: box-shadow 0.2s, transform 0.1s;
+        box-shadow: 0 1px 3px rgba(37, 99, 235, 0.3);
       }
-      #psc-run-btn:hover:not(:disabled) { background: var(--hbr-color-accent-hover); }
-      #psc-run-btn:disabled { background: #9BB9E8; cursor: not-allowed; }
+      #psc-run-btn:hover:not(:disabled) {
+        box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
+        transform: translateY(-1px);
+      }
+      #psc-run-btn:active:not(:disabled) { transform: translateY(0); }
+      #psc-run-btn:disabled { background: #93b4e8; box-shadow: none; cursor: not-allowed; }
 
       #psc-form-error {
-        font-size: 10.5px;
+        font-size: 11px;
         color: #dc2626;
-        min-height: 14px;
+        min-height: 16px;
         margin-bottom: 6px;
       }
 
-      /* BELOW — results panel, full width under the Source/Destination row */
+      /* Results area */
       #psc-result-col {
-        padding: 16px 18px;
+        padding: 18px 20px;
         display: flex;
         flex-direction: column;
         align-items: stretch;
         justify-content: flex-start;
       }
-
-      /* Placeholder state */
       #psc-result-placeholder {
         flex: 1;
         display: flex;
@@ -267,7 +238,7 @@
         font-size: 12.5px;
         font-style: italic;
         text-align: center;
-        padding: 20px;
+        padding: 24px;
         min-height: 160px;
       }
 
@@ -277,90 +248,82 @@
         border-radius: var(--hbr-radius-lg);
         overflow: hidden;
         font-size: 12px;
-        background: var(--hbr-color-bg-card);
-        backdrop-filter: var(--glass-blur);
-        -webkit-backdrop-filter: var(--glass-blur);
-        box-shadow: var(--glass-shadow);
+        background: #fff;
+        box-shadow: var(--glass-shadow-sm);
       }
       .psc-result-header {
         display: flex;
         align-items: center;
         gap: 8px;
-        padding: 9px 12px;
+        padding: 10px 14px;
         font-weight: 600;
         font-size: 12px;
-        border-bottom: 1px solid var(--hbr-color-border);
       }
-      .psc-result-allow { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
-      .psc-result-block { background: #fff1f2; color: #9f1239; border-color: #fecdd3; }
-      .psc-result-isolate { background: #f5f3ff; color: #5b21b6; border-color: #ddd6fe; } /* distinct purple — see audit, not yet seen live */
-      .psc-result-unknown { background: var(--hbr-color-bg-subtle); color: var(--hbr-color-text-weak); }
-      .psc-result-body { padding: 10px 12px; }
+      .psc-result-allow { background: #f0fdf4; color: #166534; border-bottom: 1px solid #bbf7d0; }
+      .psc-result-block { background: #fef2f2; color: #991b1b; border-bottom: 1px solid #fecaca; }
+      .psc-result-isolate { background: #f5f3ff; color: #5b21b6; border-bottom: 1px solid #ddd6fe; }
+      .psc-result-unknown { background: #f9fafb; color: var(--hbr-color-text-weak); border-bottom: 1px solid var(--hbr-color-border); }
+      .psc-result-body { padding: 12px 14px; }
       .psc-result-rule-name {
         font-weight: 600;
         color: var(--hbr-color-text-heading);
-        margin-bottom: 3px;
-        font-size: 12.5px;
+        margin-bottom: 4px;
+        font-size: 13px;
       }
       .psc-result-meta {
-        font-size: 10px;
+        font-size: 10.5px;
         color: var(--hbr-color-text-weak);
-        margin-bottom: 8px;
+        margin-bottom: 10px;
       }
       .psc-result-cond-title {
-        font-size: 11px;
-        font-weight: 600;
+        font-size: 10px;
+        font-weight: 700;
         color: var(--hbr-color-text-weak);
-        margin-bottom: 4px;
+        margin-bottom: 6px;
         text-transform: uppercase;
-        letter-spacing: 0.04em;
+        letter-spacing: 0.05em;
       }
       .psc-result-cond-list {
         list-style: none;
         display: flex;
         flex-direction: column;
-        gap: 3px;
+        gap: 4px;
       }
       .psc-result-cond-list li {
         font-size: 11px;
         color: var(--hbr-color-text-body);
         display: flex;
         align-items: flex-start;
-        gap: 5px;
+        gap: 6px;
         line-height: 1.45;
       }
       .psc-result-cond-list li::before {
-        content: "→";
-        color: var(--hbr-color-text-weak);
+        content: "\u2192";
+        color: var(--hbr-color-accent);
         flex-shrink: 0;
         margin-top: 1px;
+        font-weight: 600;
       }
 
-      /* Clean label:value field grid — replaces the arrow-bullet
-         "MATCHED BECAUSE" list for a structure closer to a resolved-name
-         detail panel (source/destination/identity/app as individual rows),
-         used by both the Test Policy result and the Rules tab's "What will
-         usually match" section. */
+      /* Field grid */
       .psc-result-fields {
         display: flex;
         flex-direction: column;
-        border: 1px solid var(--hbr-color-border);
+        border: 1px solid rgba(0,0,0,0.08);
         border-radius: var(--hbr-radius-md);
         overflow: hidden;
-        backdrop-filter: var(--glass-blur);
-        -webkit-backdrop-filter: var(--glass-blur);
       }
       .psc-result-field-row {
         display: grid;
         grid-template-columns: 108px 1fr;
         gap: 8px;
-        padding: 6px 10px;
+        padding: 7px 12px;
         font-size: 11px;
-        border-bottom: 1px solid var(--hbr-color-border);
-        background: var(--hbr-color-bg-card);
+        border-bottom: 1px solid rgba(0,0,0,0.05);
+        background: #fff;
       }
       .psc-result-field-row:last-child { border-bottom: none; }
-      .psc-result-field-row.psc-field-unconstrained { background: var(--hbr-color-bg-subtle); }
+      .psc-result-field-row.psc-field-unconstrained { background: #f9fafb; }
       .psc-result-field-label {
         color: var(--hbr-color-text-weak);
         font-weight: 600;
@@ -374,18 +337,15 @@
         word-break: break-word;
       }
       .psc-result-field-value.psc-field-any {
-        color: var(--hbr-color-text-weak);
+        color: #9ca3af;
         font-style: italic;
       }
 
       .psc-no-match-card {
         border: 1px solid var(--hbr-color-border);
         border-radius: var(--hbr-radius-lg);
-        padding: 12px;
-        background: var(--hbr-color-bg-subtle);
-        backdrop-filter: var(--glass-blur);
-        -webkit-backdrop-filter: var(--glass-blur);
-        box-shadow: var(--glass-shadow);
+        padding: 14px;
+        background: #f9fafb;
         font-size: 12px;
         color: var(--hbr-color-text-weak);
         display: flex;
@@ -393,70 +353,55 @@
         align-items: flex-start;
       }
 
-      /* Action badge — BLOCK/ALLOW colors (COLOR.allow/COLOR.block, applied
-         inline via JS) are semantic and intentionally NOT part of the
-         Cisco neutral/brand palette — left unchanged. */
+      /* Badges */
       .psc-badge-action {
         display: inline-flex;
         align-items: center;
-        padding: 2px 8px;
+        padding: 2px 10px;
         border-radius: var(--hbr-radius-pill);
         font-size: 10px;
-        font-weight: 600;
-        letter-spacing: 0.06em;
+        font-weight: 700;
+        letter-spacing: 0.04em;
         text-transform: uppercase;
         white-space: nowrap;
         flex-shrink: 0;
       }
-
-      /* Default-rule badge — distinguishes Cisco's built-in catch-all rules
-         (e.g. "All Internet access", "All private applications") from
-         user-created custom rules in the Rules tab list. */
       .psc-badge-default {
         display: inline-flex;
         align-items: center;
-        padding: 2px 8px;
+        padding: 2px 10px;
         border-radius: var(--hbr-radius-pill);
         font-size: 10px;
         font-weight: 600;
-        letter-spacing: 0.06em;
+        letter-spacing: 0.04em;
         text-transform: uppercase;
         white-space: nowrap;
         flex-shrink: 0;
-        background: var(--hbr-color-bg-subtle);
+        background: #f3f4f6;
         color: var(--hbr-color-text-weak);
-        border: 1px solid var(--hbr-color-border);
+        border: 1px solid rgba(0,0,0,0.06);
       }
-
-      /* Severity badge — critical/high/medium/low colors (COLOR object,
-         applied inline via JS) are semantic and intentionally NOT part of
-         the Cisco neutral/brand palette — left unchanged. */
       .psc-badge-sev {
         display: inline-flex;
         align-items: center;
-        padding: 1px 6px;
+        padding: 1px 7px;
         border-radius: var(--hbr-radius-pill);
         font-size: 10px;
-        font-weight: 600;
-        letter-spacing: 0.05em;
+        font-weight: 700;
+        letter-spacing: 0.03em;
         text-transform: uppercase;
         color: #fff;
         flex-shrink: 0;
         vertical-align: middle;
       }
-
-      /* Static finding-count badge on rule card headers (Rules tab) — colored
-         with the worst severity present, same COLOR source as the card's
-         severity dot. The "clean" variant reuses the existing pass/fail
-         green already used by .psc-good-item elsewhere in this file. */
       .psc-badge-findings {
         display: inline-flex;
         align-items: center;
-        padding: 2px 8px;
+        padding: 3px 10px;
         border-radius: var(--hbr-radius-pill);
         font-size: 10px;
-        font-weight: 600;
-        letter-spacing: 0.03em;
+        font-weight: 700;
+        letter-spacing: 0.02em;
         white-space: nowrap;
         flex-shrink: 0;
         color: #fff;
@@ -465,27 +410,28 @@
         background: #f0fdf4;
         color: #166534;
         border: 1px solid #bbf7d0;
+        font-weight: 600;
       }
 
       /* Highlight button */
       #psc-highlight-btn {
-        margin-top: 10px;
-        padding: 5px 12px;
+        margin-top: 12px;
+        padding: 6px 14px;
         font-size: 11px;
         font-weight: 600;
-        border: var(--hbr-border-width) solid var(--hbr-color-accent);
-        background: var(--hbr-color-bg-card);
+        border: 1.5px solid var(--hbr-color-accent);
+        background: var(--hbr-color-accent-light);
         color: var(--hbr-color-accent);
         border-radius: var(--hbr-radius-md);
         cursor: pointer;
         font-family: inherit;
-        transition: background 0.12s;
+        transition: background 0.15s;
         display: inline-block;
       }
-      #psc-highlight-btn:hover { background: var(--hbr-color-accent-light); }
+      #psc-highlight-btn:hover { background: #dbeafe; }
 
       /* ================================================================== */
-      /* AUDIT SECTIONS — below the tester panel                             */
+      /* AUDIT SECTIONS                                                     */
       /* ================================================================== */
       #psc-audit-root {
         display: flex;
@@ -502,98 +448,100 @@
         display: flex;
         align-items: center;
         gap: 8px;
-        padding: 10px 16px;
+        padding: 12px 20px;
         cursor: pointer;
         font-weight: 600;
         font-size: 12px;
         list-style: none;
         user-select: none;
         color: var(--hbr-color-text-heading);
-        transition: background 0.1s;
+        transition: background 0.15s;
       }
-      .psc-section summary:hover { background: var(--hbr-color-bg-subtle); }
+      .psc-section summary:hover { background: rgba(0,0,0,0.02); }
       .psc-section summary::-webkit-details-marker { display: none; }
       .psc-section .psc-chevron {
         margin-left: auto;
         font-size: 10px;
         color: var(--hbr-color-text-weak);
-        transition: transform 0.15s;
+        transition: transform 0.2s ease;
       }
       .psc-section[open] .psc-chevron { transform: rotate(180deg); }
       .psc-section-body {
-        padding: 10px 16px 14px;
+        padding: 8px 20px 16px;
         display: flex;
         flex-direction: column;
         gap: 6px;
-        border-top: 1px solid var(--hbr-color-border);
       }
       .psc-empty { color: var(--hbr-color-text-weak); font-style: italic; font-size: 11.5px; }
 
-      /* Good section items — pass/fail status color, not brand palette — left unchanged */
       .psc-good-item {
         display: flex;
         align-items: center;
         gap: 7px;
-        padding: 5px 8px;
+        padding: 6px 10px;
         border-radius: var(--hbr-radius-md);
         background: #f0fdf4;
         border: 1px solid #bbf7d0;
         font-size: 11.5px;
         color: #166534;
       }
-      /* Bad section — rule groups */
+
+      /* Rule groups */
       .psc-rule-group {
-        border: 1px solid var(--hbr-color-border);
+        border: 1px solid rgba(0,0,0,0.06);
         border-radius: var(--hbr-radius-lg);
         overflow: hidden;
-        margin-bottom: 2px;
-        background: var(--hbr-color-bg-card);
-        backdrop-filter: var(--glass-blur);
-        -webkit-backdrop-filter: var(--glass-blur);
+        margin-bottom: 4px;
+        background: #fff;
+        box-shadow: var(--glass-shadow-sm);
+        transition: box-shadow 0.2s;
+      }
+      .psc-rule-group:hover {
         box-shadow: var(--glass-shadow);
       }
       .psc-rule-group-header {
         display: flex;
         align-items: center;
-        gap: 6px;
-        padding: 7px 10px;
+        gap: 8px;
+        padding: 9px 12px;
         cursor: pointer;
         font-weight: 600;
-        font-size: 11.5px;
-        background: var(--hbr-color-bg-subtle);
+        font-size: 12px;
+        background: #f9fafb;
         list-style: none;
         user-select: none;
         border-bottom: 1px solid transparent;
+        transition: background 0.15s;
       }
-      .psc-rule-group[open] .psc-rule-group-header { border-bottom-color: var(--hbr-color-border); }
+      .psc-rule-group-header:hover { background: #f3f4f6; }
+      .psc-rule-group[open] .psc-rule-group-header { border-bottom-color: rgba(0,0,0,0.06); }
       .psc-rule-group-header::-webkit-details-marker { display: none; }
       .psc-rule-group-header .psc-chevron {
         margin-left: auto;
         font-size: 9px;
         color: var(--hbr-color-text-weak);
-        transition: transform 0.15s;
+        transition: transform 0.2s ease;
       }
       .psc-rule-group[open] .psc-rule-group-header .psc-chevron { transform: rotate(180deg); }
-      .psc-check-list { padding: 6px 10px; display: flex; flex-direction: column; gap: 4px; }
+      .psc-check-list { padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; }
       .psc-check-item {
         border-left: 3px solid;
-        padding: 5px 8px;
-        border-radius: var(--hbr-radius-sm);
+        padding: 6px 10px;
+        border-radius: 0 var(--hbr-radius-sm) var(--hbr-radius-sm) 0;
         font-size: 11px;
         line-height: 1.5;
       }
       .psc-check-item-head {
         display: flex;
         align-items: center;
-        gap: 5px;
+        gap: 6px;
         margin-bottom: 2px;
         font-weight: 600;
-        font-size: 10.5px;
+        font-size: 11px;
       }
       .psc-check-msg { color: var(--hbr-color-text-body); display: block; }
-      .psc-check-detail { color: var(--hbr-color-text-weak); font-size: 10px; margin-top: 2px; }
+      .psc-check-detail { color: var(--hbr-color-text-weak); font-size: 10.5px; margin-top: 3px; }
 
-      /* Dot severity indicator */
       .psc-dot {
         width: 8px;
         height: 8px;
@@ -602,47 +550,48 @@
         display: inline-block;
       }
 
-      /* Searchable Dropdown */
+      /* Dropdowns */
       .psc-dropdown-wrapper { position: relative; width: 100%; }
       .psc-dropdown-input {
-        width: 100%; padding: 6px 8px; border: 1px solid var(--hbr-color-border); border-radius: var(--hbr-radius-md);
-        font-family: inherit; font-size: 12px; color: var(--hbr-color-text-body); background: var(--hbr-color-bg-card);
+        width: 100%; padding: 7px 10px; border: 1px solid rgba(0,0,0,0.12); border-radius: var(--hbr-radius-md);
+        font-family: inherit; font-size: 12px; color: var(--hbr-color-text-body); background: #fff;
+        transition: border-color 0.2s, box-shadow 0.2s;
       }
-      .psc-dropdown-input:focus { border-color: var(--hbr-color-accent); outline: none; }
+      .psc-dropdown-input:focus { border-color: var(--hbr-color-accent); outline: none; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
       .psc-dropdown-list {
-        position: absolute; top: 100%; left: 0; right: 0; background: var(--hbr-color-bg-card); border: 1px solid var(--hbr-color-border);
-        backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-        border-radius: 0 0 var(--hbr-radius-md) var(--hbr-radius-md); max-height: 200px; overflow-y: auto; z-index: 100;
-        display: none; list-style: none; margin: 0; padding: 0; box-shadow: var(--glass-shadow);
+        position: absolute; top: calc(100% + 2px); left: 0; right: 0; background: #fff;
+        border: 1px solid rgba(0,0,0,0.08);
+        border-radius: var(--hbr-radius-md); max-height: 200px; overflow-y: auto; z-index: 100;
+        display: none; list-style: none; margin: 0; padding: 4px 0;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.12);
       }
-      .psc-dropdown-list li { padding: 6px 8px; font-size: 11px; cursor: pointer; border-bottom: 1px solid var(--hbr-color-border); color: var(--hbr-color-text-body); }
+      .psc-dropdown-list li {
+        padding: 7px 10px; font-size: 11px; cursor: pointer;
+        color: var(--hbr-color-text-body);
+        transition: background 0.1s;
+      }
       .psc-dropdown-list li:hover { background: var(--hbr-color-accent-light); }
       .psc-dropdown-id { color: var(--hbr-color-text-weak); font-size: 9px; margin-left: 5px; }
 
-      /* Hover Tooltip — kept at high opacity (0.92, not the lighter
-         --hbr-color-bg-card-style translucency used elsewhere) since white
-         text needs to stay fully legible against it; still gets the blur +
-         glass shadow for visual consistency with the rest of the panel. */
+      /* Tooltip */
       #psc-tooltip {
         position: fixed;
         display: none;
-        background: rgba(39, 116, 217, 0.92); /* var(--hbr-color-accent) as rgba — color-mix() isn't safe to rely on for extension-host Chrome versions */
-        backdrop-filter: var(--glass-blur);
-        -webkit-backdrop-filter: var(--glass-blur);
-        color: #fff;
+        background: #1e293b;
+        color: #f1f5f9;
         padding: 8px 12px;
         border-radius: var(--hbr-radius-md);
         font-size: 11px;
-        font-family: var(--hbr-font-family); /* prose, not JSON — no longer monospace */
+        font-family: var(--hbr-font-family);
         line-height: 1.5;
-        white-space: pre-wrap; /* still needed: tooltip text uses \n for multi-line summaries */
+        white-space: pre-wrap;
         z-index: 99999;
         max-width: 350px;
         word-wrap: break-word;
-        box-shadow: var(--glass-shadow);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         pointer-events: none;
       }
-    `;
+`;
     document.head.appendChild(s);
   }
 
