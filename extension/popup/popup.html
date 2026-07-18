@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Secure Access Policy Checker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+    />
+    <style>
+      /* ==================================================================== */
+      /* Cisco Hummingbird (hbr) design tokens — extracted from the live       */
+      /* dashboard's CSS custom properties. Single source of truth for this    */
+      /* document; popup-sections.js's injected <style> (appended to this same */
+      /* document's <head>) references these same var(--hbr-*) tokens.        */
+      /*                                                                       */
+      /* content-script.js runs in the separate live-dashboard document, so it */
+      /* cannot see these variables — its injected styles duplicate the same   */
+      /* literal values instead (see the comment there).                      */
+      /* ==================================================================== */
+      :root {
+        --hbr-font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+        --hbr-radius-sm: 0.25rem;
+        --hbr-radius-md: 0.38rem;
+        --hbr-radius-lg: 0.50rem;
+        --hbr-radius-pill: 9999px;
+        --hbr-border-width: 2px;
+
+        /* Vertical spacing scale — see .psc-panel-section rhythm rules in
+           popup-sections.js for how these are applied. */
+        --hbr-space-xs: 4px;  /* label → hint */
+        --hbr-space-sm: 8px;  /* hint → input */
+        --hbr-space-md: 16px; /* between complete field groups */
+        --hbr-space-lg: 20px; /* panel title → first field group */
+
+        --hbr-color-bg-page: #F7F7F7;      /* gray-98 */
+
+        /* Glassmorphism pass: bg-card/bg-subtle/border are now translucent
+           instead of solid, and every class across this file and
+           popup-sections.js that already references them via var() picks up
+           the glass look automatically — no need to touch each individual
+           rule. backdrop-filter: blur() is added separately on the specific
+           "panel/card" container classes (see popup-sections.js), since
+           blur has to be declared per-element, not inherited through a
+           color variable. Same exact hex hues as before (--hbr-color-accent,
+           severity/action colors, etc.) — only alpha changed, so the color
+           scheme itself is unchanged, just made translucent. */
+        --hbr-color-bg-card: rgba(255, 255, 255, 0.6);
+        --hbr-color-bg-subtle: rgba(240, 241, 242, 0.5);   /* was solid gray-95 */
+        --hbr-color-text-body: #373C42;    /* gray-25 */
+        --hbr-color-text-heading: #23282E; /* gray-15 */
+        --hbr-color-text-weak: #596069;    /* gray-40 */
+        --hbr-color-border: rgba(255, 255, 255, 0.55);     /* was solid gray-90 */
+
+        --hbr-color-accent: #2774D9;
+        --hbr-color-accent-hover: #1D69CC;
+        --hbr-color-accent-light: #EAF1FC; /* derived light tint of accent, for hover/selected backgrounds */
+
+        /* Header/brand color. No official Cisco "blue gradient" token was
+           found (checked this same :root block and the rest of the
+           codebase for one) — only the green brand gradient we'd used
+           previously existed, and no live dashboard CSS was available this
+           session to check for a real blue equivalent. Defaulting to a flat
+           color derived from --hbr-color-accent per instruction, rather
+           than inventing a fake gradient. */
+        --hbr-color-header: var(--hbr-color-accent);
+
+        --glass-blur: blur(16px);
+        --glass-shadow: 0 8px 32px rgba(35, 40, 46, 0.12);
+      }
+
+      *, *::before, *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        font-family: var(--hbr-font-family);
+        font-weight: 400;
+        /* Soft blurred-blob wash behind the glass panels, built only from
+           the existing page-bg and accent-blue tokens above (no new hues)
+           so there's actually something for backdrop-filter: blur() to
+           refract — a flat solid background would make every "glass"
+           surface look like plain translucent gray instead. */
+        background:
+          radial-gradient(480px 320px at 8% -10%, rgba(39, 116, 217, 0.16), transparent 60%),
+          radial-gradient(420px 300px at 105% 15%, rgba(39, 116, 217, 0.10), transparent 65%),
+          radial-gradient(500px 380px at 50% 120%, rgba(39, 116, 217, 0.08), transparent 60%),
+          var(--hbr-color-bg-page);
+        width: 660px;
+        color: var(--hbr-color-text-body);
+        font-size: 13px;
+        min-height: 300px;
+      }
+
+      /* When this document is running inside content-script.js's embedded
+         iframe (see initEmbeddedPopup() there), popup.js adds this class —
+         swaps the gradient wash for a fully transparent body so the outer
+         #sec-embed-panel's backdrop-filter: blur() actually shows the real,
+         blurred dashboard page through the glass instead of this document's
+         own opaque background hiding it completely. Higher specificity than
+         the plain "body" rule above (class beats element), so this wins
+         automatically without !important. Toolbar-popup context (no class
+         added) keeps the gradient wash unchanged — there's no page behind
+         a toolbar popup for transparency to reveal anyway. */
+      body.sec-embedded {
+        background: transparent;
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* Top toolbar — Cisco blue brand header. Left solid (not glass) on   */
+      /* purpose: it's the brand/title bar, and keeping it a flat, fully    */
+      /* opaque blue keeps the title legible and reads as "the same header" */
+      /* rather than another translucent panel competing with the cards     */
+      /* below it.                                                          */
+      /* ------------------------------------------------------------------ */
+      .toolbar {
+        background: var(--hbr-color-header);
+        display: flex;
+        align-items: center;
+        padding: 0 14px;
+        height: 42px;
+        gap: 10px;
+      }
+      .toolbar-logo {
+        font-size: 16px;
+      }
+      .toolbar-title {
+        color: #fff;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+        flex: 1;
+      }
+      /* ------------------------------------------------------------------ */
+      /* Error Banner                                                        */
+      /* ------------------------------------------------------------------ */
+      #error-banner {
+        /* Hidden by default — was previously ALSO declared "display: flex"
+           further down in this same rule, which won the cascade over this
+           "none" (later declaration of the same property wins) and made the
+           banner permanently visible as an empty pink bar until JS set an
+           inline style, i.e. for the entire skeleton-loading window before
+           the first RUN_SCAN response comes back. JS now sets
+           style.display = "flex" explicitly when it actually wants to show
+           this (see popup.js), so only one display value belongs here. */
+        display: none;
+        background: #fee2e2;
+        color: #991b1b;
+        padding: 8px 14px;
+        font-size: 12px;
+        border-bottom: var(--hbr-border-width) solid #fecaca;
+        align-items: center;
+        gap: 10px;
+      }
+      #psc-retry-btn {
+        background: var(--hbr-color-accent);
+        color: #fff;
+        border: none;
+        border-radius: var(--hbr-radius-md);
+        padding: 4px 12px;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+        flex-shrink: 0;
+      }
+      #psc-retry-btn:hover { background: var(--hbr-color-accent-hover); }
+
+      /* ------------------------------------------------------------------ */
+      /* Tabs                                                                */
+      /* ------------------------------------------------------------------ */
+      .tabs {
+        display: flex;
+        background: var(--hbr-color-bg-card);
+        backdrop-filter: var(--glass-blur);
+        -webkit-backdrop-filter: var(--glass-blur);
+        border-bottom: 1px solid var(--hbr-color-border);
+        padding: 0 14px;
+      }
+      .tab-btn {
+        background: none;
+        border: none;
+        padding: 12px 16px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--hbr-color-text-weak);
+        cursor: pointer;
+        border-bottom: var(--hbr-border-width) solid transparent;
+        transition: all 0.15s;
+        font-family: inherit;
+      }
+      .tab-btn:hover {
+        color: var(--hbr-color-text-heading);
+      }
+      .tab-btn.active {
+        color: var(--hbr-color-accent);
+        border-bottom: var(--hbr-border-width) solid var(--hbr-color-accent);
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* Tab Contents                                                        */
+      /* ------------------------------------------------------------------ */
+      .tab-content {
+        display: none;
+        flex-direction: column;
+      }
+      .tab-content.active {
+        display: flex;
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* Skeleton loading screen — shown in place of the Test Policy panel   */
+      /* from page load until the first RUN_SCAN response comes back        */
+      /* (including through any silent auto-retries while waiting for the   */
+      /* token-sniffer to capture a fresh token — see popup.js's            */
+      /* runInitialScan()). Replaces the old behavior of the tester panel    */
+      /* just sitting empty/disabled during that window.                    */
+      /* ------------------------------------------------------------------ */
+      @keyframes psc-skeleton-shimmer {
+        0%   { background-position: -400px 0; }
+        100% { background-position: 400px 0; }
+      }
+      .psc-skeleton {
+        padding: 18px;
+      }
+      .psc-skeleton-line,
+      .psc-skeleton-block {
+        background: linear-gradient(90deg, #ECEDEF 25%, #F6F7F8 37%, #ECEDEF 63%);
+        background-size: 800px 100%;
+        animation: psc-skeleton-shimmer 1.4s ease-in-out infinite;
+        border-radius: var(--hbr-radius-md);
+      }
+      .psc-skeleton-line { height: 12px; margin-bottom: 10px; }
+      .psc-skeleton-line.psc-skeleton-title { height: 16px; width: 45%; margin-bottom: 14px; }
+      .psc-skeleton-line.medium { width: 65%; }
+      .psc-skeleton-line.long { width: 90%; }
+      .psc-skeleton-row { display: flex; gap: 14px; margin-top: 16px; }
+      .psc-skeleton-block { flex: 1 1 0; min-width: 0; height: 160px; }
+    </style>
+  </head>
+  <body>
+
+    <!-- Top toolbar -->
+    <div class="toolbar">
+      <span class="toolbar-logo">🛡️</span>
+      <span class="toolbar-title">Cisco Secure Access — Policy Checker</span>
+    </div>
+
+    <!-- Error Banner -->
+    <div id="error-banner"></div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab-btn active" data-target="tab-tester">Test Policy</button>
+      <button class="tab-btn" data-target="tab-rules">Rules</button>
+    </div>
+
+    <!-- Tab Contents -->
+    <div id="tab-tester" class="tab-content active">
+      <div id="tester-root"></div>
+    </div>
+
+    <div id="tab-rules" class="tab-content">
+      <div id="rules-root"></div>
+    </div>
+
+    <!-- Script load order matters -->
+    <script src="mock-api.js"></script>
+    <script src="matcher.js"></script>
+    <script src="popup-sections.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
