@@ -1569,14 +1569,14 @@
             break;
           }
           case "umbrella.destination.appRiskProfileId": {
-            // CONFIRMED via live API payload. No lookup exists for App Risk
-            // Profile names — the value is a hash-like ID, not a friendly
-            // number, but still shown parenthetically in case it's useful
-            // for cross-referencing against Cisco's own dashboard.
             const ids = Array.isArray(values) ? values : [values];
+            const names = ids.map((id) => {
+              const name = lookups.appRiskProfiles && lookups.appRiskProfiles[String(id)];
+              return name || `App Risk Profile #${String(id).substring(0, 8)}…`;
+            });
             summaryText = ids.length === 1
-              ? `Matches destinations with a specific App Risk Profile (ID ${ids[0]})`
-              : `Matches destinations with specific App Risk Profiles (IDs ${ids.join(", ")})`;
+              ? `App Risk Profile: ${names[0]}`
+              : `App Risk Profiles: ${names.join(", ")}`;
             break;
           }
           default: {
@@ -1618,6 +1618,7 @@
       lookups.serviceObjectGroups = (objectMaps && objectMaps.serviceObjectGroups) || {};
       lookups.applicationLists = (objectMaps && objectMaps.applicationLists) || {};
       lookups.categoryLists    = (objectMaps && objectMaps.categoryLists) || {};
+      lookups.appRiskProfiles  = (objectMaps && objectMaps.appRiskProfiles) || {};
       root.innerHTML = "";
       if (!rules || rules.length === 0) {
         root.appendChild(el("p", { class: "psc-empty", style: { textAlign: "center" } }, ["No rules available."]));

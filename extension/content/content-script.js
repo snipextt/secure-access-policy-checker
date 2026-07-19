@@ -511,10 +511,10 @@ function loadObjectMap() {
   return new Promise((resolve) => {
     api.runtime.sendMessage({ type: "GET_OBJECT_MAP" }, (response) => {
       if (api.runtime.lastError || !response) {
-        resolve({});
+        resolve({ objectMap: {}, objectMaps: {} });
         return;
       }
-      resolve(response.objectMap || {});
+      resolve({ objectMap: response.objectMap || {}, objectMaps: response.objectMaps || {} });
     });
   });
 }
@@ -613,12 +613,14 @@ function summarizeConditions(rule, lookups) {
         break;
       }
       case "umbrella.destination.appRiskProfileId": {
-        // CONFIRMED via live API payload. No lookup for App Risk Profile names
-        // (see popup-sections.js for the primary copy of this case).
         const ids = Array.isArray(values) ? values : [values];
+        const names = ids.map((id) => {
+          const name = lookups.appRiskProfiles && lookups.appRiskProfiles[String(id)];
+          return name || `App Risk Profile #${String(id).substring(0, 8)}…`;
+        });
         summaryText = ids.length === 1
-          ? `Matches destinations with a specific App Risk Profile (ID ${ids[0]})`
-          : `Matches destinations with specific App Risk Profiles (IDs ${ids.join(", ")})`;
+          ? `App Risk Profile: ${names[0]}`
+          : `App Risk Profiles: ${names.join(", ")}`;
         break;
       }
       case "umbrella.destination.private_resource_ids":
@@ -839,9 +841,12 @@ function showPopoverForRule(anchorEl, ruleName, testMatchReasons, autoHideMs) {
     // testMatchReasons is provided, in case some future caller wants both
     // sections; renderHoverPopoverContent() itself decides which one to
     // actually show.
-    Promise.all([loadLookups(), loadIdentityMap(), loadObjectMap()]).then(([lookups, identityMap, objectMap]) => {
+    Promise.all([loadLookups(), loadIdentityMap(), loadObjectMap()]).then(([lookups, identityMap, objectMapResult]) => {
       lookups.identities = identityMap;
-      lookups.objects = objectMap;
+      lookups.objects = objectMapResult.objectMap || objectMapResult;
+      // Wire typed object maps for lookups (appRiskProfiles, etc.)
+      const om = objectMapResult.objectMaps || {};
+      lookups.appRiskProfiles = om.appRiskProfiles || {};
       const matchSummary = summarizeConditions(rule, lookups);
       renderHoverPopoverContent(popover, ruleName, rule, ruleFindings, matchSummary, testMatchReasons);
       reveal();

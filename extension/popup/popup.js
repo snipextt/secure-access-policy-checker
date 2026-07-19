@@ -56,6 +56,7 @@ document.addEventListener("DOMContentLoaded", () => {
     serviceObjectGroups: {},
     applicationLists: {},
     categoryLists: {},
+    appRiskProfiles: {},
   };
   let currentIdentityTypeMap = {};
 
@@ -102,6 +103,7 @@ document.addEventListener("DOMContentLoaded", () => {
         lookups.serviceObjectGroups = (currentObjectMaps && currentObjectMaps.serviceObjectGroups) || {};
         lookups.applicationLists = (currentObjectMaps && currentObjectMaps.applicationLists) || {};
         lookups.categoryLists    = (currentObjectMaps && currentObjectMaps.categoryLists) || {};
+        lookups.appRiskProfiles  = (currentObjectMaps && currentObjectMaps.appRiskProfiles) || {};
         const result = window.Matcher.matchPolicy(currentRules, testInput, lookups);
         if (testerHandle) {
           testerHandle.updateResult(result === null ? "NO_MATCH" : result);

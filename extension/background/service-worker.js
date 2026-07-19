@@ -1386,6 +1386,28 @@ const OBJECT_ENDPOINTS = [
       }));
     },
   },
+  {
+    name: "app_risk_profiles",
+    tokenKey: "mgmt_authz_token",
+    // DISCOVERED via CDP network interception of dashboard: the dashboard SPA
+    // calls this internal endpoint to resolve App Risk Profile UUIDs to names.
+    // Response is base64-encoded JSON: {"items":[{"app_risk_profile_id":"uuid",
+    // "app_risk_profile_name":"name",...}]}. Requires mgmt_authz_token.
+    buildUrl: () =>
+      "https://management.api.umbrella.com/policies.us/v2/appRiskProfileManager/appRiskProfiles",
+    parse: (json) => {
+      // Response may be base64-encoded; the items array has UUID-keyed profiles
+      let data = json;
+      if (typeof json === "string") {
+        try { data = JSON.parse(atob(json)); } catch (e) { data = json; }
+      }
+      const items = data?.items || [];
+      return items.map((e) => ({
+        id: e.app_risk_profile_id || e.id,
+        name: e.app_risk_profile_name || e.name,
+      }));
+    },
+  },
 ];
 
 // Collect all object IDs referenced in rule conditions, grouped by type.
@@ -1458,6 +1480,7 @@ async function resolveObjectRefs(orgId, tabId, rules) {
     serviceObjectGroups: {},
     applicationLists: {},
     categoryLists: {},
+    appRiskProfiles: {},
   };
   
   await Promise.all(
@@ -1506,6 +1529,7 @@ async function resolveObjectRefs(orgId, tabId, rules) {
           endpoint.name === "service_object_groups" ? "serviceObjectGroups" :
           endpoint.name === "application_lists" ? "applicationLists" :
           endpoint.name === "category_lists" ? "categoryLists" :
+          endpoint.name === "app_risk_profiles" ? "appRiskProfiles" :
           null;
         
         if (mapKey && maps[mapKey]) {
