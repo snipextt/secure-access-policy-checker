@@ -1579,6 +1579,34 @@
               : `App Risk Profiles: ${names.join(", ")}`;
             break;
           }
+          case "umbrella.destination.composite_inline_ip": {
+            // Inline IP/port/protocol objects — not named resources, render as
+            // readable network specs: "IP: 198.18.0.0/16, Port: 0-65535, Protocol: ANY"
+            const items = Array.isArray(values) ? values : [values];
+            const parts = items.map((item) => {
+              if (item && typeof item === "object" && !Array.isArray(item)) {
+                const ip = Array.isArray(item.ip) ? item.ip.join(", ") : (item.ip || "*");
+                const port = Array.isArray(item.port) ? item.port.join(", ") : (item.port || "*");
+                const proto = item.protocol || "ANY";
+                return `IP: ${ip}, Port: ${port}, Protocol: ${proto}`;
+              }
+              return String(item);
+            });
+            summaryText = `IP/Port/Protocol: ${parts.join(" + ")}`;
+            break;
+          }
+          case "umbrella.destination.private_resource_types": {
+            const items = Array.isArray(values) ? values : [values];
+            const labels = items.map((v) => {
+              if (v === "apps") return "Applications";
+              if (v === "networks") return "Networks";
+              if (v === "websites") return "Websites";
+              // Capitalize first letter as fallback
+              return String(v).charAt(0).toUpperCase() + String(v).slice(1);
+            });
+            summaryText = `Resource Types: ${labels.join(", ")}`;
+            break;
+          }
           default: {
             // Generic fallback for any umbrella.* condition type we haven't
             // explicitly coded a case for yet (this has now happened twice —

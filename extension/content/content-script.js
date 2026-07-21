@@ -623,6 +623,31 @@ function summarizeConditions(rule, lookups) {
           : `App Risk Profiles: ${names.join(", ")}`;
         break;
       }
+      case "umbrella.destination.composite_inline_ip": {
+        const items = Array.isArray(values) ? values : [values];
+        const parts = items.map((item) => {
+          if (item && typeof item === "object" && !Array.isArray(item)) {
+            const ip = Array.isArray(item.ip) ? item.ip.join(", ") : (item.ip || "*");
+            const port = Array.isArray(item.port) ? item.port.join(", ") : (item.port || "*");
+            const proto = item.protocol || "ANY";
+            return `IP: ${ip}, Port: ${port}, Protocol: ${proto}`;
+          }
+          return String(item);
+        });
+        summaryText = `IP/Port/Protocol: ${parts.join(" + ")}`;
+        break;
+      }
+      case "umbrella.destination.private_resource_types": {
+        const items = Array.isArray(values) ? values : [values];
+        const labels = items.map((v) => {
+          if (v === "apps") return "Applications";
+          if (v === "networks") return "Networks";
+          if (v === "websites") return "Websites";
+          return String(v).charAt(0).toUpperCase() + String(v).slice(1);
+        });
+        summaryText = `Resource Types: ${labels.join(", ")}`;
+        break;
+      }
       case "umbrella.destination.private_resource_ids":
       case "umbrella.destination.private_resource_group_ids": {
         // Resolved via resolveObjectRefs() in service-worker.js, fetched
