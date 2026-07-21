@@ -662,7 +662,65 @@ function summarizeConditions(rule, lookups) {
         summaryText = `${label}: ${resNames.join(", ")}`;
         break;
       }
-      default: {
+      case "umbrella.source.networkObjectIds":
+      case "umbrella.source.networkObjectIds_shared": {
+        const ids = Array.isArray(values) ? values : [values];
+        const names = ids.map((id) => (lookups.objects && lookups.objects[String(id)]) || `Network Object #${id}`);
+        summaryText = `Source Network Objects: ${names.join(", ")}`;
+        break;
+      }
+      case "umbrella.source.networkObjectGroupIds":
+      case "umbrella.source.networkObjectGroupIds_shared": {
+        const ids = Array.isArray(values) ? values : [values];
+        const names = ids.map((id) => (lookups.objects && lookups.objects[String(id)]) || `Network Group #${id}`);
+        summaryText = `Source Network Object Groups: ${names.join(", ")}`;
+        break;
+      }
+      case "umbrella.source.geolocations": {
+        const geos = Array.isArray(values) ? values : [values];
+        summaryText = `Source Countries/Regions: ${geos.join(", ")}`;
+        break;
+      }
+      case "umbrella.destination.networkObjectGroupIds": {
+        const ids = Array.isArray(values) ? values : [values];
+        const names = ids.map((id) => (lookups.objects && lookups.objects[String(id)]) || `Network Group #${id}`);
+        summaryText = `Destination Network Object Groups: ${names.join(", ")}`;
+        break;
+      }
+      case "umbrella.destination.serviceObjectIds": {
+        const ids = Array.isArray(values) ? values : [values];
+        const names = ids.map((id) => (lookups.objects && lookups.objects[String(id)]) || `Service Object #${id}`);
+        summaryText = `Service Objects: ${names.join(", ")}`;
+        break;
+      }
+      case "umbrella.destination.application_category_ids": {
+        const ids = Array.isArray(values) ? values : [values];
+        summaryText = `Application Categories: ${ids.join(", ")}`;
+        break;
+      }
+      case "umbrella.destination.saasTenantIds": {
+        const ids = Array.isArray(values) ? values : [values];
+        summaryText = `SaaS Tenant Controls: ${ids.join(", ")}`;
+        break;
+      }
+      case "umbrella.destination.security_group_tag_ids":
+      case "umbrella.destination.any_security_group_tag": {
+        const ids = Array.isArray(values) ? values : [values];
+        summaryText = `Security Group Tags (SGT): ${ids.join(", ")}`;
+        break;
+      }
+      case "umbrella.posture.ipsProfileId": {
+        summaryText = `IPS Profile: ${values}`;
+        break;
+      }
+      case "umbrella.posture.profileIdClientbased":
+      case "umbrella.posture.profileIdClientless":
+      case "umbrella.posture.vpnProfileId":
+      case "umbrella.posture.webProfileId": {
+        const label = type.replace("umbrella.posture.", "").replace(/([A-Z])/g, " $1");
+        summaryText = `Posture (${label}): ${values}`;
+        break;
+      }
         // Generic fallback for any unrecognized umbrella.* condition type —
         // see popup-sections.js for the full comment on why this exists.
         const humanized = type

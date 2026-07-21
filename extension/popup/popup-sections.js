@@ -1607,15 +1607,65 @@
             summaryText = `Resource Types: ${labels.join(", ")}`;
             break;
           }
-          default: {
-            // Generic fallback for any umbrella.* condition type we haven't
-            // explicitly coded a case for yet (this has now happened twice —
-            // destination_list_ids, appRiskProfileId — and will likely keep
-            // happening as more org configs get tested live). Humanize the
-            // raw field name instead of showing it verbatim: strip the
-            // "umbrella." prefix, split camelCase/snake_case into words.
-            // Not as good as a dedicated case with a real lookup, but always
-            // better than a raw JSON-shaped field name.
+          case "umbrella.source.networkObjectIds":
+          case "umbrella.source.networkObjectIds_shared": {
+            const ids = Array.isArray(values) ? values : [values];
+            const names = ids.map((id) => (lookups.networkObjects && lookups.networkObjects[String(id)]) || `Network Object #${id}`);
+            summaryText = `Source Network Objects: ${names.join(", ")}`;
+            break;
+          }
+          case "umbrella.source.networkObjectGroupIds":
+          case "umbrella.source.networkObjectGroupIds_shared": {
+            const ids = Array.isArray(values) ? values : [values];
+            const names = ids.map((id) => (lookups.networkObjectGroups && lookups.networkObjectGroups[String(id)]) || `Network Group #${id}`);
+            summaryText = `Source Network Object Groups: ${names.join(", ")}`;
+            break;
+          }
+          case "umbrella.source.geolocations": {
+            const geos = Array.isArray(values) ? values : [values];
+            summaryText = `Source Countries/Regions: ${geos.join(", ")}`;
+            break;
+          }
+          case "umbrella.destination.networkObjectGroupIds": {
+            const ids = Array.isArray(values) ? values : [values];
+            const names = ids.map((id) => (lookups.networkObjectGroups && lookups.networkObjectGroups[String(id)]) || `Network Group #${id}`);
+            summaryText = `Destination Network Object Groups: ${names.join(", ")}`;
+            break;
+          }
+          case "umbrella.destination.serviceObjectIds": {
+            const ids = Array.isArray(values) ? values : [values];
+            const names = ids.map((id) => (lookups.serviceObjects && lookups.serviceObjects[String(id)]) || `Service Object #${id}`);
+            summaryText = `Service Objects: ${names.join(", ")}`;
+            break;
+          }
+          case "umbrella.destination.application_category_ids": {
+            const ids = Array.isArray(values) ? values : [values];
+            summaryText = `Application Categories: ${ids.join(", ")}`;
+            break;
+          }
+          case "umbrella.destination.saasTenantIds": {
+            const ids = Array.isArray(values) ? values : [values];
+            summaryText = `SaaS Tenant Controls: ${ids.join(", ")}`;
+            break;
+          }
+          case "umbrella.destination.security_group_tag_ids":
+          case "umbrella.destination.any_security_group_tag": {
+            const ids = Array.isArray(values) ? values : [values];
+            summaryText = `Security Group Tags (SGT): ${ids.join(", ")}`;
+            break;
+          }
+          case "umbrella.posture.ipsProfileId": {
+            summaryText = `IPS Profile: ${values}`;
+            break;
+          }
+          case "umbrella.posture.profileIdClientbased":
+          case "umbrella.posture.profileIdClientless":
+          case "umbrella.posture.vpnProfileId":
+          case "umbrella.posture.webProfileId": {
+            const label = type.replace("umbrella.posture.", "").replace(/([A-Z])/g, " $1");
+            summaryText = `Posture (${label}): ${values}`;
+            break;
+          }
             const humanized = type
               .replace(/^umbrella\./, "")
               .replace(/\./g, " ")
