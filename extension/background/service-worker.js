@@ -453,32 +453,27 @@ async function fetchRules(token, orgId) {
         loggingEnabled = raw.logging_enabled !== false && raw.loggingEnabled !== false;
       }
 
-      // Security profiles — resolved from ruleSettings using confirmed settingName values.
-      // The live API stores these as { settingName, settingId, settingValue } entries
-      // in rule.ruleSettings. Confirmed setting names from live API intercept:
-      //   - "umbrella.logLevel" (LOG_ALL / NONE)
-      //   - "umbrella.default.traffic" (PRIVATE_NETWORK / INTERNET)
-      // Security inspection profiles use these settingName patterns:
-      //   - "umbrella.security.ips" (ENABLED / DISABLED)
-      //   - "umbrella.security.amp" (ENABLED / DISABLED)
-      //   - "umbrella.security.tls" (ENABLED / DISABLED)
-      //   - "umbrella.security.dlp" (ENABLED / DISABLED)
-      // Also check for camelCase and snake_case variants as fallbacks.
-      const getProfile = (mockKey1, mockKey2, realSettingName, altNames) => {
+      // Security profiles — resolved from ruleSettings using confirmed Cisco API settingName keys.
+      // Confirmed live API settingNames:
+      //   - IPS: "umbrella.posture.ipsProfileId"
+      //   - TLS / Web Inspection: "umbrella.posture.webProfileId"
+      //   - AMP / Client Posture: "umbrella.posture.profileIdClientbased" / "umbrella.posture.profileIdClientless"
+      //   - Tenant Control / DLP: "sse.tenantControlProfileId"
+      const getProfile = (realSettingName, altNames) => {
         if (raw.ruleSettings) {
-          // Try the primary setting name first
           let val = getSetting(realSettingName);
-          // Try alternative setting names if primary not found
           if (val === undefined && altNames) {
             for (const alt of altNames) {
               val = getSetting(alt);
               if (val !== undefined) break;
             }
           }
-          if (val !== undefined) return val === "ENABLED" || val === "ON" || val === true;
-          return null; // explicitly unconfirmed — setting not present in ruleSettings
+          if (val !== undefined && val !== null && val !== "" && val !== false && val !== "DISABLED" && val !== "NONE") {
+            return true;
+          }
+          return false;
         }
-        return raw.security_profiles?.[mockKey1] || raw.securityProfiles?.[mockKey2] || false;
+        return false;
       };
 
       return {
@@ -496,10 +491,10 @@ async function fetchRules(token, orgId) {
       conditions: raw.conditions || raw.ruleConditions || [],
       logging_enabled: loggingEnabled,
       security_profiles: {
-        ips_enabled: getProfile("ips_enabled", "ipsEnabled", "umbrella.security.ips", ["ips_enabled", "ipsEnabled", "security.ips"]),
-        amp_malware_enabled: getProfile("amp_malware_enabled", "ampMalwareEnabled", "umbrella.security.amp", ["amp_malware_enabled", "ampMalwareEnabled", "security.amp"]),
-        tls_decryption_enabled: getProfile("tls_decryption_enabled", "tlsDecryptionEnabled", "umbrella.security.tls", ["tls_decryption_enabled", "tlsDecryptionEnabled", "security.tls"]),
-        dlp_enabled: getProfile("dlp_enabled", "dlpEnabled", "umbrella.security.dlp", ["dlp_enabled", "dlpEnabled", "security.dlp"]),
+        ips_enabled: getProfile("umbrella.posture.ipsProfileId", ["umbrella.security.ips", "ips_enabled"]),
+        amp_malware_enabled: getProfile("umbrella.posture.profileIdClientbased", ["umbrella.posture.profileIdClientless", "umbrella.security.amp", "amp_malware_enabled"]),
+        tls_decryption_enabled: getProfile("umbrella.posture.webProfileId", ["umbrella.security.tls", "tls_decryption_enabled"]),
+        dlp_enabled: getProfile("sse.tenantControlProfileId", ["umbrella.security.dlp", "dlp_enabled"]),
       },
       raw: raw
     };

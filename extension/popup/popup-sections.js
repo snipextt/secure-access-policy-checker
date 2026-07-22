@@ -1898,11 +1898,22 @@
         // Security Profile Chips
         if (rule.security_profiles) {
           const sp = rule.security_profiles;
+          const makeSpChip = (label, enabled) => {
+            return el("span", {
+              class: "psc-chip",
+              style: {
+                background: enabled ? "#f0fdf4" : "#f8fafc",
+                borderColor: enabled ? "#bbf7d0" : "#cbd5e1",
+                color: enabled ? "#166534" : "#64748b",
+                fontWeight: enabled ? "700" : "500"
+              }
+            }, [`${label}: ${enabled ? "ON" : "OFF"}`]);
+          };
           const spRow = el("div", { class: "psc-inline-chips", style: { marginBottom: "6px" } }, [
-            el("span", { class: "psc-chip", style: { borderColor: sp.ips_enabled ? "#166534" : "#cbd5e1" } }, [`IPS: ${sp.ips_enabled ? "ON" : "OFF"}`]),
-            el("span", { class: "psc-chip", style: { borderColor: sp.amp_malware_enabled ? "#166534" : "#cbd5e1" } }, [`AMP: ${sp.amp_malware_enabled ? "ON" : "OFF"}`]),
-            el("span", { class: "psc-chip", style: { borderColor: sp.tls_decryption_enabled ? "#166534" : "#cbd5e1" } }, [`TLS: ${sp.tls_decryption_enabled ? "ON" : "OFF"}`]),
-            el("span", { class: "psc-chip", style: { borderColor: sp.dlp_enabled ? "#166534" : "#cbd5e1" } }, [`DLP: ${sp.dlp_enabled ? "ON" : "OFF"}`]),
+            makeSpChip("IPS", sp.ips_enabled),
+            makeSpChip("AMP", sp.amp_malware_enabled),
+            makeSpChip("TLS", sp.tls_decryption_enabled),
+            makeSpChip("DLP", sp.dlp_enabled),
           ]);
           cardBody.appendChild(spRow);
         }
