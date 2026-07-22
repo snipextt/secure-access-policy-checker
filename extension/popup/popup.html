@@ -11,16 +11,16 @@
     />
     <style>
       /* ==================================================================== */
-      /* Black & White Monochrome Design Tokens                               */
+      /* Light Mode Design Tokens (White Background, Black Text)              */
       /* ==================================================================== */
       :root {
         --hbr-font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         --hbr-font-mono: "JetBrains Mono", monospace;
 
-        --hbr-radius-sm: 0px;
-        --hbr-radius-md: 0px;
-        --hbr-radius-lg: 0px;
-        --hbr-radius-pill: 0px;
+        --hbr-radius-sm: 2px;
+        --hbr-radius-md: 2px;
+        --hbr-radius-lg: 2px;
+        --hbr-radius-pill: 2px;
         --hbr-border-width: 1px;
 
         --hbr-space-xs: 4px;
@@ -28,18 +28,18 @@
         --hbr-space-md: 12px;
         --hbr-space-lg: 16px;
 
-        --hbr-color-bg-page: #000000;
-        --hbr-color-bg-card: #0d0d0d;
-        --hbr-color-bg-subtle: #171717;
-        --hbr-color-text-body: #d4d4d4;
-        --hbr-color-text-heading: #ffffff;
-        --hbr-color-text-weak: #888888;
-        --hbr-color-border: #262626;
+        --hbr-color-bg-page: #ffffff;
+        --hbr-color-bg-card: #f8fafc;
+        --hbr-color-bg-subtle: #f1f5f9;
+        --hbr-color-text-body: #1e293b;
+        --hbr-color-text-heading: #0f172a;
+        --hbr-color-text-weak: #64748b;
+        --hbr-color-border: #e2e8f0;
 
-        --hbr-color-accent: #ffffff;
-        --hbr-color-accent-hover: #e5e5e5;
-        --hbr-color-accent-light: #1a1a1a;
-        --hbr-color-header: #0d0d0d;
+        --hbr-color-accent: #0f172a;
+        --hbr-color-accent-hover: #1e293b;
+        --hbr-color-accent-light: #e2e8f0;
+        --hbr-color-header: #ffffff;
       }
 
       *, *::before, *::after {
@@ -51,7 +51,7 @@
       body {
         font-family: var(--hbr-font-family);
         font-weight: 400;
-        background: #000000;
+        background: #ffffff;
         width: 660px;
         color: var(--hbr-color-text-body);
         font-size: 12px;
@@ -68,22 +68,22 @@
       /* Header bar                                                         */
       /* ------------------------------------------------------------------ */
       .toolbar {
-        background: #0d0d0d;
+        background: #ffffff;
         display: flex;
         align-items: center;
         padding: 0 16px;
         height: 44px;
         gap: 10px;
-        border-bottom: 1px solid #262626;
+        border-bottom: 1px solid #e2e8f0;
       }
       .toolbar-logo {
         font-size: 14px;
         line-height: 1;
-        color: #ffffff;
+        color: #0f172a;
         font-weight: bold;
       }
       .toolbar-title {
-        color: #ffffff;
+        color: #0f172a;
         font-size: 12px;
         font-weight: 700;
         letter-spacing: 0.08em;
@@ -93,20 +93,20 @@
       }
       .toolbar-close {
         background: transparent;
-        border: 1px solid #404040;
-        color: #a3a3a3;
+        border: 1px solid #cbd5e1;
+        color: #64748b;
         font-size: 14px;
         font-weight: 600;
         cursor: pointer;
         padding: 3px 8px;
-        border-radius: 0px;
+        border-radius: 2px;
         line-height: 1;
         transition: all 0.15s;
       }
       .toolbar-close:hover {
-        background: #ffffff;
-        color: #000000;
-        border-color: #ffffff;
+        background: #0f172a;
+        color: #ffffff;
+        border-color: #0f172a;
       }
 
       /* ------------------------------------------------------------------ */
@@ -114,20 +114,20 @@
       /* ------------------------------------------------------------------ */
       #error-banner {
         display: none;
-        background: #1a1a1a;
-        color: #ffffff;
+        background: #fef2f2;
+        color: #991b1b;
         padding: 10px 16px;
         font-size: 11px;
-        border-bottom: 1px solid #404040;
+        border-bottom: 1px solid #fecaca;
         align-items: center;
         gap: 10px;
         font-family: var(--hbr-font-mono);
       }
       #psc-retry-btn {
-        background: #ffffff;
-        color: #000000;
+        background: #0f172a;
+        color: #ffffff;
         border: none;
-        border-radius: 0px;
+        border-radius: 2px;
         padding: 4px 12px;
         font-size: 11px;
         font-weight: 700;
@@ -136,15 +136,15 @@
         flex-shrink: 0;
         text-transform: uppercase;
       }
-      #psc-retry-btn:hover { background: #e5e5e5; }
+      #psc-retry-btn:hover { background: #1e293b; }
 
       /* ------------------------------------------------------------------ */
       /* Tabs                                                               */
       /* ------------------------------------------------------------------ */
       .tabs {
         display: flex;
-        background: #0d0d0d;
-        border-bottom: 1px solid #262626;
+        background: #ffffff;
+        border-bottom: 1px solid #e2e8f0;
         padding: 0 16px;
         gap: 4px;
       }
@@ -154,7 +154,7 @@
         padding: 11px 16px;
         font-size: 11px;
         font-weight: 700;
-        color: #737373;
+        color: #64748b;
         cursor: pointer;
         border-bottom: 2px solid transparent;
         transition: all 0.2s;
@@ -163,12 +163,12 @@
         letter-spacing: 0.06em;
       }
       .tab-btn:hover {
-        color: #d4d4d4;
+        color: #0f172a;
       }
       .tab-btn.active {
-        color: #ffffff;
-        border-bottom-color: #ffffff;
-        background: #171717;
+        color: #0f172a;
+        border-bottom-color: #0f172a;
+        background: #f8fafc;
       }
 
       /* ------------------------------------------------------------------ */
@@ -194,10 +194,10 @@
       }
       .psc-skeleton-line,
       .psc-skeleton-block {
-        background: linear-gradient(90deg, #171717 25%, #262626 37%, #171717 63%);
+        background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 37%, #f1f5f9 63%);
         background-size: 800px 100%;
         animation: psc-skeleton-shimmer 1.6s ease-in-out infinite;
-        border-radius: 0px;
+        border-radius: 2px;
       }
       .psc-skeleton-line { height: 10px; margin-bottom: 12px; }
       .psc-skeleton-line.psc-skeleton-title { height: 14px; width: 40%; margin-bottom: 16px; }

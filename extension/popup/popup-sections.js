@@ -2,9 +2,9 @@
 // popup-sections.js — DOM builders for the Policy Match Tester split panel
 // and the single collapsible audit-result sections.
 //
-// Visual design: High-Contrast Black & White Monochrome HUD with sharp 0px/2px
-// borders, clean terminal typography, default IP+Port controls, toggleable
-// advanced criteria, and inline rule chips.
+// Visual design: Clean Light Mode UI with pure white background, dark slate
+// typography, crisp borders, progressive disclosure controls, and human-readable
+// condition chips.
 //
 // Exported to window.PopupSections. No browser-extension API calls.
 // =============================================================================
@@ -12,15 +12,45 @@
 (function (global) {
   "use strict";
 
+  // Default fallback dictionary for identity types
+  const DEFAULT_IDENTITY_TYPES = {
+    "1": "Active Directory Users & Groups",
+    "2": "Network Devices",
+    "3": "Sites & Branches",
+    "4": "Users & AD Groups",
+    "5": "Roaming Computers",
+    "6": "Internal Networks",
+    "7": "Network Tunnels",
+    "8": "SAML Users & Groups",
+    "9": "IP Subnets / CIDR",
+    "10": "Device Posture Profiles",
+    "11": "Security Group Tags (SGT)",
+    "36": "Posture & Compliance Profile",
+    "37": "OS Version & Patch Level",
+    "38": "Endpoint Requirements",
+    "40": "Client Version / Agent",
+    "57": "Managed Mobile Devices / BYOD",
+    "user": "Active Directory Users & Groups",
+    "device": "Network Devices",
+    "site": "Sites & Branches",
+    "group": "Users & AD Groups",
+    "roaming": "Roaming Computers",
+    "internal_network": "Internal Networks",
+    "tunnel": "Network Tunnels",
+    "saml": "SAML Users & Groups",
+    "ip_subnet": "IP Subnets / CIDR",
+    "posture": "Device Posture Profiles",
+    "sgt": "Security Group Tags (SGT)"
+  };
   const COLOR = {
-    critical: { bg: "#000000", light: "#1a1a1a", border: "#ffffff", text: "#ffffff" },
-    high:     { bg: "#000000", light: "#171717", border: "#d4d4d4", text: "#e5e5e5" },
-    medium:   { bg: "#000000", light: "#141414", border: "#a3a3a3", text: "#d4d4d4" },
-    low:      { bg: "#000000", light: "#0f0f0f", border: "#525252", text: "#a3a3a3" },
-    allow:    { bg: "#ffffff", text: "#000000", border: "#ffffff" },
-    block:    { bg: "#000000", text: "#ffffff", border: "#ffffff" },
-    isolate:  { bg: "#262626", text: "#ffffff", border: "#737373" },
-    unknown:  { bg: "#171717", text: "#a3a3a3", border: "#404040" },
+    critical: { bg: "#fef2f2", text: "#991b1b", border: "#fecaca" },
+    high:     { bg: "#fff7ed", text: "#c2410c", border: "#fed7aa" },
+    medium:   { bg: "#fefce8", text: "#a16207", border: "#fef08a" },
+    low:      { bg: "#f8fafc", text: "#475569", border: "#e2e8f0" },
+    allow:    { bg: "#f0fdf4", text: "#15803d", border: "#bbf7d0" },
+    block:    { bg: "#fef2f2", text: "#b91c1c", border: "#fecaca" },
+    isolate:  { bg: "#faf5ff", text: "#7e22ce", border: "#e9d5ff" },
+    unknown:  { bg: "#f8fafc", text: "#475569", border: "#e2e8f0" },
   };
 
   function injectStyles() {
@@ -29,11 +59,11 @@
     s.id = "psc-style";
     s.textContent = `
       /* ================================================================== */
-      /* BLACK & WHITE MONOCHROME HUD THEME                                 */
+      /* LIGHT MODE HUD THEME (PURE WHITE BG, DARK TEXT)                     */
       /* ================================================================== */
       #psc-panel {
-        background: #000000;
-        color: #d4d4d4;
+        background: #ffffff;
+        color: #1e293b;
         display: flex;
         flex-direction: column;
         font-family: var(--hbr-font-family);
@@ -43,7 +73,7 @@
         padding: 14px 18px 2px;
         font-size: 13px;
         font-weight: 800;
-        color: #ffffff;
+        color: #0f172a;
         letter-spacing: 0.08em;
         text-transform: uppercase;
         font-family: var(--hbr-font-mono, monospace);
@@ -53,14 +83,14 @@
       }
       #psc-panel-title::before {
         content: "//";
-        color: #737373;
+        color: #64748b;
       }
       #psc-panel-desc {
         padding: 0 18px 10px;
         font-size: 11px;
-        color: #888888;
+        color: #64748b;
         line-height: 1.45;
-        border-bottom: 1px solid #262626;
+        border-bottom: 1px solid #e2e8f0;
       }
 
       #psc-panel-body {
@@ -78,10 +108,10 @@
 
       /* Default Primary IP+Port Cards */
       .psc-hud-card {
-        border: 1px solid #262626;
-        border-radius: 0px;
+        border: 1px solid #e2e8f0;
+        border-radius: 2px;
         padding: 12px 14px;
-        background: #0d0d0d;
+        background: #f8fafc;
         display: flex;
         flex-direction: column;
         gap: 10px;
@@ -91,13 +121,13 @@
         content: "";
         position: absolute;
         top: 0; left: 0; width: 3px; bottom: 0;
-        background: #ffffff;
+        background: #0f172a;
       }
 
       .psc-hud-title {
         font-size: 10.5px;
         font-weight: 700;
-        color: #ffffff;
+        color: #0f172a;
         text-transform: uppercase;
         letter-spacing: 0.08em;
         font-family: var(--hbr-font-mono, monospace);
@@ -108,13 +138,13 @@
 
       /* Toggle Buttons for Advanced Criteria */
       .psc-toggle-btn {
-        background: #0d0d0d;
-        border: 1px solid #262626;
-        border-radius: 0px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 2px;
         padding: 8px 12px;
         font-size: 11px;
         font-weight: 700;
-        color: #a3a3a3;
+        color: #475569;
         cursor: pointer;
         display: flex;
         align-items: center;
@@ -126,14 +156,14 @@
         text-transform: uppercase;
       }
       .psc-toggle-btn:hover {
-        background: #171717;
-        border-color: #ffffff;
-        color: #ffffff;
+        background: #f1f5f9;
+        border-color: #cbd5e1;
+        color: #0f172a;
       }
       .psc-toggle-btn.active {
-        background: #171717;
-        border-color: #ffffff;
-        color: #ffffff;
+        background: #f1f5f9;
+        border-color: #0f172a;
+        color: #0f172a;
       }
       .psc-toggle-arrow {
         font-size: 10px;
@@ -149,9 +179,9 @@
         flex-direction: column;
         gap: 10px;
         padding: 12px;
-        border: 1px solid #262626;
-        border-radius: 0px;
-        background: #050505;
+        border: 1px solid #e2e8f0;
+        border-radius: 2px;
+        background: #ffffff;
       }
       .psc-advanced-box.open {
         display: flex;
@@ -162,7 +192,7 @@
       .psc-field-label {
         font-size: 11px;
         font-weight: 600;
-        color: #a3a3a3;
+        color: #475569;
         margin: 0 0 4px 0;
         display: block;
         font-family: var(--hbr-font-mono, monospace);
@@ -174,43 +204,43 @@
       .psc-dropdown-input {
         width: 100%;
         padding: 7px 10px;
-        border: 1px solid #262626 !important;
-        border-radius: 0px !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 2px !important;
         font-size: 12px;
         font-family: var(--hbr-font-mono, monospace) !important;
-        color: #ffffff !important;
-        background: #0d0d0d !important;
+        color: #0f172a !important;
+        background: #ffffff !important;
         outline: none;
         transition: all 0.15s;
       }
       .psc-field-group input:focus,
       .psc-field-group select:focus,
       .psc-dropdown-input:focus {
-        border-color: #ffffff !important;
-        box-shadow: 0 0 0 1px #ffffff !important;
+        border-color: #0f172a !important;
+        box-shadow: 0 0 0 1px #0f172a !important;
       }
-      .psc-field-group input::placeholder { color: #525252; }
+      .psc-field-group input::placeholder { color: #94a3b8; }
 
       /* Dropdown lists */
       .psc-dropdown-wrapper { position: relative; width: 100%; }
       .psc-dropdown-list {
-        position: absolute; top: calc(100% + 2px); left: 0; right: 0; background: #0d0d0d;
-        border: 1px solid #525252;
-        border-radius: 0px; max-height: 200px; overflow-y: auto; z-index: 100;
+        position: absolute; top: calc(100% + 2px); left: 0; right: 0; background: #ffffff;
+        border: 1px solid #cbd5e1;
+        border-radius: 2px; max-height: 200px; overflow-y: auto; z-index: 100;
         display: none; list-style: none; margin: 0; padding: 4px 0;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.8);
+        box-shadow: 0 4px 16px rgba(15, 23, 42, 0.1);
       }
       .psc-dropdown-list li {
         padding: 7px 10px; font-size: 11px; cursor: pointer;
-        color: #d4d4d4; font-family: var(--hbr-font-mono, monospace);
+        color: #1e293b; font-family: var(--hbr-font-mono, monospace);
         transition: background 0.1s;
       }
-      .psc-dropdown-list li:hover { background: #262626; color: #ffffff; }
+      .psc-dropdown-list li:hover { background: #f1f5f9; color: #0f172a; }
 
       /* Form Footer Actions */
       #psc-form-footer {
         padding: 12px 18px;
-        border-bottom: 1px solid #262626;
+        border-bottom: 1px solid #e2e8f0;
       }
       #psc-form-actions {
         display: flex;
@@ -219,24 +249,24 @@
         gap: 10px;
       }
       #psc-reset-btn {
-        background: transparent;
-        border: 1px solid #262626;
-        color: #888888;
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        color: #475569;
         font-size: 11px;
         font-weight: 700;
         cursor: pointer;
         padding: 7px 14px;
-        border-radius: 0px;
+        border-radius: 2px;
         font-family: var(--hbr-font-mono, monospace);
         text-transform: uppercase;
         transition: all 0.15s;
       }
-      #psc-reset-btn:hover { color: #ffffff; border-color: #525252; background: #171717; }
+      #psc-reset-btn:hover { color: #0f172a; border-color: #94a3b8; background: #f8fafc; }
       #psc-run-btn {
-        background: #ffffff;
-        color: #000000;
-        border: 1px solid #ffffff;
-        border-radius: 0px;
+        background: #0f172a;
+        color: #ffffff;
+        border: 1px solid #0f172a;
+        border-radius: 2px;
         padding: 7px 22px;
         font-size: 11px;
         font-weight: 800;
@@ -247,11 +277,11 @@
         transition: all 0.15s;
       }
       #psc-run-btn:hover:not(:disabled) {
-        background: #e5e5e5;
-        color: #000000;
+        background: #1e293b;
+        border-color: #1e293b;
       }
-      #psc-run-btn:disabled { background: #171717; border-color: #262626; color: #525252; cursor: not-allowed; }
-      #psc-form-error { font-size: 11px; color: #ffffff; min-height: 16px; margin-bottom: 6px; font-family: var(--hbr-font-mono, monospace); }
+      #psc-run-btn:disabled { background: #e2e8f0; border-color: #cbd5e1; color: #94a3b8; cursor: not-allowed; }
+      #psc-form-error { font-size: 11px; color: #b91c1c; min-height: 16px; margin-bottom: 6px; font-family: var(--hbr-font-mono, monospace); }
 
       /* Results Area */
       #psc-result-col {
@@ -260,22 +290,23 @@
         flex-direction: column;
       }
       #psc-result-placeholder {
-        color: #737373;
+        color: #64748b;
         font-size: 11px;
         text-align: center;
         padding: 18px;
-        background: #080808;
-        border: 1px dashed #262626;
-        border-radius: 0px;
+        background: #f8fafc;
+        border: 1px dashed #cbd5e1;
+        border-radius: 2px;
         font-family: var(--hbr-font-mono, monospace);
       }
 
       /* Hero Decision Card */
       .psc-hero-card {
-        border-radius: 0px;
+        border-radius: 2px;
         overflow: hidden;
-        background: #0d0d0d;
-        border: 1px solid #404040;
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
       }
       .psc-hero-banner {
         padding: 12px 14px;
@@ -285,20 +316,20 @@
         gap: 10px;
       }
       .psc-hero-allow {
-        background: #171717;
-        border-bottom: 1px solid #404040;
+        background: #f0fdf4;
+        border-bottom: 1px solid #bbf7d0;
       }
       .psc-hero-block {
-        background: #0a0a0a;
-        border-bottom: 1px solid #ffffff;
+        background: #fef2f2;
+        border-bottom: 1px solid #fecaca;
       }
       .psc-hero-isolate {
-        background: #121212;
-        border-bottom: 1px solid #525252;
+        background: #faf5ff;
+        border-bottom: 1px solid #e9d5ff;
       }
       .psc-hero-unknown {
-        background: #0d0d0d;
-        border-bottom: 1px solid #262626;
+        background: #f8fafc;
+        border-bottom: 1px solid #e2e8f0;
       }
 
       .psc-hero-info {
@@ -309,11 +340,11 @@
       .psc-hero-rule-title {
         font-size: 13px;
         font-weight: 700;
-        color: #ffffff;
+        color: #0f172a;
       }
       .psc-hero-rule-sub {
         font-size: 10.5px;
-        color: #a3a3a3;
+        color: #475569;
         display: flex;
         align-items: center;
         gap: 6px;
@@ -324,23 +355,23 @@
         font-size: 11px;
         font-weight: 800;
         padding: 4px 12px;
-        border-radius: 0px;
+        border-radius: 2px;
         letter-spacing: 0.08em;
         text-transform: uppercase;
         font-family: var(--hbr-font-mono, monospace);
       }
-      .psc-hero-allow .psc-hero-action-badge { background: #ffffff; color: #000000; border: 1px solid #ffffff; }
-      .psc-hero-block .psc-hero-action-badge { background: #000000; color: #ffffff; border: 1px solid #ffffff; }
-      .psc-hero-isolate .psc-hero-action-badge { background: #262626; color: #ffffff; border: 1px solid #737373; }
+      .psc-hero-allow .psc-hero-action-badge { background: #166534; color: #ffffff; }
+      .psc-hero-block .psc-hero-action-badge { background: #991b1b; color: #ffffff; }
+      .psc-hero-isolate .psc-hero-action-badge { background: #6b21a8; color: #ffffff; }
 
       .psc-hero-body { padding: 12px 14px; }
       .psc-summary-box {
-        background: #050505;
-        border: 1px solid #262626;
-        border-radius: 0px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 2px;
         padding: 8px 12px;
         font-size: 11px;
-        color: #e5e5e5;
+        color: #0f172a;
         margin-bottom: 10px;
         font-family: var(--hbr-font-mono, monospace);
       }
@@ -349,7 +380,7 @@
       .psc-result-details summary {
         font-size: 11px;
         font-weight: 700;
-        color: #ffffff;
+        color: #0f172a;
         cursor: pointer;
         padding: 4px 0;
         user-select: none;
@@ -365,10 +396,10 @@
       .psc-result-fields {
         display: flex;
         flex-direction: column;
-        border: 1px solid #262626;
-        border-radius: 0px;
+        border: 1px solid #e2e8f0;
+        border-radius: 2px;
         overflow: hidden;
-        background: #050505;
+        background: #ffffff;
       }
       .psc-result-field-row {
         display: grid;
@@ -376,26 +407,26 @@
         gap: 8px;
         padding: 6px 10px;
         font-size: 11px;
-        border-bottom: 1px solid #171717;
+        border-bottom: 1px solid #f1f5f9;
         font-family: var(--hbr-font-mono, monospace);
       }
       .psc-result-field-row:last-child { border-bottom: none; }
       .psc-result-field-label {
-        color: #888888;
+        color: #64748b;
         font-weight: 700;
         text-transform: uppercase;
         font-size: 10px;
       }
-      .psc-result-field-value { color: #ffffff; word-break: break-word; }
-      .psc-result-field-value.psc-field-any { color: #525252; font-style: italic; }
+      .psc-result-field-value { color: #0f172a; word-break: break-word; }
+      .psc-result-field-value.psc-field-any { color: #94a3b8; font-style: italic; }
 
       .psc-no-match-card {
-        border: 1px solid #404040;
-        border-radius: 0px;
+        border: 1px solid #cbd5e1;
+        border-radius: 2px;
         padding: 12px 14px;
-        background: #0d0d0d;
+        background: #f8fafc;
         font-size: 11px;
-        color: #e5e5e5;
+        color: #1e293b;
         font-family: var(--hbr-font-mono, monospace);
       }
 
@@ -409,18 +440,18 @@
       .psc-search-input {
         width: 100%;
         padding: 8px 12px;
-        border: 1px solid #262626;
-        border-radius: 0px;
+        border: 1px solid #cbd5e1;
+        border-radius: 2px;
         font-size: 11px;
         font-family: var(--hbr-font-mono, monospace);
         outline: none;
-        background: #0d0d0d;
-        color: #ffffff;
+        background: #ffffff;
+        color: #0f172a;
         transition: border-color 0.2s;
       }
       .psc-search-input:focus {
-        border-color: #ffffff;
-        box-shadow: 0 0 0 1px #ffffff;
+        border-color: #0f172a;
+        box-shadow: 0 0 0 1px #0f172a;
       }
       .psc-filter-pills {
         display: flex;
@@ -428,40 +459,40 @@
         flex-wrap: wrap;
       }
       .psc-filter-pill {
-        background: #0d0d0d;
-        border: 1px solid #262626;
-        border-radius: 0px;
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        border-radius: 2px;
         padding: 4px 10px;
         font-size: 10.5px;
         font-weight: 700;
-        color: #737373;
+        color: #475569;
         cursor: pointer;
         font-family: var(--hbr-font-mono, monospace);
         text-transform: uppercase;
         transition: all 0.15s;
       }
       .psc-filter-pill:hover {
-        background: #171717;
-        color: #e5e5e5;
+        background: #f8fafc;
+        color: #0f172a;
       }
       .psc-filter-pill.active {
-        background: #ffffff;
-        color: #000000;
-        border-color: #ffffff;
+        background: #0f172a;
+        color: #ffffff;
+        border-color: #0f172a;
       }
 
-      /* Futuristic HUD Rule Cards */
+      /* Rule Cards */
       .psc-rule-group {
-        border: 1px solid #262626;
-        border-radius: 0px;
+        border: 1px solid #e2e8f0;
+        border-radius: 2px;
         overflow: hidden;
         margin-bottom: 6px;
-        background: #0d0d0d;
+        background: #ffffff;
         transition: border-color 0.15s;
         position: relative;
       }
       .psc-rule-group:hover {
-        border-color: #525252;
+        border-color: #cbd5e1;
       }
       .psc-rule-group-header {
         display: flex;
@@ -469,7 +500,7 @@
         gap: 6px;
         padding: 10px 12px;
         cursor: pointer;
-        background: #0d0d0d;
+        background: #ffffff;
         list-style: none;
         user-select: none;
       }
@@ -485,17 +516,17 @@
         font-family: var(--hbr-font-mono, monospace);
         font-size: 10px;
         font-weight: 700;
-        color: #ffffff;
-        background: #171717;
-        border: 1px solid #404040;
+        color: #0f172a;
+        background: #f1f5f9;
+        border: 1px solid #cbd5e1;
         padding: 1px 5px;
-        border-radius: 0px;
+        border-radius: 2px;
       }
       .psc-rule-name {
         flex: 1;
         font-weight: 700;
         font-size: 12px;
-        color: #ffffff;
+        color: #0f172a;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -505,13 +536,13 @@
         font-size: 10px;
         font-weight: 800;
         padding: 2px 8px;
-        border-radius: 0px;
+        border-radius: 2px;
         text-transform: uppercase;
         letter-spacing: 0.04em;
       }
-      .psc-action-allow { background: #ffffff; color: #000000; border: 1px solid #ffffff; }
-      .psc-action-block { background: #000000; color: #ffffff; border: 1px solid #ffffff; }
-      .psc-action-isolate { background: #262626; color: #ffffff; border: 1px solid #525252; }
+      .psc-action-allow { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+      .psc-action-block { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+      .psc-action-isolate { background: #f3e8ff; color: #6b21a8; border: 1px solid #e9d5ff; }
 
       /* Inline Data Bar on Rules */
       .psc-inline-chips {
@@ -522,26 +553,26 @@
         font-size: 10px;
       }
       .psc-chip {
-        background: #141414;
-        border: 1px solid #262626;
-        border-radius: 0px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 2px;
         padding: 2px 6px;
-        color: #a3a3a3;
+        color: #334155;
         display: inline-flex;
         align-items: center;
         gap: 4px;
       }
-      .psc-chip-key { color: #737373; font-weight: 700; }
-      .psc-chip-val { color: #ffffff; }
+      .psc-chip-key { color: #64748b; font-weight: 700; }
+      .psc-chip-val { color: #0f172a; font-weight: 600; }
 
-      .psc-check-list { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; background: #000000; border-top: 1px solid #262626; }
+      .psc-check-list { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; background: #f8fafc; border-top: 1px solid #e2e8f0; }
       .psc-check-item {
-        border-left: 2px solid;
+        border-left: 3px solid;
         padding: 6px 10px;
-        border-radius: 0px;
+        border-radius: 2px;
         font-size: 11px;
         line-height: 1.45;
-        background: #0d0d0d;
+        background: #ffffff;
       }
       .psc-check-item-head {
         display: flex;
@@ -552,18 +583,18 @@
         font-size: 10.5px;
         font-family: var(--hbr-font-mono, monospace);
       }
-      .psc-check-msg { color: #e5e5e5; display: block; }
-      .psc-check-detail { color: #737373; font-size: 10px; margin-top: 2px; font-family: var(--hbr-font-mono, monospace); }
+      .psc-check-msg { color: #1e293b; display: block; }
+      .psc-check-detail { color: #64748b; font-size: 10px; margin-top: 2px; font-family: var(--hbr-font-mono, monospace); }
 
       /* Tooltip */
       #psc-tooltip {
         position: fixed;
         display: none;
-        background: #0d0d0d;
+        background: #0f172a;
         color: #ffffff;
-        border: 1px solid #ffffff;
+        border: 1px solid #0f172a;
         padding: 8px 12px;
-        border-radius: 0px;
+        border-radius: 2px;
         font-size: 11px;
         font-family: var(--hbr-font-mono, monospace);
         line-height: 1.45;
@@ -625,20 +656,13 @@
     if (t) t.style.display = "none";
   }
 
-  function addTooltip(element, content) {
-    if (!content) return;
-    element.addEventListener("mouseenter", (e) => showTooltip(e, content));
-    element.addEventListener("mousemove", positionTooltip);
-    element.addEventListener("mouseleave", hideTooltip);
-  }
-
   function createSearchableSelect(labelStr, hintStr, inputId, itemsObj) {
     const wrapper = el("div", { class: "psc-dropdown-wrapper" });
     const input = el("input", {
       id: inputId,
       type: "text",
       class: "psc-dropdown-input",
-      placeholder: hintStr || "Type to search...",
+      placeholder: hintStr || "Type to search by name...",
       autocomplete: "off",
     });
     input.disabled = true;
@@ -653,22 +677,22 @@
       const q = (query || "").toLowerCase();
       const matches = keys.filter(k => {
         const label = itemsObj[k] || "";
-        return k.toLowerCase().includes(q) || label.toLowerCase().includes(q);
+        return k.toLowerCase().includes(q) || String(label).toLowerCase().includes(q);
       }).slice(0, 50);
 
       if (matches.length === 0) {
-        list.appendChild(el("li", { style: { color: "#737373", cursor: "default" } }, ["No matches found"]));
+        list.appendChild(el("li", { style: { color: "#94a3b8", cursor: "default" } }, ["No matching names found"]));
         return;
       }
 
       matches.forEach(k => {
         const label = itemsObj[k] || k;
         const li = el("li", {}, [
-          label
+          String(label)
         ]);
         li.addEventListener("click", () => {
           selectedValue = k;
-          input.value = label;
+          input.value = String(label);
           list.style.display = "none";
         });
         list.appendChild(li);
@@ -738,7 +762,7 @@
     const primaryCard = el("div", { class: "psc-hud-card" });
     primaryCard.appendChild(el("div", { class: "psc-hud-title" }, [
       el("span", {}, ["PRIMARY IP / PORT CRITERIA"]),
-      el("span", { style: { fontSize: "9px", color: "#a3a3a3" } }, ["[DEFAULT ACTIVE]"])
+      el("span", { style: { fontSize: "9px", color: "#64748b" } }, ["[DEFAULT ACTIVE]"])
     ]));
 
     // Source IP:Port Input
@@ -783,49 +807,50 @@
         identityItems[id] = label;
       });
     }
-    const identitySelect = createSearchableSelect("Identity", "Search AD group, user, or device...", "psc-identity", identityItems);
+    const identitySelect = createSearchableSelect("Identity", "Search AD user, group, or device name...", "psc-identity", identityItems);
     identitySelect.input.disabled = false;
     srcAdvBox.appendChild(identitySelect.element);
 
-    const identityTypeSelect = createSearchableSelect("Identity Type", "Search identity types...", "psc-identity-type", identityTypeMap || {});
+    const mergedIdentityTypeMap = Object.assign({}, DEFAULT_IDENTITY_TYPES, identityTypeMap || {});
+    const identityTypeSelect = createSearchableSelect("Identity Type", "Search identity type by name...", "psc-identity-type", mergedIdentityTypeMap);
     identityTypeSelect.input.disabled = false;
     srcAdvBox.appendChild(identityTypeSelect.element);
 
-    const sgtInput = el("input", { id: "psc-sgt", type: "text", placeholder: "SGT Tag / ID", autocomplete: "off" });
+    const sgtInput = el("input", { id: "psc-sgt", type: "text", placeholder: "Search Security Group Tag name...", autocomplete: "off" });
     srcAdvBox.appendChild(el("div", { class: "psc-field-group" }, [
       el("label", { class: "psc-field-label", htmlFor: "psc-sgt" }, ["Security Group Tag (SGT)"]),
       sgtInput
     ]));
 
-    const locInput = el("input", { id: "psc-location", type: "text", placeholder: "Location / Branch name or ID", autocomplete: "off" });
+    const locInput = el("input", { id: "psc-location", type: "text", placeholder: "Search Location / Branch name...", autocomplete: "off" });
     srcAdvBox.appendChild(el("div", { class: "psc-field-group" }, [
       el("label", { class: "psc-field-label", htmlFor: "psc-location" }, ["Location / Branch"]),
       locInput
     ]));
 
-    const intNetInput = el("input", { id: "psc-internal-net", type: "text", placeholder: "Internal Network Range", autocomplete: "off" });
+    const intNetInput = el("input", { id: "psc-internal-net", type: "text", placeholder: "Internal Network CIDR or name...", autocomplete: "off" });
     srcAdvBox.appendChild(el("div", { class: "psc-field-group" }, [
       el("label", { class: "psc-field-label", htmlFor: "psc-internal-net" }, ["Internal Network"]),
       intNetInput
     ]));
 
-    const srcNetObjSelect = createSearchableSelect("Source Network Object", "Search network objects...", "psc-netobj-src", maps.networkObjects || {});
+    const srcNetObjSelect = createSearchableSelect("Source Network Object", "Search network object by name...", "psc-netobj-src", maps.networkObjects || {});
     srcNetObjSelect.input.disabled = false;
     srcAdvBox.appendChild(srcNetObjSelect.element);
 
-    const tunnelInput = el("input", { id: "psc-tunnel", type: "text", placeholder: "Tunnel name or ID", autocomplete: "off" });
+    const tunnelInput = el("input", { id: "psc-tunnel", type: "text", placeholder: "Search Network Tunnel by name...", autocomplete: "off" });
     srcAdvBox.appendChild(el("div", { class: "psc-field-group" }, [
       el("label", { class: "psc-field-label", htmlFor: "psc-tunnel" }, ["Network Tunnel"]),
       tunnelInput
     ]));
 
-    const postureInput = el("input", { id: "psc-posture", type: "text", placeholder: "Device Posture Profile", autocomplete: "off" });
+    const postureInput = el("input", { id: "psc-posture", type: "text", placeholder: "Search Device Posture Profile name...", autocomplete: "off" });
     srcAdvBox.appendChild(el("div", { class: "psc-field-group" }, [
       el("label", { class: "psc-field-label", htmlFor: "psc-posture" }, ["Device Posture Profile"]),
       postureInput
     ]));
 
-    const netDevInput = el("input", { id: "psc-network-device", type: "text", placeholder: "Network Device hostname/IP", autocomplete: "off" });
+    const netDevInput = el("input", { id: "psc-network-device", type: "text", placeholder: "Search Network Device hostname or IP...", autocomplete: "off" });
     srcAdvBox.appendChild(el("div", { class: "psc-field-group" }, [
       el("label", { class: "psc-field-label", htmlFor: "psc-network-device" }, ["Network Device"]),
       netDevInput
@@ -847,25 +872,25 @@
 
     const dstAdvBox = el("div", { class: "psc-advanced-box", id: "psc-dst-adv-box" });
 
-    const appSelect = createSearchableSelect("Internet Application", "Search applications...", "psc-app", {});
-    const protoSelect = createSearchableSelect("Application Protocol", "Search protocols...", "psc-proto", {});
-    const catSelect = createSearchableSelect("Content Category", "Search categories...", "psc-cat", {});
-    const privResSelect = createSearchableSelect("Private Resource", "Search private resources...", "psc-privres", maps.privateResources || {});
+    const appSelect = createSearchableSelect("Internet Application", "Search applications by name...", "psc-app", {});
+    const protoSelect = createSearchableSelect("Application Protocol", "Search protocols by name...", "psc-proto", {});
+    const catSelect = createSearchableSelect("Content Category", "Search categories by name...", "psc-cat", {});
+    const privResSelect = createSearchableSelect("Private Resource", "Search private resources by name...", "psc-privres", maps.privateResources || {});
     privResSelect.input.disabled = false;
 
-    const destListSelect = createSearchableSelect("Destination List", "Search destination lists...", "psc-destlist", maps.destinationLists || {});
+    const destListSelect = createSearchableSelect("Destination List", "Search destination lists by name...", "psc-destlist", maps.destinationLists || {});
     destListSelect.input.disabled = false;
 
-    const netObjSelect = createSearchableSelect("Network Object", "Search network objects...", "psc-netobj", maps.networkObjects || {});
+    const netObjSelect = createSearchableSelect("Network Object", "Search network objects by name...", "psc-netobj", maps.networkObjects || {});
     netObjSelect.input.disabled = false;
 
-    const svcObjSelect = createSearchableSelect("Service Object Group", "Search service groups...", "psc-svcobj", maps.serviceObjectGroups || {});
+    const svcObjSelect = createSearchableSelect("Service Object Group", "Search service groups by name...", "psc-svcobj", maps.serviceObjectGroups || {});
     svcObjSelect.input.disabled = false;
 
-    const appListSelect = createSearchableSelect("Application List", "Search application lists...", "psc-applist", maps.applicationLists || {});
+    const appListSelect = createSearchableSelect("Application List", "Search application lists by name...", "psc-applist", maps.applicationLists || {});
     appListSelect.input.disabled = false;
 
-    const catListSelect = createSearchableSelect("Category List", "Search category lists...", "psc-catlist", maps.categoryLists || {});
+    const catListSelect = createSearchableSelect("Category List", "Search category lists by name...", "psc-catlist", maps.categoryLists || {});
     catListSelect.input.disabled = false;
 
     dstAdvBox.appendChild(appSelect.element);
@@ -889,9 +914,9 @@
 
     // Asynchronously populate lookups
     loadLookups().then(lookups => {
-      const newAppSelect = createSearchableSelect("Internet Application", "Search applications...", "psc-app", lookups.apps);
-      const newProtoSelect = createSearchableSelect("Application Protocol", "Search protocols...", "psc-proto", lookups.protocols);
-      const newCatSelect = createSearchableSelect("Content Category", "Search categories...", "psc-cat", lookups.categories);
+      const newAppSelect = createSearchableSelect("Internet Application", "Search applications by name...", "psc-app", lookups.apps);
+      const newProtoSelect = createSearchableSelect("Application Protocol", "Search protocols by name...", "psc-proto", lookups.protocols);
+      const newCatSelect = createSearchableSelect("Content Category", "Search categories by name...", "psc-cat", lookups.categories);
       
       newAppSelect.input.disabled = false;
       newProtoSelect.input.disabled = false;
@@ -1206,6 +1231,16 @@
 
     searchInput.addEventListener("input", applyRulesFilter);
 
+    function lookupItemName(mapObj, key) {
+      if (!mapObj || key === undefined || key === null) return null;
+      const kStr = String(key);
+      const val = mapObj[kStr] !== undefined ? mapObj[kStr] : mapObj[key];
+      if (!val) return null;
+      if (typeof val === "string") return val;
+      if (typeof val === "object" && val.name) return val.name;
+      return String(val);
+    }
+
     function summarizeConditions(rule, lookups) {
       const conds = rule.ruleConditions || rule.conditions || [];
       if (!Array.isArray(conds) || conds.length === 0) {
@@ -1219,47 +1254,92 @@
         if (!type || values === undefined) continue;
 
         let summaryText = "";
-        switch (type) {
-          case "umbrella.source.all":
-          case "umbrella.destination.all":
-            if (values === true) summaryText = `${type.split('.')[1].toUpperCase()} = ANY`;
-            break;
-          case "umbrella.source.identity_ids": {
-            const identityNames = (Array.isArray(values) ? values : [values]).map((id) => {
-              return (lookups.identities && lookups.identities[String(id)]) || id;
-            });
-            summaryText = `ID: ${identityNames.join(", ")}`;
-            break;
+        const tLower = type.toLowerCase();
+
+        if (tLower.includes("source.all") || tLower.includes("destination.all")) {
+          if (values === true) summaryText = `${tLower.includes("source") ? "SOURCE" : "DESTINATION"}: ANY`;
+        } else if (tLower.includes("identity_type")) {
+          const typeNames = (Array.isArray(values) ? values : [values]).map((id) => {
+            return lookupItemName(lookups.identityTypes, id) || lookupItemName(DEFAULT_IDENTITY_TYPES, id) || `Type #${id}`;
+          });
+          summaryText = `Identity Type: ${typeNames.join(", ")}`;
+        } else if (tLower.includes("identity_ids") || tLower.includes("identities")) {
+          const identityNames = (Array.isArray(values) ? values : [values]).map((id) => {
+            return lookupItemName(lookups.identities, id) || `Identity #${id}`;
+          });
+          summaryText = `Identity: ${identityNames.join(", ")}`;
+        } else if (tLower.includes("application_ids")) {
+          const appMatches = [];
+          for (const id of Array.isArray(values) ? values : [values]) {
+            const name = lookupItemName(lookups.apps, id) || lookupItemName(lookups.protocols, id);
+            appMatches.push(name || `App #${id}`);
           }
-          case "umbrella.destination.application_ids": {
-            const appMatches = [];
-            for (const id of Array.isArray(values) ? values : []) {
-              if (lookups.apps[id] !== undefined) appMatches.push(lookups.apps[id]);
-              else if (lookups.protocols[id] !== undefined) appMatches.push(lookups.protocols[id]);
-              else appMatches.push(id);
+          summaryText = `App: ${appMatches.join(", ")}`;
+        } else if (tLower.includes("application_category") || tLower.includes("category_ids")) {
+          const catMatches = [];
+          for (const id of Array.isArray(values) ? values : [values]) {
+            const name = lookupItemName(lookups.categories, id);
+            catMatches.push(name || `Category #${id}`);
+          }
+          summaryText = `Category: ${catMatches.join(", ")}`;
+        } else if (tLower.includes("private_resource")) {
+          const resMatches = [];
+          for (const id of Array.isArray(values) ? values : [values]) {
+            const name = lookupItemName(lookups.privateResources, id) || lookupItemName(lookups.objects, id);
+            resMatches.push(name || `Private Resource #${id}`);
+          }
+          summaryText = `Private Resource: ${resMatches.join(", ")}`;
+        } else if (tLower.includes("destination_list")) {
+          const listMatches = [];
+          for (const id of Array.isArray(values) ? values : [values]) {
+            const name = lookupItemName(lookups.destinationLists, id);
+            listMatches.push(name || `Destination List #${id}`);
+          }
+          summaryText = `Destination List: ${listMatches.join(", ")}`;
+        } else if (tLower.includes("network_object")) {
+          const objMatches = [];
+          for (const id of Array.isArray(values) ? values : [values]) {
+            const name = lookupItemName(lookups.networkObjects, id);
+            objMatches.push(name || `Network Object #${id}`);
+          }
+          summaryText = `Network Object: ${objMatches.join(", ")}`;
+        } else if (tLower.includes("service_object")) {
+          const objMatches = [];
+          for (const id of Array.isArray(values) ? values : [values]) {
+            const name = lookupItemName(lookups.serviceObjectGroups, id);
+            objMatches.push(name || `Service Group #${id}`);
+          }
+          summaryText = `Service Group: ${objMatches.join(", ")}`;
+        } else if (tLower.includes("application_list")) {
+          const listMatches = [];
+          for (const id of Array.isArray(values) ? values : [values]) {
+            const name = lookupItemName(lookups.applicationLists, id);
+            listMatches.push(name || `App List #${id}`);
+          }
+          summaryText = `App List: ${listMatches.join(", ")}`;
+        } else if (tLower.includes("composite_inline_ip")) {
+          const items = Array.isArray(values) ? values : [values];
+          const parts = items.map((item) => {
+            if (item && typeof item === "object") {
+              const ip = Array.isArray(item.ip) ? item.ip.join(",") : (item.ip || "*");
+              const port = Array.isArray(item.port) ? item.port.join(",") : (item.port || "*");
+              return `${ip}:${port}`;
             }
-            summaryText = `APP: ${appMatches.join(", ")}`;
-            break;
-          }
-          case "umbrella.destination.composite_inline_ip": {
-            const items = Array.isArray(values) ? values : [values];
-            const parts = items.map((item) => {
-              if (item && typeof item === "object") {
-                const ip = Array.isArray(item.ip) ? item.ip.join(",") : (item.ip || "*");
-                const port = Array.isArray(item.port) ? item.port.join(",") : (item.port || "*");
-                return `${ip}:${port}`;
-              }
-              return String(item);
-            });
-            summaryText = `DST IP: ${parts.join(" + ")}`;
-            break;
-          }
-          default: {
-            const simple = type.replace("umbrella.", "").replace("destination.", "").replace("source.", "");
-            summaryText = `${simple.toUpperCase()}: ${Array.isArray(values) ? values.join(",") : values}`;
-            break;
-          }
+            return String(item);
+          });
+          summaryText = `Dst IP/Port: ${parts.join(" + ")}`;
+        } else if (tLower.includes("sgt")) {
+          summaryText = `SGT: ${Array.isArray(values) ? values.join(", ") : values}`;
+        } else if (tLower.includes("location")) {
+          summaryText = `Location: ${Array.isArray(values) ? values.join(", ") : values}`;
+        } else if (tLower.includes("tunnel")) {
+          summaryText = `Tunnel: ${Array.isArray(values) ? values.join(", ") : values}`;
+        } else {
+          const simple = type.replace(/^umbrella\./i, "").replace(/^(source|destination)\./i, "").replace(/_/g, " ");
+          const valStr = Array.isArray(values) ? values.map(v => typeof v === "object" ? JSON.stringify(v) : v).join(", ") : values;
+          summaryText = `${simple.toUpperCase()}: ${valStr}`;
         }
+
         if (summaryText) summaries.push({ text: summaryText, raw: c });
       }
       return summaries;
@@ -1268,15 +1348,18 @@
     async function update(rules, findings, identityMap, objectMap, objectMaps, identityTypeMap) {
       const lookups = await loadLookups();
       lookups.identities = identityMap || {};
-      lookups.identityTypes = identityTypeMap || {};
+      lookups.identityTypes = Object.assign({}, DEFAULT_IDENTITY_TYPES, identityTypeMap || {});
       lookups.objects = objectMap || {};
       lookups.privateResources = (objectMaps && objectMaps.privateResources) || objectMap || {};
       lookups.destinationLists = (objectMaps && objectMaps.destinationLists) || {};
       lookups.networkObjects   = (objectMaps && objectMaps.networkObjects) || {};
+      lookups.serviceObjectGroups = (objectMaps && objectMaps.serviceObjectGroups) || {};
+      lookups.applicationLists = (objectMaps && objectMaps.applicationLists) || {};
+      lookups.categoryLists    = (objectMaps && objectMaps.categoryLists) || {};
 
       rulesContainer.innerHTML = "";
       if (!rules || rules.length === 0) {
-        rulesContainer.appendChild(el("p", { class: "psc-empty", style: { textAlign: "center", color: "#888888", fontFamily: "var(--hbr-font-mono)" } }, ["// NO RULES LOADED"]));
+        rulesContainer.appendChild(el("p", { class: "psc-empty", style: { textAlign: "center", color: "#64748b", fontFamily: "var(--hbr-font-mono)" } }, ["// NO RULES LOADED"]));
         return;
       }
 
@@ -1293,7 +1376,7 @@
         const rId = rule.ruleId !== undefined ? rule.ruleId : rule.id;
         const ruleFindings = findingsByRule.get(rId) || [];
 
-        const borderLeftColor = rAction === "allow" ? "#ffffff" : (rAction === "block" ? "#525252" : "#a3a3a3");
+        const borderLeftColor = rAction === "allow" ? "#166534" : (rAction === "block" ? "#991b1b" : "#6b21a8");
 
         const card = el("details", {
           class: "psc-rule-group",
@@ -1314,7 +1397,7 @@
 
         // Inline Data Chips Bar
         const inlineChips = el("div", { class: "psc-inline-chips" });
-        condSummaries.slice(0, 3).forEach(cs => {
+        condSummaries.slice(0, 4).forEach(cs => {
           const colonIdx = cs.text.indexOf(":");
           if (colonIdx > -1) {
             inlineChips.appendChild(el("span", { class: "psc-chip" }, [
@@ -1342,10 +1425,10 @@
         if (rule.security_profiles) {
           const sp = rule.security_profiles;
           const spRow = el("div", { class: "psc-inline-chips", style: { marginBottom: "6px" } }, [
-            el("span", { class: "psc-chip", style: { borderColor: sp.ips_enabled ? "#ffffff" : "#333333" } }, [`IPS: ${sp.ips_enabled ? "ON" : "OFF"}`]),
-            el("span", { class: "psc-chip", style: { borderColor: sp.amp_malware_enabled ? "#ffffff" : "#333333" } }, [`AMP: ${sp.amp_malware_enabled ? "ON" : "OFF"}`]),
-            el("span", { class: "psc-chip", style: { borderColor: sp.tls_decryption_enabled ? "#ffffff" : "#333333" } }, [`TLS: ${sp.tls_decryption_enabled ? "ON" : "OFF"}`]),
-            el("span", { class: "psc-chip", style: { borderColor: sp.dlp_enabled ? "#ffffff" : "#333333" } }, [`DLP: ${sp.dlp_enabled ? "ON" : "OFF"}`]),
+            el("span", { class: "psc-chip", style: { borderColor: sp.ips_enabled ? "#166534" : "#cbd5e1" } }, [`IPS: ${sp.ips_enabled ? "ON" : "OFF"}`]),
+            el("span", { class: "psc-chip", style: { borderColor: sp.amp_malware_enabled ? "#166534" : "#cbd5e1" } }, [`AMP: ${sp.amp_malware_enabled ? "ON" : "OFF"}`]),
+            el("span", { class: "psc-chip", style: { borderColor: sp.tls_decryption_enabled ? "#166534" : "#cbd5e1" } }, [`TLS: ${sp.tls_decryption_enabled ? "ON" : "OFF"}`]),
+            el("span", { class: "psc-chip", style: { borderColor: sp.dlp_enabled ? "#166534" : "#cbd5e1" } }, [`DLP: ${sp.dlp_enabled ? "ON" : "OFF"}`]),
           ]);
           cardBody.appendChild(spRow);
         }
@@ -1355,8 +1438,8 @@
           const findingsBox = el("div", { style: { display: "flex", flexDirection: "column", gap: "4px" } });
           ruleFindings.forEach(f => {
             const fc = COLOR[f.severity] || COLOR.low;
-            findingsBox.appendChild(el("div", { class: "psc-check-item", style: { borderLeftColor: fc.border } }, [
-              el("div", { class: "psc-check-item-head", style: { color: fc.border } }, [`[${f.checkId}] ${f.severity.toUpperCase()}`]),
+            findingsBox.appendChild(el("div", { class: "psc-check-item", style: { borderLeftColor: fc.text, background: fc.bg } }, [
+              el("div", { class: "psc-check-item-head", style: { color: fc.text } }, [`[${f.checkId}] ${f.severity.toUpperCase()}`]),
               el("span", { class: "psc-check-msg" }, [f.message])
             ]));
           });
