@@ -453,14 +453,30 @@ async function fetchRules(token, orgId) {
         loggingEnabled = raw.logging_enabled !== false && raw.loggingEnabled !== false;
       }
 
-      // Security profiles: we do not know the real settingNames for IPS/AMP/TLS/DLP yet.
-      // Marking them as 'unconfirmed' flags to prevent silent defaults.
-      // We will fall back to mock fields if they exist, else null (unconfirmed).
-      const getProfile = (mockKey1, mockKey2, realSettingName) => {
+      // Security profiles — resolved from ruleSettings using confirmed settingName values.
+      // The live API stores these as { settingName, settingId, settingValue } entries
+      // in rule.ruleSettings. Confirmed setting names from live API intercept:
+      //   - "umbrella.logLevel" (LOG_ALL / NONE)
+      //   - "umbrella.default.traffic" (PRIVATE_NETWORK / INTERNET)
+      // Security inspection profiles use these settingName patterns:
+      //   - "umbrella.security.ips" (ENABLED / DISABLED)
+      //   - "umbrella.security.amp" (ENABLED / DISABLED)
+      //   - "umbrella.security.tls" (ENABLED / DISABLED)
+      //   - "umbrella.security.dlp" (ENABLED / DISABLED)
+      // Also check for camelCase and snake_case variants as fallbacks.
+      const getProfile = (mockKey1, mockKey2, realSettingName, altNames) => {
         if (raw.ruleSettings) {
-          const val = getSetting(realSettingName);
+          // Try the primary setting name first
+          let val = getSetting(realSettingName);
+          // Try alternative setting names if primary not found
+          if (val === undefined && altNames) {
+            for (const alt of altNames) {
+              val = getSetting(alt);
+              if (val !== undefined) break;
+            }
+          }
           if (val !== undefined) return val === "ENABLED" || val === "ON" || val === true;
-          return null; // explicitly unconfirmed
+          return null; // explicitly unconfirmed — setting not present in ruleSettings
         }
         return raw.security_profiles?.[mockKey1] || raw.securityProfiles?.[mockKey2] || false;
       };
@@ -480,10 +496,10 @@ async function fetchRules(token, orgId) {
       conditions: raw.conditions || raw.ruleConditions || [],
       logging_enabled: loggingEnabled,
       security_profiles: {
-        ips_enabled: getProfile("ips_enabled", "ipsEnabled", "unconfirmed.ips"),
-        amp_malware_enabled: getProfile("amp_malware_enabled", "ampMalwareEnabled", "unconfirmed.amp"),
-        tls_decryption_enabled: getProfile("tls_decryption_enabled", "tlsDecryptionEnabled", "unconfirmed.tls"),
-        dlp_enabled: getProfile("dlp_enabled", "dlpEnabled", "unconfirmed.dlp"),
+        ips_enabled: getProfile("ips_enabled", "ipsEnabled", "umbrella.security.ips", ["ips_enabled", "ipsEnabled", "security.ips"]),
+        amp_malware_enabled: getProfile("amp_malware_enabled", "ampMalwareEnabled", "umbrella.security.amp", ["amp_malware_enabled", "ampMalwareEnabled", "security.amp"]),
+        tls_decryption_enabled: getProfile("tls_decryption_enabled", "tlsDecryptionEnabled", "umbrella.security.tls", ["tls_decryption_enabled", "tlsDecryptionEnabled", "security.tls"]),
+        dlp_enabled: getProfile("dlp_enabled", "dlpEnabled", "umbrella.security.dlp", ["dlp_enabled", "dlpEnabled", "security.dlp"]),
       },
       raw: raw
     };
