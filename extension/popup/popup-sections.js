@@ -134,24 +134,68 @@
         letter-spacing: 0.04em;
       }
 
-      /* Settings Panel (right side) */
-      .psc-settings-panel {
+      /* Settings Popover (top, next to source/destination) */
+      .psc-settings-toggle {
+        background: #f8fafc;
         border: 1px solid #e2e8f0;
         border-radius: 2px;
-        padding: 12px;
-        background: #f8fafc;
-        margin-top: 8px;
-      }
-      .psc-settings-panel .psc-settings-title {
+        padding: 6px 12px;
         font-size: 10px;
         font-weight: 700;
         color: #0f172a;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-family: var(--hbr-font-mono, monospace);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-top: 4px;
+        align-self: flex-start;
+      }
+      .psc-settings-toggle:hover {
+        background: #f1f5f9;
+        border-color: #cbd5e1;
+      }
+      .psc-settings-arrow {
+        font-size: 9px;
+        transition: transform 0.2s ease;
+      }
+      .psc-settings-toggle:hover .psc-settings-arrow {
+        transform: rotate(180deg);
+      }
+      .psc-settings-popover {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        z-index: 100;
+        display: none;
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 2px;
+        padding: 8px;
+        min-width: 240px;
+        box-shadow: 0 4px 16px rgba(15, 23, 42, 0.1);
+      }
+      .psc-settings-popover.open {
+        display: block;
+      }
+      .psc-settings-group {
+        margin-bottom: 8px;
+      }
+      .psc-settings-group:last-child {
+        margin-bottom: 0;
+      }
+      .psc-settings-group-title {
+        font-size: 8px;
+        font-weight: 700;
+        color: #64748b;
         text-transform: uppercase;
         letter-spacing: 0.04em;
         font-family: var(--hbr-font-mono, monospace);
-        margin-bottom: 8px;
+        margin-bottom: 4px;
       }
-      .psc-settings-panel .psc-setting-row {
+      .psc-setting-row {
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -160,37 +204,24 @@
         color: #1e293b;
         font-family: var(--hbr-font-mono, monospace);
       }
-      .psc-settings-panel .psc-setting-row label {
+      .psc-setting-label {
         color: #475569;
         font-size: 10.5px;
       }
-      .psc-settings-panel .psc-setting-toggle {
-        width: 36px;
-        height: 18px;
-        border-radius: 9px;
-        border: 1px solid #cbd5e1;
-        background: #e2e8f0;
-        position: relative;
-        cursor: pointer;
-        transition: all 0.15s;
+
+      /* Enabled Fields Container (vertical rendering) */
+      .psc-enabled-fields {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 8px;
+        width: 100%;
       }
-      .psc-settings-panel .psc-setting-toggle.active {
-        background: #0f172a;
-        border-color: #0f172a;
+      .psc-enabled-fields .psc-field-group {
+        width: 100%;
       }
-      .psc-settings-panel .psc-setting-toggle::after {
-        content: "";
-        position: absolute;
-        top: 2px;
-        left: 2px;
-        width: 14px;
-        height: 14px;
-        border-radius: 50%;
-        background: #ffffff;
-        transition: transform 0.15s;
-      }
-      .psc-settings-panel .psc-setting-toggle.active::after {
-        transform: translateX(18px);
+      .psc-enabled-fields .psc-dropdown-wrapper {
+        width: 100%;
       }
 
       /* Default Primary IP+Port Cards */
@@ -1044,33 +1075,84 @@
     formRow.appendChild(dstAdvToggle);
     formRow.appendChild(dstAdvBox);
 
-    // --- 4. SETTINGS PANEL (right side) — enable additional source/destination fields ---
-    const settingsPanel = el("div", { class: "psc-settings-panel" });
-    settingsPanel.appendChild(el("div", { class: "psc-settings-title" }, ["FIELD SETTINGS"]));
+    // --- 4. SETTINGS POPOVER (top, next to source/destination) ---
+    // A toggle button that opens a popover listing all available fields.
+    // Enabled fields render vertically below the source/destination row.
+    const settingsToggle = el("button", {
+      type: "button",
+      class: "psc-settings-toggle",
+      id: "psc-settings-toggle"
+    }, [
+      el("span", {}, ["⚙ FIELD SETTINGS"]),
+      el("span", { class: "psc-settings-arrow" }, ["▼"])
+    ]);
+
+    const settingsPopover = el("div", { class: "psc-settings-popover", id: "psc-settings-popover" });
 
     // Settings toggles for additional source/destination fields
     const settingsToggles = {
-      identity: { label: "Identity", enabled: true },
-      identityType: { label: "Identity Type", enabled: true },
-      sgt: { label: "Security Group Tag", enabled: true },
-      location: { label: "Location / Branch", enabled: false },
-      internalNetwork: { label: "Internal Network", enabled: false },
-      networkObject: { label: "Network Object", enabled: false },
-      tunnel: { label: "Network Tunnel", enabled: false },
-      posture: { label: "Device Posture Profile", enabled: false },
-      networkDevice: { label: "Network Device", enabled: false },
-      app: { label: "Internet Application", enabled: true },
-      protocol: { label: "Application Protocol", enabled: true },
-      category: { label: "Content Category", enabled: true },
-      privateResource: { label: "Private Resource", enabled: false },
-      destinationList: { label: "Destination List", enabled: false },
-      netObject: { label: "Network Object (Dest)", enabled: false },
-      serviceObject: { label: "Service Object Group", enabled: false },
-      appList: { label: "Application List", enabled: false },
-      catList: { label: "Category List", enabled: false },
+      identity: { label: "Identity", enabled: true, category: "source" },
+      identityType: { label: "Identity Type", enabled: true, category: "source" },
+      sgt: { label: "Security Group Tag", enabled: true, category: "source" },
+      location: { label: "Location / Branch", enabled: false, category: "source" },
+      internalNetwork: { label: "Internal Network", enabled: false, category: "source" },
+      networkObject: { label: "Network Object", enabled: false, category: "source" },
+      tunnel: { label: "Network Tunnel", enabled: false, category: "source" },
+      posture: { label: "Device Posture Profile", enabled: false, category: "source" },
+      networkDevice: { label: "Network Device", enabled: false, category: "source" },
+      app: { label: "Internet Application", enabled: true, category: "destination" },
+      protocol: { label: "Application Protocol", enabled: true, category: "destination" },
+      category: { label: "Content Category", enabled: true, category: "destination" },
+      privateResource: { label: "Private Resource", enabled: false, category: "destination" },
+      destinationList: { label: "Destination List", enabled: false, category: "destination" },
+      netObject: { label: "Network Object (Dest)", enabled: false, category: "destination" },
+      serviceObject: { label: "Service Object Group", enabled: false, category: "destination" },
+      appList: { label: "Application List", enabled: false, category: "destination" },
+      catList: { label: "Category List", enabled: false, category: "destination" },
     };
 
-    Object.entries(settingsToggles).forEach(([key, cfg]) => {
+    // Group settings by category
+    const sourceSettings = Object.entries(settingsToggles).filter(([_, cfg]) => cfg.category === "source");
+    const destSettings = Object.entries(settingsToggles).filter(([_, cfg]) => cfg.category === "destination");
+
+    const sourceGroup = el("div", { class: "psc-settings-group" });
+    sourceGroup.appendChild(el("div", { class: "psc-settings-group-title" }, ["SOURCE FIELDS"]));
+    sourceSettings.forEach(([key, cfg]) => {
+      sourceGroup.appendChild(createSettingRow(key, cfg));
+    });
+
+    const destGroup = el("div", { class: "psc-settings-group" });
+    destGroup.appendChild(el("div", { class: "psc-settings-group-title" }, ["DESTINATION FIELDS"]));
+    destSettings.forEach(([key, cfg]) => {
+      destGroup.appendChild(createSettingRow(key, cfg));
+    });
+
+    settingsPopover.appendChild(sourceGroup);
+    settingsPopover.appendChild(destGroup);
+
+    // Toggle button handler
+    settingsToggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      settingsPopover.classList.toggle("open");
+    });
+
+    // Close popover when clicking outside
+    document.addEventListener("click", (e) => {
+      if (!settingsPopover.contains(e.target) && e.target !== settingsToggle) {
+        settingsPopover.classList.remove("open");
+      }
+    });
+
+    // Container for vertically rendered enabled fields
+    const enabledFieldsContainer = el("div", { class: "psc-enabled-fields", id: "psc-enabled-fields" });
+
+    // Insert settings toggle at the top of formRow, before ipFieldsRow
+    formRow.insertBefore(settingsToggle, ipFieldsRow);
+    formRow.appendChild(settingsPopover);
+    formRow.appendChild(enabledFieldsContainer);
+
+    // Helper: create a setting row with toggle
+    function createSettingRow(key, cfg) {
       const toggle = el("div", {
         class: "psc-setting-toggle" + (cfg.enabled ? " active" : ""),
         "data-setting": key
@@ -1079,39 +1161,59 @@
         toggle.classList.toggle("active");
         const isActive = toggle.classList.contains("active");
         // Enable/disable the corresponding input
-        const inputMap = {
-          identity: identitySelect,
-          identityType: identityTypeSelect,
-          sgt: sgtInput,
-          location: locInput,
-          internalNetwork: intNetInput,
-          networkObject: srcNetObjSelect,
-          tunnel: tunnelInput,
-          posture: postureInput,
-          networkDevice: netDevInput,
-          app: appSelect,
-          protocol: protoSelect,
-          category: catSelect,
-          privateResource: privResSelect,
-          destinationList: destListSelect,
-          netObject: netObjSelect,
-          serviceObject: svcObjSelect,
-          appList: appListSelect,
-          catList: catListSelect,
-        };
         const sel = inputMap[key];
         if (sel && sel.input) {
           sel.input.disabled = !isActive;
         }
+        // Re-render enabled fields vertically
+        renderEnabledFields();
       });
-      settingsPanel.appendChild(el("div", { class: "psc-setting-row" }, [
+
+      const row = el("div", { class: "psc-setting-row" }, [
         el("label", { class: "psc-setting-label" }, [cfg.label]),
         toggle
-      ]));
-    });
+      ]);
+      return row;
+    }
 
-    formRow.appendChild(settingsPanel);
-    body.appendChild(formRow);
+    // Render enabled fields vertically in the container
+    function renderEnabledFields() {
+      enabledFieldsContainer.innerHTML = "";
+      Object.entries(settingsToggles).forEach(([key, cfg]) => {
+        const toggle = settingsPopover.querySelector(`[data-setting="${key}"]`);
+        if (toggle && toggle.classList.contains("active")) {
+          const sel = inputMap[key];
+          if (sel && sel.element) {
+            enabledFieldsContainer.appendChild(sel.element);
+          }
+        }
+      });
+    }
+
+    // Initialize: render enabled fields on load
+    setTimeout(renderEnabledFields, 100);
+
+    // inputMap needs to be defined before createSettingRow uses it
+    var inputMap = {
+      identity: identitySelect,
+      identityType: identityTypeSelect,
+      sgt: sgtInput,
+      location: locInput,
+      internalNetwork: intNetInput,
+      networkObject: srcNetObjSelect,
+      tunnel: tunnelInput,
+      posture: postureInput,
+      networkDevice: netDevInput,
+      app: appSelect,
+      protocol: protoSelect,
+      category: catSelect,
+      privateResource: privResSelect,
+      destinationList: destListSelect,
+      netObject: netObjSelect,
+      serviceObject: svcObjSelect,
+      appList: appListSelect,
+      catList: catListSelect,
+    };
 
     // Asynchronously populate lookups
     loadLookups().then(lookups => {
