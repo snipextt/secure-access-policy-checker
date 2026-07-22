@@ -930,12 +930,22 @@
     const list = el("ul", { class: "psc-dropdown-list" });
     let selectedValue = "";
 
+    function getItemLabel(item, fallbackKey) {
+      if (item === undefined || item === null) return String(fallbackKey || "");
+      if (typeof item === "string") return item;
+      if (typeof item === "object") {
+        return item.name || item.label || item.displayName || String(fallbackKey || "");
+      }
+      return String(item);
+    }
+
     function renderList(query) {
       list.innerHTML = "";
       const q = (query || "").toLowerCase();
       const matches = keys.filter(k => {
-        const label = currentItemsObj[k] || "";
-        return k.toLowerCase().includes(q) || String(label).toLowerCase().includes(q);
+        const item = currentItemsObj[k];
+        const label = getItemLabel(item, k);
+        return k.toLowerCase().includes(q) || label.toLowerCase().includes(q);
       }).slice(0, 50);
 
       if (matches.length === 0) {
@@ -944,13 +954,14 @@
       }
 
       matches.forEach(k => {
-        const label = currentItemsObj[k] || k;
+        const item = currentItemsObj[k];
+        const labelStr = getItemLabel(item, k);
         const li = el("li", {}, [
-          String(label)
+          labelStr
         ]);
         li.addEventListener("click", () => {
           selectedValue = k;
-          input.value = String(label);
+          input.value = labelStr;
           list.style.display = "none";
         });
         list.appendChild(li);
