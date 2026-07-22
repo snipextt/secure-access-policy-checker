@@ -637,6 +637,81 @@
         border-color: #0f172a;
       }
 
+      /* Policy Audit Summary Banner */
+      #psc-audit-summary-container {
+        width: 100%;
+        margin-bottom: 8px;
+      }
+      .psc-audit-summary-card {
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        background: #ffffff;
+        padding: 12px;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+      }
+      .psc-audit-summary-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid #f1f5f9;
+        padding-bottom: 8px;
+        margin-bottom: 8px;
+      }
+      .psc-audit-summary-title {
+        font-size: 11px;
+        font-weight: 800;
+        color: #0f172a;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        font-family: var(--hbr-font-mono, monospace);
+      }
+      .psc-audit-badge-warning {
+        background: #fff7ed;
+        color: #c2410c;
+        border: 1px solid #fed7aa;
+        font-size: 10px;
+        font-weight: 800;
+        padding: 2px 8px;
+        border-radius: 2px;
+        font-family: var(--hbr-font-mono, monospace);
+      }
+      .psc-audit-badge-pass {
+        background: #f0fdf4;
+        color: #166534;
+        border: 1px solid #bbf7d0;
+        font-size: 10px;
+        font-weight: 800;
+        padding: 2px 8px;
+        border-radius: 2px;
+        font-family: var(--hbr-font-mono, monospace);
+      }
+      .psc-audit-stats-row {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-bottom: 4px;
+      }
+      .psc-audit-stat-chip {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 2px;
+        padding: 3px 8px;
+        font-size: 10px;
+        font-family: var(--hbr-font-mono, monospace);
+        display: flex;
+        gap: 4px;
+        align-items: center;
+      }
+      .psc-audit-stat-label { color: #64748b; font-weight: 600; }
+      .psc-audit-stat-val { color: #0f172a; font-weight: 800; }
+      .psc-audit-stat-chip.has-issues {
+        background: #fff7ed;
+        border-color: #fed7aa;
+      }
+      .psc-audit-stat-chip.has-issues .psc-audit-stat-val {
+        color: #c2410c;
+      }
+
       /* Rule Cards */
       .psc-rule-group {
         border: 1px solid #e2e8f0;
@@ -1449,6 +1524,9 @@
     const root = el("div", { id: "psc-rules-list-root", style: { display: "flex", flexDirection: "column", gap: "10px", padding: "12px 14px", width: "100%", maxWidth: "100%", boxSizing: "border-box", overflowX: "hidden" } });
     container.appendChild(root);
 
+    const summaryContainer = el("div", { id: "psc-audit-summary-container" });
+    root.appendChild(summaryContainer);
+
     const filterBar = el("div", { class: "psc-rules-filter-bar" });
     const searchInput = el("input", {
       type: "text",
@@ -1787,6 +1865,70 @@
       lookups.serviceObjectGroups = (objectMaps && objectMaps.serviceObjectGroups) || {};
       lookups.applicationLists = (objectMaps && objectMaps.applicationLists) || {};
       lookups.categoryLists    = (objectMaps && objectMaps.categoryLists) || {};
+
+      // Render Policy Audit & Overlap Summary Banner at top of Rules tab
+      const allFindings = findings || [];
+      const totalIssues = allFindings.length;
+      const shadowCount = allFindings.filter(f => f.checkId === "shadowing").length;
+      const dupCount = allFindings.filter(f => f.checkId && f.checkId.includes("duplicate")).length;
+      const conflictCount = allFindings.filter(f => f.checkId && f.checkId.includes("conflict")).length;
+      const permissiveCount = allFindings.filter(f => f.checkId && f.checkId.includes("permissive")).length;
+
+      summaryContainer.innerHTML = "";
+      const summaryCard = el("div", { class: "psc-audit-summary-card" });
+      const summaryHeader = el("div", { class: "psc-audit-summary-header" }, [
+        el("span", { class: "psc-audit-summary-title" }, ["POLICY AUDIT & OVERLAP SUMMARY"]),
+        totalIssues > 0
+          ? el("span", { class: "psc-audit-badge-warning" }, [`⚠️ ${totalIssues} ISSUE${totalIssues > 1 ? "S" : ""} DETECTED`])
+          : el("span", { class: "psc-audit-badge-pass" }, ["✓ 100% HEALTHY"])
+      ]);
+
+      const statsRow = el("div", { class: "psc-audit-stats-row" }, [
+        el("div", { class: "psc-audit-stat-chip" }, [
+          el("span", { class: "psc-audit-stat-label" }, ["Total Rules:"]),
+          el("span", { class: "psc-audit-stat-val" }, [String((rules || []).length)])
+        ]),
+        el("div", { class: `psc-audit-stat-chip ${shadowCount > 0 ? "has-issues" : ""}` }, [
+          el("span", { class: "psc-audit-stat-label" }, ["Shadowed:"]),
+          el("span", { class: "psc-audit-stat-val" }, [String(shadowCount)])
+        ]),
+        el("div", { class: `psc-audit-stat-chip ${dupCount > 0 ? "has-issues" : ""}` }, [
+          el("span", { class: "psc-audit-stat-label" }, ["Duplicate:"]),
+          el("span", { class: "psc-audit-stat-val" }, [String(dupCount)])
+        ]),
+        el("div", { class: `psc-audit-stat-chip ${conflictCount > 0 ? "has-issues" : ""}` }, [
+          el("span", { class: "psc-audit-stat-label" }, ["Conflicting:"]),
+          el("span", { class: "psc-audit-stat-val" }, [String(conflictCount)])
+        ]),
+        el("div", { class: `psc-audit-stat-chip ${permissiveCount > 0 ? "has-issues" : ""}` }, [
+          el("span", { class: "psc-audit-stat-label" }, ["Permissive:"]),
+          el("span", { class: "psc-audit-stat-val" }, [String(permissiveCount)])
+        ]),
+      ]);
+
+      summaryCard.appendChild(summaryHeader);
+      summaryCard.appendChild(statsRow);
+
+      if (totalIssues > 0) {
+        const detailsBox = el("details", { class: "psc-result-details", style: { marginTop: "6px" } });
+        const summaryLabel = el("summary", { style: { fontSize: "10.5px", fontWeight: "700", color: "#c2410c", cursor: "pointer", fontFamily: "var(--hbr-font-mono, monospace)" } }, [
+          `▶ VIEW OVERLAP & CONFLICT BREAKDOWN (${totalIssues})`
+        ]);
+        const issuesList = el("div", { style: { display: "flex", flexDirection: "column", gap: "4px", marginTop: "6px" } });
+        allFindings.forEach(f => {
+          const fc = COLOR[f.severity] || COLOR.low;
+          issuesList.appendChild(el("div", { class: "psc-check-item", style: { borderLeftColor: fc.text, background: fc.bg } }, [
+            el("div", { class: "psc-check-item-head", style: { color: fc.text } }, [`[${(f.checkId || "AUDIT").toUpperCase()}] ${f.severity ? f.severity.toUpperCase() : ""}`]),
+            el("span", { class: "psc-check-msg" }, [f.message]),
+            f.detail ? el("span", { class: "psc-check-detail" }, [f.detail]) : null
+          ].filter(Boolean)));
+        });
+        detailsBox.appendChild(summaryLabel);
+        detailsBox.appendChild(issuesList);
+        summaryCard.appendChild(detailsBox);
+      }
+
+      summaryContainer.appendChild(summaryCard);
 
       rulesContainer.innerHTML = "";
       if (!rules || rules.length === 0) {
