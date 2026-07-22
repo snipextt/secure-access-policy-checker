@@ -1140,7 +1140,12 @@ async function resolveIdentities(rules, orgId, tabId) {
         }
         const url = endpoint.buildUrl(orgId, ids);
         const response = await fetch(url, {
-          headers: { Authorization: `Bearer ${tokenObj.token}`, Accept: "application/json" },
+          headers: {
+            Authorization: `Bearer ${tokenObj.token}`,
+            Accept: "application/json",
+            Origin: "https://dashboard.sse.cisco.com",
+            Referer: "https://dashboard.sse.cisco.com/",
+          },
         });
         if (!response.ok) {
           logEvent("identity-resolve", "Endpoint returned non-OK status", {
@@ -1148,7 +1153,14 @@ async function resolveIdentities(rules, orgId, tabId) {
           });
           return;
         }
-        const json = await response.json();
+        const text = await response.text();
+        let json;
+        try {
+          json = JSON.parse(text);
+        } catch (_) {
+          logEvent("identity-resolve", "Endpoint non-JSON response", { endpoint: endpoint.name });
+          return;
+        }
         const entries = endpoint.parse(json, ids);
         for (const e of entries) {
           if (e && e.id !== undefined && e.name) map[String(e.id)] = e.name;

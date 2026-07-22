@@ -923,18 +923,18 @@
       placeholder: hintStr || "Type to search by name...",
       autocomplete: "off",
     });
-    input.disabled = true;
+
+    let currentItemsObj = itemsObj || {};
+    let keys = Object.keys(currentItemsObj);
 
     const list = el("ul", { class: "psc-dropdown-list" });
     let selectedValue = "";
-
-    const keys = Object.keys(itemsObj || {});
 
     function renderList(query) {
       list.innerHTML = "";
       const q = (query || "").toLowerCase();
       const matches = keys.filter(k => {
-        const label = itemsObj[k] || "";
+        const label = currentItemsObj[k] || "";
         return k.toLowerCase().includes(q) || String(label).toLowerCase().includes(q);
       }).slice(0, 50);
 
@@ -944,7 +944,7 @@
       }
 
       matches.forEach(k => {
-        const label = itemsObj[k] || k;
+        const label = currentItemsObj[k] || k;
         const li = el("li", {}, [
           String(label)
         ]);
@@ -982,10 +982,19 @@
       wrapper
     ]);
 
+    function setItems(newItemsObj, enable = true) {
+      currentItemsObj = newItemsObj || {};
+      keys = Object.keys(currentItemsObj);
+      if (enable) {
+        input.disabled = false;
+      }
+    }
+
     return {
       element: container,
       wrapper,
       input,
+      setItems,
       getValue: () => selectedValue || input.value.trim(),
       reset: () => {
         selectedValue = "";
@@ -1038,8 +1047,15 @@
     const identityItems = {};
     if (Array.isArray(identityOptions)) {
       identityOptions.forEach(id => {
-        const label = identityMap && identityMap[id] ? identityMap[id] : id;
-        identityItems[id] = label;
+        const resolvedName = identityMap && identityMap[id];
+        const typeLabel = identityTypeMap && identityTypeMap[id];
+        if (resolvedName) {
+          identityItems[id] = typeLabel ? `${resolvedName} (${typeLabel})` : `${resolvedName} (ID: ${id})`;
+        } else if (typeLabel) {
+          identityItems[id] = `${typeLabel} (ID: ${id})`;
+        } else {
+          identityItems[id] = `Identity #${id}`;
+        }
       });
     }
     const identitySelect = createSearchableSelect("Identity", "Search AD user, group, or device name...", "psc-identity", identityItems);
@@ -1146,8 +1162,11 @@
     const dstIpField = createFieldGroup("Destination IP / Domain / Port", destInput);
 
     const appSelect = createSearchableSelect("Internet Application", "Search applications by name...", "psc-app", {});
+    appSelect.input.disabled = false;
     const protoSelect = createSearchableSelect("Application Protocol", "Search protocols by name...", "psc-proto", {});
+    protoSelect.input.disabled = false;
     const catSelect = createSearchableSelect("Content Category", "Search categories by name...", "psc-cat", {});
+    catSelect.input.disabled = false;
     const privResSelect = createSearchableSelect("Private Resource", "Search private resources by name...", "psc-privres", maps.privateResources || {});
     privResSelect.input.disabled = false;
     const destListSelect = createSearchableSelect("Destination List", "Search destination lists by name...", "psc-destlist", maps.destinationLists || {});
@@ -1257,20 +1276,11 @@
 
     // Asynchronously populate lookups
     loadLookups().then(lookups => {
-      const newAppSelect = createSearchableSelect("Internet Application", "Search applications by name...", "psc-app", lookups.apps);
-      const newProtoSelect = createSearchableSelect("Application Protocol", "Search protocols by name...", "psc-proto", lookups.protocols);
-      const newCatSelect = createSearchableSelect("Content Category", "Search categories by name...", "psc-cat", lookups.categories);
-      
-      newAppSelect.input.disabled = false;
-      newProtoSelect.input.disabled = false;
-      newCatSelect.input.disabled = false;
-      
-      appSelect.getValue = newAppSelect.getValue;
-      protoSelect.getValue = newProtoSelect.getValue;
-      catSelect.getValue = newCatSelect.getValue;
-      appSelect.reset = newAppSelect.reset;
-      protoSelect.reset = newProtoSelect.reset;
-      catSelect.reset = newCatSelect.reset;
+      if (lookups) {
+        if (lookups.apps) appSelect.setItems(lookups.apps);
+        if (lookups.protocols) protoSelect.setItems(lookups.protocols);
+        if (lookups.categories) catSelect.setItems(lookups.categories);
+      }
     });
 
     // Footer actions
