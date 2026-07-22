@@ -105,6 +105,7 @@
       #psc-panel-body {
         display: flex;
         flex-direction: column;
+        min-height: 480px;
       }
 
       #psc-form-row {
@@ -113,6 +114,83 @@
         gap: 12px;
         padding: 14px 18px 0;
         width: 100%;
+      }
+
+      /* Source/Destination IP:Port Fields — no enclosing box, space-between layout */
+      .psc-ip-fields-row {
+        display: flex;
+        gap: 16px;
+        width: 100%;
+      }
+      .psc-ip-fields-row .psc-field-group {
+        flex: 1;
+        min-width: 0;
+      }
+      .psc-ip-fields-row .psc-field-label {
+        font-size: 10.5px;
+        font-weight: 700;
+        color: #0f172a;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+
+      /* Settings Panel (right side) */
+      .psc-settings-panel {
+        border: 1px solid #e2e8f0;
+        border-radius: 2px;
+        padding: 12px;
+        background: #f8fafc;
+        margin-top: 8px;
+      }
+      .psc-settings-panel .psc-settings-title {
+        font-size: 10px;
+        font-weight: 700;
+        color: #0f172a;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        font-family: var(--hbr-font-mono, monospace);
+        margin-bottom: 8px;
+      }
+      .psc-settings-panel .psc-setting-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 4px 0;
+        font-size: 11px;
+        color: #1e293b;
+        font-family: var(--hbr-font-mono, monospace);
+      }
+      .psc-settings-panel .psc-setting-row label {
+        color: #475569;
+        font-size: 10.5px;
+      }
+      .psc-settings-panel .psc-setting-toggle {
+        width: 36px;
+        height: 18px;
+        border-radius: 9px;
+        border: 1px solid #cbd5e1;
+        background: #e2e8f0;
+        position: relative;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .psc-settings-panel .psc-setting-toggle.active {
+        background: #0f172a;
+        border-color: #0f172a;
+      }
+      .psc-settings-panel .psc-setting-toggle::after {
+        content: "";
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #ffffff;
+        transition: transform 0.15s;
+      }
+      .psc-settings-panel .psc-setting-toggle.active::after {
+        transform: translateX(18px);
       }
 
       /* Default Primary IP+Port Cards */
@@ -795,12 +873,8 @@
     const body = el("div", { id: "psc-panel-body" });
     const formRow = el("div", { id: "psc-form-row" });
 
-    // --- 1. DEFAULT PRIMARY CARD: Source IP:Port + Destination IP:Port ---
-    const primaryCard = el("div", { class: "psc-hud-card" });
-    primaryCard.appendChild(el("div", { class: "psc-hud-title" }, [
-      el("span", {}, ["PRIMARY IP / PORT CRITERIA"]),
-      el("span", { style: { fontSize: "9px", color: "#64748b" } }, ["DEFAULT ACTIVE"])
-    ]));
+    // --- 1. SOURCE / DESTINATION IP:Port (no enclosing box, space-between) ---
+    const ipFieldsRow = el("div", { class: "psc-ip-fields-row" });
 
     // Source IP:Port Input
     const sourceInput = el("input", {
@@ -809,8 +883,8 @@
       placeholder: "192.168.1.50:443 or CIDR (e.g. 10.0.0.0/16)",
       autocomplete: "off",
     });
-    primaryCard.appendChild(el("div", { class: "psc-field-group" }, [
-      el("label", { class: "psc-field-label", htmlFor: "psc-src" }, ["SOURCE IP / CIDR / PORT"]),
+    ipFieldsRow.appendChild(el("div", { class: "psc-field-group" }, [
+      el("label", { class: "psc-field-label", htmlFor: "psc-src" }, ["SOURCE"]),
       sourceInput,
     ]));
 
@@ -821,12 +895,12 @@
       placeholder: "10.0.0.1:80 or Domain (e.g. cisco.com:443)",
       autocomplete: "off",
     });
-    primaryCard.appendChild(el("div", { class: "psc-field-group" }, [
-      el("label", { class: "psc-field-label", htmlFor: "psc-dest" }, ["DESTINATION IP / DOMAIN / PORT"]),
+    ipFieldsRow.appendChild(el("div", { class: "psc-field-group" }, [
+      el("label", { class: "psc-field-label", htmlFor: "psc-dest" }, ["DESTINATION"]),
       destInput,
     ]));
 
-    formRow.appendChild(primaryCard);
+    formRow.appendChild(ipFieldsRow);
 
     // --- 2. TOGGLEABLE ADVANCED SOURCE CRITERIA ---
     const srcAdvToggle = el("button", { type: "button", class: "psc-toggle-btn", id: "psc-toggle-src-adv" }, [
@@ -947,6 +1021,74 @@
 
     formRow.appendChild(dstAdvToggle);
     formRow.appendChild(dstAdvBox);
+
+    // --- 4. SETTINGS PANEL (right side) — enable additional source/destination fields ---
+    const settingsPanel = el("div", { class: "psc-settings-panel" });
+    settingsPanel.appendChild(el("div", { class: "psc-settings-title" }, ["FIELD SETTINGS"]));
+
+    // Settings toggles for additional source/destination fields
+    const settingsToggles = {
+      identity: { label: "Identity", enabled: true },
+      identityType: { label: "Identity Type", enabled: true },
+      sgt: { label: "Security Group Tag", enabled: true },
+      location: { label: "Location / Branch", enabled: false },
+      internalNetwork: { label: "Internal Network", enabled: false },
+      networkObject: { label: "Network Object", enabled: false },
+      tunnel: { label: "Network Tunnel", enabled: false },
+      posture: { label: "Device Posture Profile", enabled: false },
+      networkDevice: { label: "Network Device", enabled: false },
+      app: { label: "Internet Application", enabled: true },
+      protocol: { label: "Application Protocol", enabled: true },
+      category: { label: "Content Category", enabled: true },
+      privateResource: { label: "Private Resource", enabled: false },
+      destinationList: { label: "Destination List", enabled: false },
+      netObject: { label: "Network Object (Dest)", enabled: false },
+      serviceObject: { label: "Service Object Group", enabled: false },
+      appList: { label: "Application List", enabled: false },
+      catList: { label: "Category List", enabled: false },
+    };
+
+    Object.entries(settingsToggles).forEach(([key, cfg]) => {
+      const toggle = el("div", {
+        class: "psc-setting-toggle" + (cfg.enabled ? " active" : ""),
+        "data-setting": key
+      });
+      toggle.addEventListener("click", () => {
+        toggle.classList.toggle("active");
+        const isActive = toggle.classList.contains("active");
+        // Enable/disable the corresponding input
+        const inputMap = {
+          identity: identitySelect,
+          identityType: identityTypeSelect,
+          sgt: sgtInput,
+          location: locInput,
+          internalNetwork: intNetInput,
+          networkObject: srcNetObjSelect,
+          tunnel: tunnelInput,
+          posture: postureInput,
+          networkDevice: netDevInput,
+          app: appSelect,
+          protocol: protoSelect,
+          category: catSelect,
+          privateResource: privResSelect,
+          destinationList: destListSelect,
+          netObject: netObjSelect,
+          serviceObject: svcObjSelect,
+          appList: appListSelect,
+          catList: catListSelect,
+        };
+        const sel = inputMap[key];
+        if (sel && sel.input) {
+          sel.input.disabled = !isActive;
+        }
+      });
+      settingsPanel.appendChild(el("div", { class: "psc-setting-row" }, [
+        el("label", { class: "psc-setting-label" }, [cfg.label]),
+        toggle
+      ]));
+    });
+
+    formRow.appendChild(settingsPanel);
     body.appendChild(formRow);
 
     // Asynchronously populate lookups
