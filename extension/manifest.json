@@ -59,7 +59,6 @@
     {
       "resources": [
         "popup/popup.html",
-        "popup/mock-api.js",
         "popup/matcher.js",
         "popup/popup-sections.js",
         "popup/popup.js",

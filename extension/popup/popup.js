@@ -197,13 +197,6 @@ document.addEventListener("DOMContentLoaded", () => {
     ]);
 
     if (!cached.sse_rules || cached.sse_rules.length === 0) {
-      if (typeof mockRules !== "undefined") {
-        currentRules = mockRules;
-        currentFindings = typeof mockFindings !== "undefined" ? mockFindings : [];
-        errorBanner.style.display = "none";
-        renderResults(currentRules, currentFindings, currentIdentityMap, currentObjectMap, currentObjectMaps, currentIdentityTypeMap);
-        return "resolved";
-      }
       return "empty";
     }
 

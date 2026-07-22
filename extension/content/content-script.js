@@ -1081,7 +1081,7 @@ function initEmbeddedPopup() {
   panel.id = "sec-embed-panel";
 
   // Loading the extension's own popup.html as an iframe src requires it (and
-  // everything it loads: popup.js, popup-sections.js, matcher.js, mock-api.js,
+  // everything it loads: popup.js, popup-sections.js, matcher.js,
   // and the data/*.json lookups fetched at runtime) to be listed in
   // manifest.json's web_accessible_resources — see manifest.json.
   const iframe = document.createElement("iframe");
