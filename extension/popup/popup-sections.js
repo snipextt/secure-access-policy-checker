@@ -1464,6 +1464,14 @@
             summaryText = `Identity: ${identityNames.join(", ")}`;
             break;
           }
+          case "umbrella.source.identity_type_ids":
+          case "umbrella.source.identity_type_ids_shared": {
+            const typeNames = (Array.isArray(values) ? values : [values]).map((id) => {
+              return lookupItemName(lookups.identityTypes, id) || lookupItemName(DEFAULT_IDENTITY_TYPES, id) || `Type #${id}`;
+            });
+            summaryText = `Identity Type: ${typeNames.join(", ")}`;
+            break;
+          }
           case "umbrella.destination.application_ids": {
             const appMatches = [];
             for (const id of Array.isArray(values) ? values : [values]) {
