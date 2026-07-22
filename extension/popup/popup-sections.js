@@ -1,68 +1,66 @@
 // =============================================================================
 // popup-sections.js — DOM builders for the Policy Match Tester split panel
-// and the two collapsible audit-result sections.
+// and the single collapsible audit-result sections.
 //
-// Visual design: modelled on the Cisco Umbrella "Policy Tester" modal and
-// FortiGate "Policy Lookup" panel — two-column split (form left, results right),
-// orange title, bold section headers, descriptive hint text in grey italic,
-// RESET as a text-link, RUN TEST as a filled teal button.
+// Visual design: Dark Futuristic Cyberpunk HUD with sharp 2px borders,
+// glowing neon status indicators, monospace technical accents, default IP+Port
+// source/destination controls, toggleable advanced criteria, and inline rule chips.
 //
-// Exported to window.PopupSections.  No browser-extension API calls.
+// Exported to window.PopupSections. No browser-extension API calls.
 // =============================================================================
 
 (function (global) {
   "use strict";
 
-  // ---------------------------------------------------------------------------
-  // Design tokens
-  // ---------------------------------------------------------------------------
-
   const COLOR = {
-    // Severity
-    critical: { bg: "#dc2626", light: "#fef2f2", border: "#fca5a5" },
-    high:     { bg: "#ea580c", light: "#fff7ed", border: "#fdba74" },
-    medium:   { bg: "#ca8a04", light: "#fefce8", border: "#fde047" },
-    low:      { bg: "#6b7280", light: "#f9fafb", border: "#d1d5db" },
-    // Action
-    allow:   { bg: "#16a34a", text: "#fff" },
-    block:   { bg: "#c0392b", text: "#fff" },
-    isolate: { bg: "#7c3aed", text: "#fff" }, // distinct purple — not yet seen live, added defensively (see audit)
-    unknown: { bg: "#6b7280", text: "#fff" },
+    critical: { bg: "#ef4444", light: "rgba(239, 68, 68, 0.15)", border: "#f87171" },
+    high:     { bg: "#f97316", light: "rgba(249, 115, 22, 0.15)", border: "#fb923c" },
+    medium:   { bg: "#eab308", light: "rgba(234, 179, 8, 0.15)", border: "#fde047" },
+    low:      { bg: "#64748b", light: "rgba(100, 116, 139, 0.15)", border: "#94a3b8" },
+    allow:    { bg: "#10b981", text: "#070a12" },
+    block:    { bg: "#ef4444", text: "#fff" },
+    isolate:  { bg: "#8b5cf6", text: "#fff" },
+    unknown:  { bg: "#64748b", text: "#fff" },
   };
 
-  // ---------------------------------------------------------------------------
-  // Inject the shared stylesheet once
-  // ---------------------------------------------------------------------------
-    function injectStyles() {
+  function injectStyles() {
     if (document.getElementById("psc-style")) return;
     const s = document.createElement("style");
     s.id = "psc-style";
     s.textContent = `
-
       /* ================================================================== */
-      /* TESTER PANEL & MINIMALIST UI                                       */
+      /* FUTURISTIC DARK HUD THEME                                          */
       /* ================================================================== */
       #psc-panel {
-        background: var(--hbr-color-bg-card);
-        backdrop-filter: var(--glass-blur);
-        -webkit-backdrop-filter: var(--glass-blur);
+        background: #070a12;
+        color: #cbd5e1;
         display: flex;
         flex-direction: column;
+        font-family: var(--hbr-font-family);
       }
 
       #psc-panel-title {
-        padding: 16px 20px 2px;
-        font-size: 15px;
-        font-weight: 700;
-        color: var(--hbr-color-text-heading);
-        letter-spacing: -0.01em;
+        padding: 14px 18px 2px;
+        font-size: 13px;
+        font-weight: 800;
+        color: #06b6d4;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-family: var(--hbr-font-mono, monospace);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      #psc-panel-title::before {
+        content: "//";
+        color: #3b82f6;
       }
       #psc-panel-desc {
-        padding: 0 20px 12px;
-        font-size: 11.5px;
-        color: var(--hbr-color-text-weak);
-        line-height: 1.5;
-        border-bottom: 1px solid var(--hbr-color-border);
+        padding: 0 18px 10px;
+        font-size: 11px;
+        color: #64748b;
+        line-height: 1.45;
+        border-bottom: 1px solid #1e293b;
       }
 
       #psc-panel-body {
@@ -74,206 +72,237 @@
         display: flex;
         flex-direction: column;
         gap: 12px;
-        padding: 14px 20px 0;
+        padding: 14px 18px 0;
         width: 100%;
       }
 
-      /* Essential Primary Card */
-      .psc-essential-card {
-        border: 1px solid var(--hbr-color-border);
-        border-radius: var(--hbr-radius-lg);
-        padding: 14px 16px;
-        background: #fff;
-        box-shadow: var(--glass-shadow-sm);
+      /* Default Primary IP+Port Cards */
+      .psc-hud-card {
+        border: 1px solid #1e293b;
+        border-radius: 2px;
+        padding: 12px 14px;
+        background: #0f172a;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.5);
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        gap: 10px;
+        position: relative;
       }
-      .psc-essential-title {
-        font-size: 11px;
-        font-weight: 700;
-        color: var(--hbr-color-accent);
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        margin-bottom: 2px;
+      .psc-hud-card::before {
+        content: "";
+        position: absolute;
+        top: 0; left: 0; width: 3px; bottom: 0;
+        background: #06b6d4;
       }
 
-      /* Advanced Conditions Toggle & Container */
-      .psc-advanced-toggle {
-        background: var(--hbr-color-bg-subtle);
-        border: 1px solid var(--hbr-color-border);
-        border-radius: var(--hbr-radius-md);
+      .psc-hud-title {
+        font-size: 10.5px;
+        font-weight: 700;
+        color: #38bdf8;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-family: var(--hbr-font-mono, monospace);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      /* Toggle Buttons for Advanced Criteria */
+      .psc-toggle-btn {
+        background: #0f172a;
+        border: 1px solid #1e293b;
+        border-radius: 2px;
         padding: 8px 12px;
-        font-size: 11.5px;
-        font-weight: 600;
-        color: var(--hbr-color-text-body);
+        font-size: 11px;
+        font-weight: 700;
+        color: #94a3b8;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        transition: background 0.15s, border-color 0.15s;
+        transition: all 0.15s;
         width: 100%;
-        margin-top: 4px;
+        font-family: var(--hbr-font-mono, monospace);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
       }
-      .psc-advanced-toggle:hover {
-        background: #eef2ff;
-        border-color: #c7d2fe;
-        color: var(--hbr-color-accent);
+      .psc-toggle-btn:hover {
+        background: #1e293b;
+        border-color: #06b6d4;
+        color: #06b6d4;
+        box-shadow: 0 0 10px rgba(6, 182, 212, 0.15);
       }
-      .psc-advanced-arrow {
+      .psc-toggle-btn.active {
+        background: rgba(6, 182, 212, 0.1);
+        border-color: #06b6d4;
+        color: #38bdf8;
+      }
+      .psc-toggle-arrow {
         font-size: 10px;
         transition: transform 0.2s ease;
       }
-      .psc-advanced-toggle.active .psc-advanced-arrow {
+      .psc-toggle-btn.active .psc-toggle-arrow {
         transform: rotate(180deg);
       }
 
-      .psc-advanced-container {
+      /* Collapsible Advanced Containers */
+      .psc-advanced-box {
         display: none;
         flex-direction: column;
-        gap: 12px;
-        padding: 14px;
-        border: 1px solid var(--hbr-color-border);
-        border-radius: var(--hbr-radius-lg);
-        background: #fafafa;
-        margin-top: 4px;
+        gap: 10px;
+        padding: 12px;
+        border: 1px solid #1e293b;
+        border-radius: 2px;
+        background: #090d16;
       }
-      .psc-advanced-container.open {
+      .psc-advanced-box.open {
         display: flex;
       }
-      .psc-advanced-section-title {
-        font-size: 10.5px;
-        font-weight: 700;
-        color: var(--hbr-color-text-weak);
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        padding-bottom: 4px;
-        border-bottom: 1px dashed var(--hbr-color-border);
-        margin-bottom: 2px;
-      }
 
-      /* Fields */
+      /* Fields & Inputs */
       .psc-field-group { margin: 0; }
       .psc-field-label {
-        font-size: 11.5px;
+        font-size: 11px;
         font-weight: 600;
-        color: var(--hbr-color-text-heading);
+        color: #94a3b8;
         margin: 0 0 4px 0;
         display: block;
+        font-family: var(--hbr-font-mono, monospace);
+        letter-spacing: 0.02em;
       }
-      .psc-field-hint { display: none; }
 
       .psc-field-group input,
-      .psc-field-group select {
+      .psc-field-group select,
+      .psc-dropdown-input {
         width: 100%;
         padding: 7px 10px;
-        border: 1px solid rgba(0,0,0,0.12);
-        border-radius: var(--hbr-radius-md);
+        border: 1px solid #1e293b !important;
+        border-radius: 2px !important;
         font-size: 12px;
-        font-family: inherit;
-        color: var(--hbr-color-text-body);
-        background: #fff;
+        font-family: var(--hbr-font-mono, monospace) !important;
+        color: #f8fafc !important;
+        background: #020617 !important;
         outline: none;
-        transition: border-color 0.2s, box-shadow 0.2s;
+        transition: all 0.15s;
       }
       .psc-field-group input:focus,
-      .psc-field-group select:focus {
-        border-color: var(--hbr-color-accent);
-        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+      .psc-field-group select:focus,
+      .psc-dropdown-input:focus {
+        border-color: #06b6d4 !important;
+        box-shadow: 0 0 8px rgba(6, 182, 212, 0.25) !important;
       }
-      .psc-field-group input::placeholder { color: #9ca3af; }
+      .psc-field-group input::placeholder { color: #475569; }
 
-      /* Footer & Actions */
+      /* Dropdown lists */
+      .psc-dropdown-wrapper { position: relative; width: 100%; }
+      .psc-dropdown-list {
+        position: absolute; top: calc(100% + 2px); left: 0; right: 0; background: #0f172a;
+        border: 1px solid #06b6d4;
+        border-radius: 2px; max-height: 200px; overflow-y: auto; z-index: 100;
+        display: none; list-style: none; margin: 0; padding: 4px 0;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+      }
+      .psc-dropdown-list li {
+        padding: 7px 10px; font-size: 11px; cursor: pointer;
+        color: #cbd5e1; font-family: var(--hbr-font-mono, monospace);
+        transition: background 0.1s;
+      }
+      .psc-dropdown-list li:hover { background: rgba(6, 182, 212, 0.15); color: #06b6d4; }
+
+      /* Form Footer Actions */
       #psc-form-footer {
-        padding: 12px 20px;
-        border-bottom: 1px solid var(--hbr-color-border);
+        padding: 12px 18px;
+        border-bottom: 1px solid #1e293b;
       }
       #psc-form-actions {
         display: flex;
         align-items: center;
         justify-content: flex-end;
-        gap: 12px;
+        gap: 10px;
       }
       #psc-reset-btn {
-        background: none;
-        border: none;
-        color: var(--hbr-color-text-weak);
-        font-size: 12px;
-        font-weight: 500;
+        background: transparent;
+        border: 1px solid #1e293b;
+        color: #64748b;
+        font-size: 11px;
+        font-weight: 700;
         cursor: pointer;
-        padding: 6px 12px;
-        font-family: inherit;
-        border-radius: var(--hbr-radius-md);
-        transition: color 0.15s, background 0.15s;
+        padding: 7px 14px;
+        border-radius: 2px;
+        font-family: var(--hbr-font-mono, monospace);
+        text-transform: uppercase;
+        transition: all 0.15s;
       }
-      #psc-reset-btn:hover { color: var(--hbr-color-text-heading); background: var(--hbr-color-bg-subtle); }
+      #psc-reset-btn:hover { color: #cbd5e1; border-color: #334155; background: #0f172a; }
       #psc-run-btn {
-        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-        color: #fff;
-        border: none;
-        border-radius: var(--hbr-radius-md);
-        padding: 8px 24px;
-        font-size: 12px;
-        font-weight: 600;
+        background: linear-gradient(135deg, #0891b2 0%, #0284c7 100%);
+        color: #f8fafc;
+        border: 1px solid #06b6d4;
+        border-radius: 2px;
+        padding: 7px 22px;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
         cursor: pointer;
-        font-family: inherit;
-        transition: box-shadow 0.2s, transform 0.1s;
-        box-shadow: 0 1px 3px rgba(37, 99, 235, 0.3);
+        font-family: var(--hbr-font-mono, monospace);
+        transition: all 0.15s;
+        box-shadow: 0 0 12px rgba(6, 182, 212, 0.3);
       }
       #psc-run-btn:hover:not(:disabled) {
-        box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
-        transform: translateY(-1px);
+        background: linear-gradient(135deg, #06b6d4 0%, #0369a1 100%);
+        box-shadow: 0 0 16px rgba(6, 182, 212, 0.5);
       }
-      #psc-run-btn:disabled { background: #93b4e8; box-shadow: none; cursor: not-allowed; }
-      #psc-form-error { font-size: 11px; color: #dc2626; min-height: 16px; margin-bottom: 6px; }
+      #psc-run-btn:disabled { background: #1e293b; border-color: #334155; color: #475569; box-shadow: none; cursor: not-allowed; }
+      #psc-form-error { font-size: 11px; color: #f87171; min-height: 16px; margin-bottom: 6px; font-family: var(--hbr-font-mono, monospace); }
 
-      /* Results area */
+      /* Results Area */
       #psc-result-col {
-        padding: 16px 20px;
+        padding: 14px 18px;
         display: flex;
         flex-direction: column;
       }
       #psc-result-placeholder {
-        color: var(--hbr-color-text-weak);
-        font-size: 12px;
-        font-style: italic;
+        color: #475569;
+        font-size: 11px;
         text-align: center;
-        padding: 20px;
-        background: #f9fafb;
-        border: 1px dashed var(--hbr-color-border);
-        border-radius: var(--hbr-radius-lg);
+        padding: 18px;
+        background: #020617;
+        border: 1px dashed #1e293b;
+        border-radius: 2px;
+        font-family: var(--hbr-font-mono, monospace);
       }
 
       /* Hero Decision Card */
       .psc-hero-card {
-        border-radius: var(--hbr-radius-lg);
+        border-radius: 2px;
         overflow: hidden;
-        background: #fff;
-        border: 1px solid var(--hbr-color-border);
-        box-shadow: var(--glass-shadow-sm);
+        background: #0f172a;
+        border: 1px solid #1e293b;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.6);
       }
       .psc-hero-banner {
-        padding: 14px 16px;
+        padding: 12px 14px;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 12px;
+        gap: 10px;
       }
       .psc-hero-allow {
-        background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-        border-bottom: 1px solid #bbf7d0;
+        background: rgba(16, 185, 129, 0.12);
+        border-bottom: 1px solid rgba(16, 185, 129, 0.3);
       }
       .psc-hero-block {
-        background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
-        border-bottom: 1px solid #fecaca;
+        background: rgba(239, 68, 68, 0.12);
+        border-bottom: 1px solid rgba(239, 68, 68, 0.3);
       }
       .psc-hero-isolate {
-        background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
-        border-bottom: 1px solid #ddd6fe;
+        background: rgba(139, 92, 246, 0.12);
+        border-bottom: 1px solid rgba(139, 92, 246, 0.3);
       }
       .psc-hero-unknown {
-        background: #f9fafb;
-        border-bottom: 1px solid var(--hbr-color-border);
+        background: #0f172a;
+        border-bottom: 1px solid #1e293b;
       }
 
       .psc-hero-info {
@@ -282,154 +311,96 @@
         gap: 2px;
       }
       .psc-hero-rule-title {
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 700;
-        color: var(--hbr-color-text-heading);
+        color: #f8fafc;
       }
       .psc-hero-rule-sub {
-        font-size: 11px;
-        color: var(--hbr-color-text-weak);
+        font-size: 10.5px;
+        color: #94a3b8;
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 6px;
+        font-family: var(--hbr-font-mono, monospace);
       }
 
       .psc-hero-action-badge {
         font-size: 11px;
         font-weight: 800;
-        padding: 4px 14px;
-        border-radius: var(--hbr-radius-pill);
-        letter-spacing: 0.05em;
+        padding: 4px 12px;
+        border-radius: 2px;
+        letter-spacing: 0.08em;
         text-transform: uppercase;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+        font-family: var(--hbr-font-mono, monospace);
       }
-      .psc-hero-allow .psc-hero-action-badge { background: #16a34a; color: #fff; }
-      .psc-hero-block .psc-hero-action-badge { background: #dc2626; color: #fff; }
-      .psc-hero-isolate .psc-hero-action-badge { background: #7c3aed; color: #fff; }
+      .psc-hero-allow .psc-hero-action-badge { background: #10b981; color: #070a12; box-shadow: 0 0 10px rgba(16, 185, 129, 0.4); }
+      .psc-hero-block .psc-hero-action-badge { background: #ef4444; color: #fff; box-shadow: 0 0 10px rgba(239, 68, 68, 0.4); }
+      .psc-hero-isolate .psc-hero-action-badge { background: #8b5cf6; color: #fff; box-shadow: 0 0 10px rgba(139, 92, 246, 0.4); }
 
-      /* Summary highlight box */
-      .psc-hero-body {
-        padding: 12px 16px;
-      }
+      .psc-hero-body { padding: 12px 14px; }
       .psc-summary-box {
-        background: var(--hbr-color-bg-subtle);
-        border: 1px solid var(--hbr-color-border);
-        border-radius: var(--hbr-radius-md);
+        background: #020617;
+        border: 1px solid #1e293b;
+        border-radius: 2px;
         padding: 8px 12px;
-        font-size: 11.5px;
-        color: var(--hbr-color-text-body);
+        font-size: 11px;
+        color: #38bdf8;
         margin-bottom: 10px;
-        line-height: 1.45;
+        font-family: var(--hbr-font-mono, monospace);
       }
 
-      /* Collapsible details */
-      .psc-result-details {
-        margin-top: 6px;
-      }
+      .psc-result-details { margin-top: 4px; }
       .psc-result-details summary {
         font-size: 11px;
-        font-weight: 600;
-        color: var(--hbr-color-accent);
+        font-weight: 700;
+        color: #06b6d4;
         cursor: pointer;
         padding: 4px 0;
         user-select: none;
         list-style: none;
-        display: flex;
-        align-items: center;
-        gap: 4px;
+        font-family: var(--hbr-font-mono, monospace);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
       }
       .psc-result-details summary::-webkit-details-marker { display: none; }
       .psc-result-details[open] summary { margin-bottom: 8px; }
 
-      /* Field grid */
+      /* Technical Matrix Grid */
       .psc-result-fields {
         display: flex;
         flex-direction: column;
-        border: 1px solid rgba(0,0,0,0.08);
-        border-radius: var(--hbr-radius-md);
+        border: 1px solid #1e293b;
+        border-radius: 2px;
         overflow: hidden;
+        background: #020617;
       }
       .psc-result-field-row {
         display: grid;
-        grid-template-columns: 110px 1fr;
+        grid-template-columns: 100px 1fr;
         gap: 8px;
-        padding: 7px 12px;
+        padding: 6px 10px;
         font-size: 11px;
-        border-bottom: 1px solid rgba(0,0,0,0.05);
-        background: #fff;
+        border-bottom: 1px solid #0f172a;
+        font-family: var(--hbr-font-mono, monospace);
       }
       .psc-result-field-row:last-child { border-bottom: none; }
-      .psc-result-field-row.psc-field-unconstrained { background: #f9fafb; }
       .psc-result-field-label {
-        color: var(--hbr-color-text-weak);
-        font-weight: 600;
+        color: #64748b;
+        font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.03em;
         font-size: 10px;
-        padding-top: 1px;
       }
-      .psc-result-field-value { color: var(--hbr-color-text-body); word-break: break-word; }
-      .psc-result-field-value.psc-field-any { color: #9ca3af; font-style: italic; }
+      .psc-result-field-value { color: #e2e8f0; word-break: break-word; }
+      .psc-result-field-value.psc-field-any { color: #475569; font-style: italic; }
 
       .psc-no-match-card {
-        border: 1px solid var(--hbr-color-border);
-        border-radius: var(--hbr-radius-lg);
-        padding: 14px 16px;
-        background: #f9fafb;
-        font-size: 12px;
-        color: var(--hbr-color-text-weak);
-      }
-
-      /* Badges */
-      .psc-badge-action {
-        display: inline-flex;
-        align-items: center;
-        padding: 2px 10px;
-        border-radius: var(--hbr-radius-pill);
-        font-size: 10px;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        white-space: nowrap;
-        flex-shrink: 0;
-      }
-      .psc-badge-default {
-        display: inline-flex;
-        align-items: center;
-        padding: 2px 8px;
-        border-radius: var(--hbr-radius-pill);
-        font-size: 10px;
-        font-weight: 600;
-        text-transform: uppercase;
-        background: #f3f4f6;
-        color: var(--hbr-color-text-weak);
-        border: 1px solid rgba(0,0,0,0.06);
-      }
-      .psc-badge-sev {
-        display: inline-flex;
-        align-items: center;
-        padding: 1px 7px;
-        border-radius: var(--hbr-radius-pill);
-        font-size: 10px;
-        font-weight: 700;
-        text-transform: uppercase;
-        color: #fff;
-      }
-      .psc-badge-findings {
-        display: inline-flex;
-        align-items: center;
-        padding: 3px 10px;
-        border-radius: var(--hbr-radius-pill);
-        font-size: 10px;
-        font-weight: 700;
-        white-space: nowrap;
-        color: #fff;
-      }
-      .psc-badge-findings-clean {
-        background: #f0fdf4;
-        color: #166534;
-        border: 1px solid #bbf7d0;
-        font-weight: 600;
+        border: 1px solid #1e293b;
+        border-radius: 2px;
+        padding: 12px 14px;
+        background: #0f172a;
+        font-size: 11px;
+        color: #f59e0b;
+        font-family: var(--hbr-font-mono, monospace);
       }
 
       /* Rules Filter Bar */
@@ -442,16 +413,18 @@
       .psc-search-input {
         width: 100%;
         padding: 8px 12px;
-        border: 1px solid var(--hbr-color-border);
-        border-radius: var(--hbr-radius-md);
-        font-size: 12px;
-        font-family: inherit;
+        border: 1px solid #1e293b;
+        border-radius: 2px;
+        font-size: 11px;
+        font-family: var(--hbr-font-mono, monospace);
         outline: none;
-        background: #fff;
+        background: #020617;
+        color: #f8fafc;
         transition: border-color 0.2s;
       }
       .psc-search-input:focus {
-        border-color: var(--hbr-color-accent);
+        border-color: #06b6d4;
+        box-shadow: 0 0 8px rgba(6, 182, 212, 0.25);
       }
       .psc-filter-pills {
         display: flex;
@@ -459,419 +432,291 @@
         flex-wrap: wrap;
       }
       .psc-filter-pill {
-        background: #f3f4f6;
-        border: 1px solid rgba(0,0,0,0.06);
-        border-radius: var(--hbr-radius-pill);
-        padding: 4px 12px;
-        font-size: 11px;
-        font-weight: 500;
-        color: var(--hbr-color-text-weak);
+        background: #0f172a;
+        border: 1px solid #1e293b;
+        border-radius: 2px;
+        padding: 4px 10px;
+        font-size: 10.5px;
+        font-weight: 700;
+        color: #64748b;
         cursor: pointer;
-        transition: background 0.15s, color 0.15s;
+        font-family: var(--hbr-font-mono, monospace);
+        text-transform: uppercase;
+        transition: all 0.15s;
       }
       .psc-filter-pill:hover {
-        background: #e5e7eb;
-        color: var(--hbr-color-text-heading);
+        background: #1e293b;
+        color: #cbd5e1;
       }
       .psc-filter-pill.active {
-        background: var(--hbr-color-accent);
-        color: #fff;
-        border-color: var(--hbr-color-accent);
+        background: rgba(6, 182, 212, 0.15);
+        color: #06b6d4;
+        border-color: #06b6d4;
       }
 
-      /* Rule groups */
+      /* Futuristic HUD Rule Cards */
       .psc-rule-group {
-        border: 1px solid rgba(0,0,0,0.06);
-        border-radius: var(--hbr-radius-lg);
+        border: 1px solid #1e293b;
+        border-radius: 2px;
         overflow: hidden;
         margin-bottom: 6px;
-        background: #fff;
-        box-shadow: var(--glass-shadow-sm);
-        transition: box-shadow 0.2s;
+        background: #0f172a;
+        transition: border-color 0.15s;
+        position: relative;
       }
-      .psc-rule-group:hover { box-shadow: var(--glass-shadow); }
+      .psc-rule-group:hover {
+        border-color: #334155;
+      }
       .psc-rule-group-header {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 10px 12px;
+        cursor: pointer;
+        background: #0f172a;
+        list-style: none;
+        user-select: none;
+      }
+      .psc-rule-group-header::-webkit-details-marker { display: none; }
+
+      .psc-rule-top-line {
         display: flex;
         align-items: center;
         gap: 8px;
-        padding: 10px 14px;
-        cursor: pointer;
-        font-weight: 600;
+        width: 100%;
+      }
+      .psc-rule-prio {
+        font-family: var(--hbr-font-mono, monospace);
+        font-size: 10px;
+        font-weight: 700;
+        color: #06b6d4;
+        background: rgba(6, 182, 212, 0.1);
+        border: 1px solid rgba(6, 182, 212, 0.2);
+        padding: 1px 5px;
+        border-radius: 2px;
+      }
+      .psc-rule-name {
+        flex: 1;
+        font-weight: 700;
         font-size: 12px;
-        background: #f9fafb;
-        list-style: none;
-        user-select: none;
-        transition: background 0.15s;
+        color: #f8fafc;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
-      .psc-rule-group-header:hover { background: #f3f4f6; }
-      .psc-rule-group[open] .psc-rule-group-header { border-bottom: 1px solid rgba(0,0,0,0.06); }
-      .psc-rule-group-header::-webkit-details-marker { display: none; }
-      .psc-rule-group-header .psc-chevron {
-        margin-left: auto;
-        font-size: 9px;
-        color: var(--hbr-color-text-weak);
-        transition: transform 0.2s ease;
+      .psc-rule-action-pill {
+        font-family: var(--hbr-font-mono, monospace);
+        font-size: 10px;
+        font-weight: 800;
+        padding: 2px 8px;
+        border-radius: 2px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
       }
-      .psc-rule-group[open] .psc-rule-group-header .psc-chevron { transform: rotate(180deg); }
-      .psc-check-list { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+      .psc-action-allow { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
+      .psc-action-block { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4); }
+      .psc-action-isolate { background: rgba(139, 92, 246, 0.2); color: #c084fc; border: 1px solid rgba(139, 92, 246, 0.4); }
+
+      /* Inline Data Bar on Rules */
+      .psc-inline-chips {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        font-family: var(--hbr-font-mono, monospace);
+        font-size: 10px;
+      }
+      .psc-chip {
+        background: #020617;
+        border: 1px solid #1e293b;
+        border-radius: 2px;
+        padding: 2px 6px;
+        color: #94a3b8;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .psc-chip-key { color: #64748b; font-weight: 700; }
+      .psc-chip-val { color: #38bdf8; }
+
+      .psc-check-list { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; background: #070a12; border-top: 1px solid #1e293b; }
       .psc-check-item {
-        border-left: 3px solid;
+        border-left: 2px solid;
         padding: 6px 10px;
-        border-radius: 0 var(--hbr-radius-sm) var(--hbr-radius-sm) 0;
+        border-radius: 2px;
         font-size: 11px;
-        line-height: 1.5;
+        line-height: 1.45;
+        background: #0f172a;
       }
       .psc-check-item-head {
         display: flex;
         align-items: center;
         gap: 6px;
         margin-bottom: 2px;
-        font-weight: 600;
-        font-size: 11px;
+        font-weight: 700;
+        font-size: 10.5px;
+        font-family: var(--hbr-font-mono, monospace);
       }
-      .psc-check-msg { color: var(--hbr-color-text-body); display: block; }
-      .psc-check-detail { color: var(--hbr-color-text-weak); font-size: 10.5px; margin-top: 3px; }
-
-      .psc-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        flex-shrink: 0;
-        display: inline-block;
-      }
-
-      /* Dropdowns */
-      .psc-dropdown-wrapper { position: relative; width: 100%; }
-      .psc-dropdown-input {
-        width: 100%; padding: 7px 10px; border: 1px solid rgba(0,0,0,0.12); border-radius: var(--hbr-radius-md);
-        font-family: inherit; font-size: 12px; color: var(--hbr-color-text-body); background: #fff;
-        transition: border-color 0.2s, box-shadow 0.2s;
-      }
-      .psc-dropdown-input:focus { border-color: var(--hbr-color-accent); outline: none; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
-      .psc-dropdown-list {
-        position: absolute; top: calc(100% + 2px); left: 0; right: 0; background: #fff;
-        border: 1px solid rgba(0,0,0,0.08);
-        border-radius: var(--hbr-radius-md); max-height: 200px; overflow-y: auto; z-index: 100;
-        display: none; list-style: none; margin: 0; padding: 4px 0;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.12);
-      }
-      .psc-dropdown-list li {
-        padding: 7px 10px; font-size: 11px; cursor: pointer;
-        color: var(--hbr-color-text-body);
-        transition: background 0.1s;
-      }
-      .psc-dropdown-list li:hover { background: var(--hbr-color-accent-light); }
-      .psc-dropdown-id { color: var(--hbr-color-text-weak); font-size: 9px; margin-left: 5px; }
+      .psc-check-msg { color: #cbd5e1; display: block; }
+      .psc-check-detail { color: #64748b; font-size: 10px; margin-top: 2px; font-family: var(--hbr-font-mono, monospace); }
 
       /* Tooltip */
       #psc-tooltip {
         position: fixed;
         display: none;
-        background: #1e293b;
-        color: #f1f5f9;
+        background: #0f172a;
+        color: #f8fafc;
+        border: 1px solid #06b6d4;
         padding: 8px 12px;
-        border-radius: var(--hbr-radius-md);
+        border-radius: 2px;
         font-size: 11px;
-        font-family: var(--hbr-font-family);
-        line-height: 1.5;
+        font-family: var(--hbr-font-mono, monospace);
+        line-height: 1.45;
         white-space: pre-wrap;
         z-index: 99999;
         max-width: 350px;
         word-wrap: break-word;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        box-shadow: 0 0 12px rgba(6, 182, 212, 0.25);
         pointer-events: none;
       }
 `;
     document.head.appendChild(s);
   }
 
-  // ---------------------------------------------------------------------------
-  // Tiny DOM factory
-  // ---------------------------------------------------------------------------
-
-  // These IDL attributes are read-only reflected properties on their elements
-  // (the getter exists but the setter does not, or is no-op).  They must be
-  // set via setAttribute() instead of direct property assignment.
-  const ATTR_ONLY = new Set(["list", "for", "htmlFor", "enctype", "form"]);
-
   function el(tag, attrs = {}, children = []) {
-    const e = document.createElement(tag);
-    for (const [k, v] of Object.entries(attrs)) {
-      if (k === "class") {
-        e.className = v;
-      } else if (k === "style" && typeof v === "object") {
-        Object.assign(e.style, v);
-      } else if (ATTR_ONLY.has(k)) {
-        e.setAttribute(k, v);
-      } else {
-        e[k] = v;
+    const element = document.createElement(tag);
+    for (const [key, val] of Object.entries(attrs)) {
+      if (key === "style" && typeof val === "object") {
+        Object.assign(element.style, val);
+      } else if (key === "htmlFor") {
+        element.setAttribute("for", val);
+      } else if (key.startsWith("on") && typeof val === "function") {
+        element.addEventListener(key.slice(2).toLowerCase(), val);
+      } else if (val !== null && val !== undefined) {
+        element.setAttribute(key, val);
       }
     }
     for (const child of children) {
-      if (child == null) continue;
-      if (typeof child === "string") e.appendChild(document.createTextNode(child));
-      else e.appendChild(child);
+      if (typeof child === "string" || typeof child === "number") {
+        element.appendChild(document.createTextNode(String(child)));
+      } else if (child instanceof Node) {
+        element.appendChild(child);
+      }
     }
-    return e;
+    return element;
   }
 
-  // ---------------------------------------------------------------------------
-  // Tooltip Helper
-  // ---------------------------------------------------------------------------
-  let tooltipEl = null;
   function showTooltip(evt, content) {
-    if (!tooltipEl) {
-      tooltipEl = document.createElement("div");
-      tooltipEl.id = "psc-tooltip";
-      document.body.appendChild(tooltipEl);
+    let t = document.getElementById("psc-tooltip");
+    if (!t) {
+      t = el("div", { id: "psc-tooltip" });
+      document.body.appendChild(t);
     }
-    tooltipEl.textContent = content;
-    tooltipEl.style.display = "block";
+    t.textContent = content;
+    t.style.display = "block";
     positionTooltip(evt);
   }
 
   function positionTooltip(evt) {
-    if (!tooltipEl || tooltipEl.style.display === "none") return;
-    const rect = tooltipEl.getBoundingClientRect();
-    let left = evt.clientX + 15;
-    let top = evt.clientY + 15;
-    if (left + rect.width > window.innerWidth) left = evt.clientX - rect.width - 15;
-    if (top + rect.height > window.innerHeight) top = evt.clientY - rect.height - 15;
-    tooltipEl.style.left = Math.max(5, left) + "px";
-    tooltipEl.style.top = Math.max(5, top) + "px";
+    const t = document.getElementById("psc-tooltip");
+    if (!t) return;
+    const x = evt.clientX + 12;
+    const y = evt.clientY + 12;
+    t.style.left = `${Math.min(x, window.innerWidth - 360)}px`;
+    t.style.top = `${Math.min(y, window.innerHeight - 100)}px`;
   }
 
   function hideTooltip() {
-    if (tooltipEl) tooltipEl.style.display = "none";
+    const t = document.getElementById("psc-tooltip");
+    if (t) t.style.display = "none";
   }
 
-  // addTooltip expects a plain, already human-readable string — no JSON is
-  // ever shown to the user (see describeCondition() below for condition
-  // tooltips, and each call site for rule/finding-metadata tooltips). The
-  // typeof-object fallback exists only as a last-resort safety net (e.g. an
-  // unexpected non-string value slipping through) and deliberately does NOT
-  // use JSON.stringify — it just stringifies plainly.
-  function addTooltip(el, content) {
-    if (typeof content !== "string") content = String(content);
-    el.addEventListener("mouseenter", (e) => showTooltip(e, content));
-    el.addEventListener("mousemove", positionTooltip);
-    el.addEventListener("mouseleave", hideTooltip);
-    el.style.cursor = "help";
+  function addTooltip(element, content) {
+    if (!content) return;
+    element.addEventListener("mouseenter", (e) => showTooltip(e, content));
+    element.addEventListener("mousemove", positionTooltip);
+    element.addEventListener("mouseleave", hideTooltip);
   }
 
   function createSearchableSelect(labelStr, hintStr, inputId, itemsObj) {
-    // itemsObj values are either a plain name string (apps, protocols) or, for
-    // categories, an object { name, categoryId } — see categories-lookup.json.
-    // "id" (the object key) is what getValue() returns and is sent as the test
-    // value, so it MUST be the field that actually drives rule matching
-    // (bitfieldPosition for categories, not the Cisco-dashboard-facing categoryId).
-    const items = Object.entries(itemsObj || {}).map(([id, raw]) => {
-      const isObj = raw && typeof raw === "object";
-      return {
-        id,
-        name: isObj ? String(raw.name) : String(raw),
-        categoryId: isObj ? raw.categoryId : undefined,
-      };
-    });
-    
     const wrapper = el("div", { class: "psc-dropdown-wrapper" });
     const input = el("input", {
       id: inputId,
-      class: "psc-dropdown-input",
       type: "text",
-      placeholder: "Search...",
+      class: "psc-dropdown-input",
+      placeholder: hintStr || "Type to search...",
       autocomplete: "off",
-      disabled: true // Initially disabled until data is passed in
     });
-    const list = el("ul", { class: "psc-dropdown-list" });
-    wrapper.appendChild(input);
-    wrapper.appendChild(list);
+    input.disabled = true;
 
-    let selectedId = null;
+    const list = el("ul", { class: "psc-dropdown-list" });
+    let selectedValue = "";
+
+    const keys = Object.keys(itemsObj || {});
 
     function renderList(query) {
       list.innerHTML = "";
-      const q = query.toLowerCase().trim();
-      const filtered = items.filter(i => i.name.toLowerCase().includes(q) || String(i.id).includes(q));
-      
-      const maxResults = 50;
-      const results = filtered.slice(0, maxResults);
-      
-      if (results.length === 0) {
-        list.appendChild(el("li", { style: { color: "var(--hbr-color-text-weak)", fontStyle: "italic" } }, ["No matches"]));
-      } else {
-        for (const item of results) {
-          const li = el("li", {}, [
-            item.name,
-            el("span", { class: "psc-dropdown-id" }, [
-              item.categoryId !== undefined
-                ? `(bitfield: ${item.id} · categoryId: ${item.categoryId})`
-                : `(ID: ${item.id})`
-            ])
-          ]);
-          li.addEventListener("mousedown", (e) => {
-            // mousedown fires before blur
-            e.preventDefault();
-            selectedId = item.id;
-            input.value = item.name;
-            list.style.display = "none";
-          });
-          list.appendChild(li);
-        }
+      const q = (query || "").toLowerCase();
+      const matches = keys.filter(k => {
+        const label = itemsObj[k] || "";
+        return k.toLowerCase().includes(q) || label.toLowerCase().includes(q);
+      }).slice(0, 50);
+
+      if (matches.length === 0) {
+        list.appendChild(el("li", { style: { color: "#64748b", cursor: "default" } }, ["No matches found"]));
+        return;
       }
-      list.style.display = "block";
+
+      matches.forEach(k => {
+        const label = itemsObj[k] || k;
+        const li = el("li", {}, [
+          label
+        ]);
+        li.addEventListener("click", () => {
+          selectedValue = k;
+          input.value = label;
+          list.style.display = "none";
+        });
+        list.appendChild(li);
+      });
     }
 
-    input.addEventListener("focus", () => renderList(input.value));
-    input.addEventListener("input", () => {
-      selectedId = null; 
+    input.addEventListener("focus", () => {
       renderList(input.value);
-    });
-    input.addEventListener("blur", () => {
-      setTimeout(() => { list.style.display = "none"; }, 100);
-      if (!selectedId) input.value = "";
+      list.style.display = "block";
     });
 
-    const group = el("div", { class: "psc-field-group" }, [
+    input.addEventListener("input", () => {
+      selectedValue = "";
+      renderList(input.value);
+      list.style.display = "block";
+    });
+
+    document.addEventListener("click", (evt) => {
+      if (!wrapper.contains(evt.target)) {
+        list.style.display = "none";
+      }
+    });
+
+    wrapper.appendChild(input);
+    wrapper.appendChild(list);
+
+    const container = el("div", { class: "psc-field-group" }, [
       el("label", { class: "psc-field-label", htmlFor: inputId }, [labelStr]),
-      el("span",  { class: "psc-field-hint" }, [hintStr]),
       wrapper
     ]);
 
     return {
-      element: group,
+      element: container,
       wrapper,
       input,
-      getValue: () => selectedId,
-      reset: () => { selectedId = null; input.value = ""; }
+      getValue: () => selectedValue || input.value.trim(),
+      reset: () => {
+        selectedValue = "";
+        input.value = "";
+      }
     };
   }
 
-
-  function actionBadge(action) {
-    const key = (action || "").toLowerCase();
-    const c = COLOR[key] || COLOR.unknown;
-    return el("span", { class: "psc-badge-action", style: { background: c.bg, color: c.text } },
-      [(action || "?").toUpperCase()]);
-  }
-
-  function defaultBadge() {
-    return el("span", { class: "psc-badge-default" }, ["DEFAULT"]);
-  }
-
-  function sevBadge(sev) {
-    const c = COLOR[sev] || COLOR.low;
-    return el("span", { class: "psc-badge-sev", style: { background: c.bg } }, [sev.toUpperCase()]);
-  }
-
-  // ---------------------------------------------------------------------------
-  // describeCondition — plain-English rendering of a single raw ruleCondition
-  // ({attributeName, attributeOperator, attributeValue}), for tooltips that
-  // used to dump this object as JSON. Deliberately generic/low-level (just
-  // describes the operator+value), complementing rather than duplicating
-  // summarizeConditions() above the two callers — the visible bullet/line
-  // text already carries the resolved, lookup-driven human label (e.g. "App
-  // Categories: Generative AI"); this fills in the technical detail on
-  // hover, in a sentence instead of a JSON blob.
-  // ---------------------------------------------------------------------------
-  // resolveConditionIdLabel — best-effort ID→name resolution for a single
-  // raw ID, used by describeConditionValue()/describeCondition() so the
-  // hover tooltip shows the same resolved names as the visible label:value
-  // grid (summarizeConditions()) instead of exposing the raw numeric ID
-  // again on hover. Mirrors the same lookups object (lookups.identities /
-  // lookups.objects / lookups.categories / lookups.apps / lookups.protocols)
-  // summarizeConditions() already uses — kept the ID visible in parens too,
-  // since this tooltip is explicitly the "technical detail" surface.
-  function resolveConditionIdLabel(attributeName, id, lookups) {
-    lookups = lookups || {};
-    const an = (attributeName || "").toLowerCase();
-
-    if (an.includes("identity")) {
-      const name = lookups.identities && lookups.identities[String(id)];
-      return name ? `${name} (ID ${id})` : `[unknown identity ${id}]`;
-    }
-    if (an.includes("private_resource")) {
-      const name = lookups.objects && lookups.objects[String(id)];
-      return name ? `${name} (ID ${id})` : `[unknown resource ${id}]`;
-    }
-    if (an.includes("category")) {
-      const entry = lookups.categories && lookups.categories[id];
-      const name = entry ? (typeof entry === "object" ? entry.name : entry) : null;
-      return name ? `${name} (ID ${id})` : `[unknown category ${id}]`;
-    }
-    if (an.includes("application")) {
-      if (lookups.apps && lookups.apps[id] !== undefined) return `${lookups.apps[id]} (ID ${id})`;
-      if (lookups.protocols && lookups.protocols[id] !== undefined) return `${lookups.protocols[id]} (ID ${id})`;
-      return `[unknown app ${id}]`;
-    }
-    return String(id);
-  }
-
-  function describeConditionValue(value, attributeName, lookups) {
-    if (value === true) return "true (catch-all — matches everything)";
-    if (value === false) return "false";
-    if (Array.isArray(value)) {
-      if (value.length === 0) return "an empty list";
-      if (typeof value[0] === "object" && value[0] !== null) {
-        // composite_inline_ip-style entries: [{ip, port, protocol}] — plain
-        // IPs/ports, nothing to resolve against a lookup.
-        return value.map(v => {
-          const parts = [];
-          if (v.ip)       parts.push(`IP ${Array.isArray(v.ip) ? v.ip.join(", ") : v.ip}`);
-          if (v.port)     parts.push(`port ${Array.isArray(v.port) ? v.port.join(", ") : v.port}`);
-          if (v.protocol) parts.push(`protocol ${v.protocol}`);
-          return parts.join(", ");
-        }).join(" ; ");
-      }
-      // ID-bearing condition types — resolve each entry via lookups when
-      // available; falls back to the raw ID (old behavior) if lookups
-      // wasn't passed in (defensive callers only, see describeCondition()).
-      const an = (attributeName || "").toLowerCase();
-      const isResolvable = an.includes("identity") || an.includes("private_resource") || an.includes("category") || an.includes("application");
-      if (isResolvable && lookups) {
-        return value.map(id => resolveConditionIdLabel(attributeName, id, lookups)).join(", ");
-      }
-      return value.join(", ");
-    }
-    return String(value);
-  }
-
-  const OPERATOR_PHRASES = { "=": "an exact match", "IN": "an IN match", "INTERSECT": "an INTERSECT match" };
-
-  function describeCondition(cond, lookups) {
-    if (!cond || !cond.attributeName) return "No condition details available.";
-    const op = (cond.attributeOperator || "=").toUpperCase();
-    const opPhrase = OPERATOR_PHRASES[op] || `a ${op} match`;
-    return `This condition checks ${cond.attributeName} using ${opPhrase} against value ${describeConditionValue(cond.attributeValue, cond.attributeName, lookups)}.`;
-  }
-
-  // Static, always-visible finding-count badge for a rule card's collapsed
-  // header — e.g. "2 HIGH · 1 MEDIUM", or a clean indicator when there are
-  // no findings. Colored with the WORST severity present, same convention
-  // already used by the card's severity dot (COLOR[worstSevStr].bg) — not a
-  // new ad-hoc color scheme. Complements (doesn't replace) the existing
-  // hover tooltip on the header, which still shows the fuller breakdown.
-  function findingCountBadge(countBySev, worstSevStr) {
-    const total = countBySev.critical + countBySev.high + countBySev.medium + countBySev.low;
-    if (total === 0) {
-      return el("span", { class: "psc-badge-findings psc-badge-findings-clean" }, ["✓ Clean"]);
-    }
-    const parts = [];
-    for (const s of ["critical", "high", "medium", "low"]) {
-      if (countBySev[s] > 0) parts.push(`${countBySev[s]} ${s.toUpperCase()}`);
-    }
-    const c = COLOR[worstSevStr] || COLOR.low;
-    return el("span", { class: "psc-badge-findings", style: { background: c.bg } }, [parts.join(" · ")]);
-  }
-
-  // ---------------------------------------------------------------------------
-  // buildTesterPanel — the main Policy Tester card, stacked layout:
-  //   TOP:    Source + Destination panels side-by-side (roughly equal width)
-  //   MIDDLE: error line + RESET/RUN TEST, full width
-  //   BOTTOM: result pane — placeholder → result card, full width
-  //
-  // Returns { panel, updateResult(result) }
-  // ---------------------------------------------------------------------------
   function buildTesterPanel(container, identityOptions, objectMaps, identityTypeMap, identityMap, onRun, onReset) {
     injectStyles();
 
@@ -886,18 +731,54 @@
 
     const panel = el("div", { id: "psc-panel" });
 
-    // Header
-    panel.appendChild(el("div", { id: "psc-panel-title" }, ["Policy Tester"]));
+    panel.appendChild(el("div", { id: "psc-panel-title" }, ["SIMULATE TRAFFIC MATCH"]));
     panel.appendChild(el("div", { id: "psc-panel-desc" }, [
-      "Simulate policy matching by selecting primary criteria below. Expand additional conditions if needed."
+      "Default mode evaluates Source/Destination IP:Port. Toggle advanced criteria to expand Identity or App filters."
     ]));
 
     const body = el("div", { id: "psc-panel-body" });
     const formRow = el("div", { id: "psc-form-row" });
 
-    // --- 1. Essential Primary Criteria Card ---
-    const primaryCard = el("div", { class: "psc-essential-card" });
-    primaryCard.appendChild(el("div", { class: "psc-essential-title" }, ["Primary Criteria"]));
+    // --- 1. DEFAULT PRIMARY CARD: Source IP:Port + Destination IP:Port ---
+    const primaryCard = el("div", { class: "psc-hud-card" });
+    primaryCard.appendChild(el("div", { class: "psc-hud-title" }, [
+      el("span", {}, ["PRIMARY IP / PORT CRITERIA"]),
+      el("span", { style: { fontSize: "9px", color: "#06b6d4" } }, ["[DEFAULT ACTIVE]"])
+    ]));
+
+    // Source IP:Port Input
+    const sourceInput = el("input", {
+      id: "psc-src",
+      type: "text",
+      placeholder: "192.168.1.50:443 or CIDR (e.g. 10.0.0.0/16)",
+      autocomplete: "off",
+    });
+    primaryCard.appendChild(el("div", { class: "psc-field-group" }, [
+      el("label", { class: "psc-field-label", htmlFor: "psc-src" }, ["SOURCE IP / CIDR / PORT"]),
+      sourceInput,
+    ]));
+
+    // Destination IP:Port Input
+    const destInput = el("input", {
+      id: "psc-dest",
+      type: "text",
+      placeholder: "10.0.0.1:80 or Domain (e.g. cisco.com:443)",
+      autocomplete: "off",
+    });
+    primaryCard.appendChild(el("div", { class: "psc-field-group" }, [
+      el("label", { class: "psc-field-label", htmlFor: "psc-dest" }, ["DESTINATION IP / DOMAIN / PORT"]),
+      destInput,
+    ]));
+
+    formRow.appendChild(primaryCard);
+
+    // --- 2. TOGGLEABLE ADVANCED SOURCE CRITERIA ---
+    const srcAdvToggle = el("button", { type: "button", class: "psc-toggle-btn", id: "psc-toggle-src-adv" }, [
+      el("span", {}, ["⚙️ [ + ADVANCED SOURCE CRITERIA ]"]),
+      el("span", { class: "psc-toggle-arrow" }, ["▼"])
+    ]);
+
+    const srcAdvBox = el("div", { class: "psc-advanced-box", id: "psc-src-adv-box" });
 
     // Identity Select
     const identityItems = {};
@@ -907,97 +788,71 @@
         identityItems[id] = label;
       });
     }
-    const identitySelect = createSearchableSelect(
-      "Identity",
-      "Search user, AD group, or device...",
-      "psc-identity",
-      identityItems
-    );
+    const identitySelect = createSearchableSelect("Identity", "Search AD group, user, or device...", "psc-identity", identityItems);
     identitySelect.input.disabled = false;
-    primaryCard.appendChild(identitySelect.element);
-
-    // Destination IP / CIDR
-    const destInput = el("input", {
-      id: "psc-dest",
-      type: "text",
-      placeholder: "Destination IP, CIDR, or Domain (e.g. 10.0.0.1 or cisco.com)",
-      autocomplete: "off",
-    });
-    primaryCard.appendChild(el("div", { class: "psc-field-group" }, [
-      el("label", { class: "psc-field-label", htmlFor: "psc-dest" }, ["Destination IP / CIDR"]),
-      destInput,
-    ]));
-
-    // Application Select
-    const appSelect = createSearchableSelect("Internet Application", "Search applications...", "psc-app", {});
-    primaryCard.appendChild(appSelect.element);
-
-    formRow.appendChild(primaryCard);
-
-    // --- 2. Advanced Criteria Toggle & Container ---
-    const advToggleBtn = el("button", { type: "button", class: "psc-advanced-toggle" }, [
-      el("span", {}, ["⚙️ Additional Conditions (IP, Posture, SGT, Location...)"]),
-      el("span", { class: "psc-advanced-arrow" }, ["▼"])
-    ]);
-
-    const advContainer = el("div", { class: "psc-advanced-container" });
-
-    // Source Refinements
-    advContainer.appendChild(el("div", { class: "psc-advanced-section-title" }, ["Source Refinements"]));
-
-    const sourceInput = el("input", { id: "psc-src", type: "text", placeholder: "Source IP or CIDR (e.g. 192.168.1.50)", autocomplete: "off" });
-    advContainer.appendChild(el("div", { class: "psc-field-group" }, [
-      el("label", { class: "psc-field-label", htmlFor: "psc-src" }, ["Source IP / CIDR"]),
-      sourceInput,
-    ]));
+    srcAdvBox.appendChild(identitySelect.element);
 
     const identityTypeSelect = createSearchableSelect("Identity Type", "Search identity types...", "psc-identity-type", identityTypeMap || {});
     identityTypeSelect.input.disabled = false;
-    advContainer.appendChild(identityTypeSelect.element);
+    srcAdvBox.appendChild(identityTypeSelect.element);
 
-    const sgtInput = el("input", { id: "psc-sgt", type: "text", placeholder: "Security Group Tag / ID", autocomplete: "off" });
-    advContainer.appendChild(el("div", { class: "psc-field-group" }, [
+    const sgtInput = el("input", { id: "psc-sgt", type: "text", placeholder: "SGT Tag / ID", autocomplete: "off" });
+    srcAdvBox.appendChild(el("div", { class: "psc-field-group" }, [
       el("label", { class: "psc-field-label", htmlFor: "psc-sgt" }, ["Security Group Tag (SGT)"]),
-      sgtInput,
+      sgtInput
     ]));
 
     const locInput = el("input", { id: "psc-location", type: "text", placeholder: "Location / Branch name or ID", autocomplete: "off" });
-    advContainer.appendChild(el("div", { class: "psc-field-group" }, [
+    srcAdvBox.appendChild(el("div", { class: "psc-field-group" }, [
       el("label", { class: "psc-field-label", htmlFor: "psc-location" }, ["Location / Branch"]),
-      locInput,
+      locInput
     ]));
 
-    const intNetInput = el("input", { id: "psc-internal-net", type: "text", placeholder: "Internal Network CIDR", autocomplete: "off" });
-    advContainer.appendChild(el("div", { class: "psc-field-group" }, [
+    const intNetInput = el("input", { id: "psc-internal-net", type: "text", placeholder: "Internal Network Range", autocomplete: "off" });
+    srcAdvBox.appendChild(el("div", { class: "psc-field-group" }, [
       el("label", { class: "psc-field-label", htmlFor: "psc-internal-net" }, ["Internal Network"]),
-      intNetInput,
+      intNetInput
     ]));
 
     const srcNetObjSelect = createSearchableSelect("Source Network Object", "Search network objects...", "psc-netobj-src", maps.networkObjects || {});
     srcNetObjSelect.input.disabled = false;
-    advContainer.appendChild(srcNetObjSelect.element);
+    srcAdvBox.appendChild(srcNetObjSelect.element);
 
     const tunnelInput = el("input", { id: "psc-tunnel", type: "text", placeholder: "Tunnel name or ID", autocomplete: "off" });
-    advContainer.appendChild(el("div", { class: "psc-field-group" }, [
+    srcAdvBox.appendChild(el("div", { class: "psc-field-group" }, [
       el("label", { class: "psc-field-label", htmlFor: "psc-tunnel" }, ["Network Tunnel"]),
-      tunnelInput,
+      tunnelInput
     ]));
 
     const postureInput = el("input", { id: "psc-posture", type: "text", placeholder: "Device Posture Profile", autocomplete: "off" });
-    advContainer.appendChild(el("div", { class: "psc-field-group" }, [
+    srcAdvBox.appendChild(el("div", { class: "psc-field-group" }, [
       el("label", { class: "psc-field-label", htmlFor: "psc-posture" }, ["Device Posture Profile"]),
-      postureInput,
+      postureInput
     ]));
 
     const netDevInput = el("input", { id: "psc-network-device", type: "text", placeholder: "Network Device hostname/IP", autocomplete: "off" });
-    advContainer.appendChild(el("div", { class: "psc-field-group" }, [
+    srcAdvBox.appendChild(el("div", { class: "psc-field-group" }, [
       el("label", { class: "psc-field-label", htmlFor: "psc-network-device" }, ["Network Device"]),
-      netDevInput,
+      netDevInput
     ]));
 
-    // Destination Refinements
-    advContainer.appendChild(el("div", { class: "psc-advanced-section-title", style: { marginTop: "8px" } }, ["Destination Refinements"]));
+    srcAdvToggle.addEventListener("click", () => {
+      srcAdvToggle.classList.toggle("active");
+      srcAdvBox.classList.toggle("open");
+    });
 
+    formRow.appendChild(srcAdvToggle);
+    formRow.appendChild(srcAdvBox);
+
+    // --- 3. TOGGLEABLE ADVANCED DESTINATION CRITERIA ---
+    const dstAdvToggle = el("button", { type: "button", class: "psc-toggle-btn", id: "psc-toggle-dst-adv" }, [
+      el("span", {}, ["⚙️ [ + ADVANCED DESTINATION CRITERIA ]"]),
+      el("span", { class: "psc-toggle-arrow" }, ["▼"])
+    ]);
+
+    const dstAdvBox = el("div", { class: "psc-advanced-box", id: "psc-dst-adv-box" });
+
+    const appSelect = createSearchableSelect("Internet Application", "Search applications...", "psc-app", {});
     const protoSelect = createSearchableSelect("Application Protocol", "Search protocols...", "psc-proto", {});
     const catSelect = createSearchableSelect("Content Category", "Search categories...", "psc-cat", {});
     const privResSelect = createSearchableSelect("Private Resource", "Search private resources...", "psc-privres", maps.privateResources || {});
@@ -1018,22 +873,23 @@
     const catListSelect = createSearchableSelect("Category List", "Search category lists...", "psc-catlist", maps.categoryLists || {});
     catListSelect.input.disabled = false;
 
-    advContainer.appendChild(protoSelect.element);
-    advContainer.appendChild(catSelect.element);
-    advContainer.appendChild(privResSelect.element);
-    advContainer.appendChild(destListSelect.element);
-    advContainer.appendChild(netObjSelect.element);
-    advContainer.appendChild(svcObjSelect.element);
-    advContainer.appendChild(appListSelect.element);
-    advContainer.appendChild(catListSelect.element);
+    dstAdvBox.appendChild(appSelect.element);
+    dstAdvBox.appendChild(protoSelect.element);
+    dstAdvBox.appendChild(catSelect.element);
+    dstAdvBox.appendChild(privResSelect.element);
+    dstAdvBox.appendChild(destListSelect.element);
+    dstAdvBox.appendChild(netObjSelect.element);
+    dstAdvBox.appendChild(svcObjSelect.element);
+    dstAdvBox.appendChild(appListSelect.element);
+    dstAdvBox.appendChild(catListSelect.element);
 
-    advToggleBtn.addEventListener("click", () => {
-      advToggleBtn.classList.toggle("active");
-      advContainer.classList.toggle("open");
+    dstAdvToggle.addEventListener("click", () => {
+      dstAdvToggle.classList.toggle("active");
+      dstAdvBox.classList.toggle("open");
     });
 
-    formRow.appendChild(advToggleBtn);
-    formRow.appendChild(advContainer);
+    formRow.appendChild(dstAdvToggle);
+    formRow.appendChild(dstAdvBox);
     body.appendChild(formRow);
 
     // Asynchronously populate lookups
@@ -1059,8 +915,8 @@
     const errorLine = el("p", { id: "psc-form-error" });
     formFooter.appendChild(errorLine);
 
-    const runBtn   = el("button", { id: "psc-run-btn",   type: "button" }, ["Run Test"]);
-    const resetBtn = el("button", { id: "psc-reset-btn", type: "button" }, ["Reset"]);
+    const runBtn   = el("button", { id: "psc-run-btn",   type: "button" }, ["RUN SIMULATION"]);
+    const resetBtn = el("button", { id: "psc-reset-btn", type: "button" }, ["RESET"]);
     formFooter.appendChild(el("div", { id: "psc-form-actions" }, [resetBtn, runBtn]));
 
     body.appendChild(formFooter);
@@ -1068,7 +924,7 @@
     // Results container
     const resultCol = el("div", { id: "psc-result-col" });
     const placeholder = el("div", { id: "psc-result-placeholder" }, [
-      "Select an identity or destination and click 'Run Test' to see matched policy rules."
+      "// ENTER CRITERIA ABOVE AND CLICK RUN SIMULATION"
     ]);
     resultCol.appendChild(placeholder);
     body.appendChild(resultCol);
@@ -1081,14 +937,14 @@
 
       if (!result) {
         resultCol.appendChild(el("div", { id: "psc-result-placeholder" }, [
-          "Select an identity or destination and click 'Run Test' to see matched policy rules."
+          "// ENTER CRITERIA ABOVE AND CLICK RUN SIMULATION"
         ]));
         return;
       }
 
       if (result === "NO_MATCH") {
         resultCol.appendChild(el("div", { class: "psc-no-match-card" }, [
-          el("span", {}, ["⚠️ No specific rule matched — default organization action applies."]),
+          el("span", {}, ["⚠️ NO SPECIFIC RULE MATCHED — DEFAULT POLICY ACTION APPLIES."]),
         ]));
         return;
       }
@@ -1108,8 +964,8 @@
         el("div", { class: "psc-hero-info" }, [
           el("div", { class: "psc-hero-rule-title" }, [displayName]),
           el("div", { class: "psc-hero-rule-sub" }, [
-            el("span", {}, [`Priority ${displayPrio}`]),
-            rule.logging_enabled ? el("span", {}, ["• Logging On"]) : null,
+            el("span", {}, [`[ PRIORITY #${displayPrio} ]`]),
+            rule.logging_enabled ? el("span", {}, ["• LOGS: ENABLED"]) : null,
           ].filter(Boolean)),
         ]),
         el("div", { class: "psc-hero-action-badge" }, [displayAction]),
@@ -1136,16 +992,16 @@
           );
 
       const summaryText = matchFields
-        ? `${matchFields.identity.constrained ? matchFields.identity.display : 'Any Identity'} ➔ ${matchFields.destination.constrained ? matchFields.destination.display : (matchFields.app.constrained ? matchFields.app.display : 'Any Traffic')}`
-        : "Matched rule conditions";
+        ? `${matchFields.identity.constrained ? matchFields.identity.display : 'ANY IDENTITY'} ➔ ${matchFields.destination.constrained ? matchFields.destination.display : (matchFields.app.constrained ? matchFields.app.display : 'ANY TRAFFIC')}`
+        : "MATCHED RULE CONDITIONS";
 
       const summaryBox = el("div", { class: "psc-summary-box" }, [
-        el("strong", {}, ["Match Summary: "]),
+        el("strong", {}, ["MATCH REASON: "]),
         summaryText
       ]);
 
       const detailsElem = el("details", { class: "psc-result-details" }, [
-        el("summary", {}, ["🔍 View full condition breakdown ▼"]),
+        el("summary", {}, ["▶ VIEW FULL MATCH MATRIX & ATTRIBUTES"]),
         matchedGrid
       ]);
 
@@ -1162,7 +1018,6 @@
       resultCol.appendChild(heroCard);
     }
 
-    // Wiring button listeners
     function parseIpInput(val, fieldName) {
       if (!val) return { ipCidr: "" };
       val = val.trim();
@@ -1174,9 +1029,6 @@
           port = portMatch[1];
           ipCidr = val.substring(0, val.length - portMatch[0].length);
       }
-      
-      const parts = ipCidr.split("/");
-      if (parts.length > 2) return { error: `${fieldName}: Invalid format`};
       
       return { ipCidr, port };
     }
@@ -1205,7 +1057,7 @@
       const netDevVal = netDevInput.value.trim();
 
       if (!srcVal && !destVal && !appId && !protoId && !catId && !identityVal && !identityTypeIdVal && !privResId && !destListId && !netObjId && !svcObjId && !appListId && !catListId && !sgtVal && !locVal && !intNetVal && !srcNetObjId && !tunnelVal && !postureVal && !netDevVal) {
-        errorLine.textContent = "Fill in at least one field before running the test.";
+        errorLine.textContent = "SELECT AT LEAST ONE CRITERION.";
         return;
       }
 
@@ -1214,7 +1066,7 @@
 
       errorLine.textContent = "";
       runBtn.disabled = true;
-      runBtn.textContent = "Testing…";
+      runBtn.textContent = "SIMULATING…";
       
       const testInput = {
         source:                srcParsed.ipCidr,
@@ -1244,7 +1096,7 @@
       setTimeout(() => {
         Promise.resolve(onRun(testInput)).finally(() => {
           runBtn.disabled = false;
-          runBtn.textContent = "Run Test";
+          runBtn.textContent = "RUN SIMULATION";
         });
       }, 0);
     });
@@ -1289,606 +1141,247 @@
     return lookupsPromise;
   }
 
-function buildRulesList(container) {
+  function buildRulesList(container) {
     injectStyles();
 
-    const root = el("div", { id: "psc-rules-list-root", style: { display: "flex", flexDirection: "column", gap: "10px", padding: "16px" } });
+    const root = el("div", { id: "psc-rules-list-root", style: { display: "flex", flexDirection: "column", gap: "10px", padding: "14px 18px" } });
     container.appendChild(root);
+
+    const filterBar = el("div", { class: "psc-rules-filter-bar" });
+    const searchInput = el("input", {
+      type: "text",
+      class: "psc-search-input",
+      placeholder: "// SEARCH RULES BY NAME, IDENTITY, DESTINATION, OR APP...",
+      autocomplete: "off",
+    });
+
+    const pillsContainer = el("div", { class: "psc-filter-pills" });
+    const filterOptions = [
+      { id: "all", label: "[ ALL ]" },
+      { id: "allow", label: "[ PERMIT ]" },
+      { id: "block", label: "[ DENY ]" },
+      { id: "private", label: "[ PRIVATE ACCESS ]" },
+      { id: "internet", label: "[ INTERNET ACCESS ]" },
+    ];
+
+    let activeFilter = "all";
+    filterOptions.forEach(opt => {
+      const pill = el("button", {
+        type: "button",
+        class: opt.id === "all" ? "psc-filter-pill active" : "psc-filter-pill",
+        "data-filter": opt.id
+      }, [opt.label]);
+
+      pill.addEventListener("click", () => {
+        pillsContainer.querySelectorAll(".psc-filter-pill").forEach(p => p.classList.remove("active"));
+        pill.classList.add("active");
+        activeFilter = opt.id;
+        applyRulesFilter();
+      });
+
+      pillsContainer.appendChild(pill);
+    });
+
+    filterBar.appendChild(searchInput);
+    filterBar.appendChild(pillsContainer);
+    root.appendChild(filterBar);
+
+    const rulesContainer = el("div", { id: "psc-rules-cards-container", style: { display: "flex", flexDirection: "column", gap: "6px" } });
+    root.appendChild(rulesContainer);
+
+    function applyRulesFilter() {
+      const query = searchInput.value.toLowerCase().trim();
+      const cards = rulesContainer.querySelectorAll(".psc-rule-group");
+      cards.forEach(card => {
+        const text = card.textContent.toLowerCase();
+        const action = card.getAttribute("data-action") || "";
+        const type = card.getAttribute("data-type") || "";
+
+        let matchesSearch = !query || text.includes(query);
+        let matchesPill = true;
+
+        if (activeFilter === "allow") matchesPill = action === "allow";
+        else if (activeFilter === "block") matchesPill = action === "block";
+        else if (activeFilter === "private") matchesPill = type.includes("private");
+        else if (activeFilter === "internet") matchesPill = !type.includes("private");
+
+        card.style.display = matchesSearch && matchesPill ? "" : "none";
+      });
+    }
+
+    searchInput.addEventListener("input", applyRulesFilter);
 
     const SEV_ORDER = ["critical", "high", "medium", "low"];
 
     function summarizeConditions(rule, lookups) {
       const conds = rule.ruleConditions || rule.conditions || [];
       if (!Array.isArray(conds) || conds.length === 0) {
-        return [{ text: "Applies to all traffic (no specific conditions)", raw: null }];
+        return [{ text: "ANY TRAFFIC", raw: null }];
       }
 
       const summaries = [];
       for (const c of conds) {
         const type = c.attributeName;
         const values = c.attributeValue;
-        
         if (!type || values === undefined) continue;
-        
+
         let summaryText = "";
         switch (type) {
           case "umbrella.source.all":
           case "umbrella.destination.all":
-            if (values === true) summaryText = `${type.split('.')[1]} = Any`;
+            if (values === true) summaryText = `${type.split('.')[1].toUpperCase()} = ANY`;
             break;
           case "umbrella.source.identity_ids": {
-            // Resolved live against org 8176184: identity IDs can be AD/SAML
-            // groups (security_group_tag), Catalyst SD-WAN tags
-            // (catalyst_sdwan), or branches/tunnels
-            // (networkTunnelGroupsAndBranches, private-access rules) —
-            // resolveIdentities() in service-worker.js queries all known
-            // types and merges whatever each one matches into identityMap
-            // (see lookups.identities here). Falls back to showing the raw
-            // ID, same pattern as destination_list_ids/appRiskProfileId,
-            // for any ID none of those endpoints recognized (e.g. its
-            // resolving token wasn't captured in time, or it's a type we
-            // haven't discovered yet).
             const identityNames = (Array.isArray(values) ? values : [values]).map((id) => {
-              const name = lookups.identities && lookups.identities[String(id)];
-              return name || `[unknown identity ${id}]`;
+              return (lookups.identities && lookups.identities[String(id)]) || id;
             });
-            summaryText = `Identities: ${identityNames.join(", ")}`;
+            summaryText = `ID: ${identityNames.join(", ")}`;
             break;
           }
-          case "umbrella.source.identity_type_ids": {
-            // Filters by identity TYPE (e.g., typeId 57 = "Roaming Computers",
-            // 34 = "AD Groups"). Resolved via lookups.identityTypes from
-            // resolveIdentityTypes() in service-worker.js.
-            const typeNames = (Array.isArray(values) ? values : [values]).map((id) => {
-              const name = lookups.identityTypes && lookups.identityTypes[String(id)];
-              return name || `[unknown identity type ${id}]`;
-            });
-            summaryText = `Identity Types: ${typeNames.join(", ")}`;
-            break;
-          }
-          case "umbrella.destination.application_category_ids":
-          case "umbrella.destination.category_ids": // alias — same concept, different field name per org (see matcher.js)
-            // values here are bitfieldPosition, not categoryId — categories-lookup.json
-            // is keyed by bitfieldPosition for exactly this reason (see data/categories-lookup.json).
-            const catNames = Array.isArray(values) ? values.map(id => {
-              const entry = lookups.categories[id];
-              if (!entry) return `[unknown category ${id}]`;
-              return typeof entry === "object" ? entry.name : entry;
-            }) : [];
-            summaryText = `App Categories: ${catNames.length ? catNames.join(", ") : values}`;
-            break;
           case "umbrella.destination.application_ids": {
-            // CONFIRMED via live API payload: umbrella.destination.application_ids is
-            // the ONLY field used for both Internet Applications AND Application
-            // Protocols — there is no separate umbrella.destination.protocol_ids field
-            // in the real API (that case has been removed; see matcher.js for the
-            // matching-side fix). An ID here may be either kind, so resolve against
-            // apps-lookup.json first, then fall back to protocols-lookup.json, and
-            // group the results into separate "Applications:" / "Protocols:" lines
-            // rather than guessing a single label for a mixed ID set.
             const appMatches = [];
-            const protoMatches = [];
-            const unresolved = [];
             for (const id of Array.isArray(values) ? values : []) {
-              if (lookups.apps[id] !== undefined) {
-                appMatches.push(lookups.apps[id]);
-              } else if (lookups.protocols[id] !== undefined) {
-                protoMatches.push(lookups.protocols[id]);
-              } else {
-                unresolved.push(id);
-              }
+              if (lookups.apps[id] !== undefined) appMatches.push(lookups.apps[id]);
+              else if (lookups.protocols[id] !== undefined) appMatches.push(lookups.protocols[id]);
+              else appMatches.push(id);
             }
-            const parts = [];
-            if (appMatches.length)   parts.push(`Applications: ${appMatches.join(", ")}`);
-            if (protoMatches.length) parts.push(`Protocols: ${protoMatches.join(", ")}`);
-            if (unresolved.length)   parts.push(`Applications: ${unresolved.map(id => `[unknown app ${id}]`).join(", ")}`);
-            summaryText = parts.length ? parts.join(" ; ") : `Applications: ${values}`;
-            break;
-          }
-          case "umbrella.destination.composite_inline_ip":
-            if (Array.isArray(values)) {
-              const destParts = [];
-              values.forEach(v => {
-                if (typeof v === "object" && v !== null) {
-                  const parts = [];
-                  if (v.ip) parts.push(`IP: ${Array.isArray(v.ip) ? v.ip.join(", ") : v.ip}`);
-                  if (v.protocol) parts.push(`Proto: ${v.protocol}`);
-                  if (v.port) parts.push(`Port: ${Array.isArray(v.port) ? v.port.join(", ") : v.port}`);
-                  destParts.push(`Destination: ${parts.join(" | ")}`);
-                } else {
-                  destParts.push(`Destination IP: ${v}`);
-                }
-              });
-              summaryText = destParts.join(" ; ");
-            }
-            break;
-          case "umbrella.destination.destination_list_ids": {
-            // CONFIRMED via live API payload (org 8176184). Resolved via
-            // lookups.destinationLists from resolveObjectRefs() in service-worker.js.
-            const ids = Array.isArray(values) ? values : [values];
-            const names = ids.map((id) => {
-              const name = lookups.destinationLists && lookups.destinationLists[String(id)];
-              return name || `[unknown destination list ${id}]`;
-            });
-            summaryText = `Destination Lists: ${names.join(", ")}`;
-            break;
-          }
-          case "umbrella.destination.network_object_ids": {
-            const ids = Array.isArray(values) ? values : [values];
-            const names = ids.map((id) => {
-              const name = lookups.networkObjects && lookups.networkObjects[String(id)];
-              return name || `[unknown network object ${id}]`;
-            });
-            summaryText = `Network Objects: ${names.join(", ")}`;
-            break;
-          }
-          case "umbrella.destination.service_object_group_ids": {
-            const ids = Array.isArray(values) ? values : [values];
-            const names = ids.map((id) => {
-              const name = lookups.serviceObjectGroups && lookups.serviceObjectGroups[String(id)];
-              return name || `[unknown service object group ${id}]`;
-            });
-            summaryText = `Service Object Groups: ${names.join(", ")}`;
-            break;
-          }
-          case "umbrella.destination.application_list_ids": {
-            const ids = Array.isArray(values) ? values : [values];
-            const names = ids.map((id) => {
-              const name = lookups.applicationLists && lookups.applicationLists[String(id)];
-              return name || `[unknown application list ${id}]`;
-            });
-            summaryText = `Application Lists: ${names.join(", ")}`;
-            break;
-          }
-          case "umbrella.destination.category_list_ids": {
-            const ids = Array.isArray(values) ? values : [values];
-            const names = ids.map((id) => {
-              const name = lookups.categoryLists && lookups.categoryLists[String(id)];
-              return name || `[unknown category list ${id}]`;
-            });
-            summaryText = `Category Lists: ${names.join(", ")}`;
-            break;
-          }
-          case "umbrella.destination.private_resource_ids":
-          case "umbrella.destination.private_resource_group_ids": {
-            // Resolved live against org 8176184 via resolveObjectRefs() in
-            // service-worker.js (private_resources / private_resource_groups
-            // endpoints), stored in lookups.privateResources.
-            const isGroup = type.endsWith("_group_ids");
-            const label = isGroup ? "Private Resource Groups" : "Private Resources";
-            const resNames = (Array.isArray(values) ? values : [values]).map((id) => {
-              const name = (lookups.privateResources && lookups.privateResources[String(id)]) ||
-                           (lookups.objects && lookups.objects[String(id)]);
-              return name || `Resource #${id}`;
-            });
-            summaryText = `${label}: ${resNames.join(", ")}`;
-            break;
-          }
-          case "umbrella.destination.appRiskProfileId": {
-            const ids = Array.isArray(values) ? values : [values];
-            const names = ids.map((id) => {
-              const name = lookups.appRiskProfiles && lookups.appRiskProfiles[String(id)];
-              return name || `App Risk Profile #${String(id).substring(0, 8)}…`;
-            });
-            summaryText = ids.length === 1
-              ? `App Risk Profile: ${names[0]}`
-              : `App Risk Profiles: ${names.join(", ")}`;
+            summaryText = `APP: ${appMatches.join(", ")}`;
             break;
           }
           case "umbrella.destination.composite_inline_ip": {
-            // Inline IP/port/protocol objects — not named resources, render as
-            // readable network specs: "IP: 198.18.0.0/16, Port: 0-65535, Protocol: ANY"
             const items = Array.isArray(values) ? values : [values];
             const parts = items.map((item) => {
-              if (item && typeof item === "object" && !Array.isArray(item)) {
-                const ip = Array.isArray(item.ip) ? item.ip.join(", ") : (item.ip || "*");
-                const port = Array.isArray(item.port) ? item.port.join(", ") : (item.port || "*");
-                const proto = item.protocol || "ANY";
-                return `IP: ${ip}, Port: ${port}, Protocol: ${proto}`;
+              if (item && typeof item === "object") {
+                const ip = Array.isArray(item.ip) ? item.ip.join(",") : (item.ip || "*");
+                const port = Array.isArray(item.port) ? item.port.join(",") : (item.port || "*");
+                return `${ip}:${port}`;
               }
               return String(item);
             });
-            summaryText = `IP/Port/Protocol: ${parts.join(" + ")}`;
-            break;
-          }
-          case "umbrella.destination.private_resource_types": {
-            const items = Array.isArray(values) ? values : [values];
-            const labels = items.map((v) => {
-              if (v === "apps") return "Applications";
-              if (v === "networks") return "Networks";
-              if (v === "websites") return "Websites";
-              // Capitalize first letter as fallback
-              return String(v).charAt(0).toUpperCase() + String(v).slice(1);
-            });
-            summaryText = `Resource Types: ${labels.join(", ")}`;
-            break;
-          }
-          case "umbrella.source.networkObjectIds":
-          case "umbrella.source.networkObjectIds_shared": {
-            const ids = Array.isArray(values) ? values : [values];
-            const names = ids.map((id) => (lookups.networkObjects && lookups.networkObjects[String(id)]) || `Network Object #${id}`);
-            summaryText = `Source Network Objects: ${names.join(", ")}`;
-            break;
-          }
-          case "umbrella.source.networkObjectGroupIds":
-          case "umbrella.source.networkObjectGroupIds_shared": {
-            const ids = Array.isArray(values) ? values : [values];
-            const names = ids.map((id) => (lookups.networkObjectGroups && lookups.networkObjectGroups[String(id)]) || `Network Group #${id}`);
-            summaryText = `Source Network Object Groups: ${names.join(", ")}`;
-            break;
-          }
-          case "umbrella.source.geolocations": {
-            const geos = Array.isArray(values) ? values : [values];
-            summaryText = `Source Countries/Regions: ${geos.join(", ")}`;
-            break;
-          }
-          case "umbrella.destination.networkObjectGroupIds": {
-            const ids = Array.isArray(values) ? values : [values];
-            const names = ids.map((id) => (lookups.networkObjectGroups && lookups.networkObjectGroups[String(id)]) || `Network Group #${id}`);
-            summaryText = `Destination Network Object Groups: ${names.join(", ")}`;
-            break;
-          }
-          case "umbrella.destination.serviceObjectIds": {
-            const ids = Array.isArray(values) ? values : [values];
-            const names = ids.map((id) => (lookups.serviceObjects && lookups.serviceObjects[String(id)]) || `Service Object #${id}`);
-            summaryText = `Service Objects: ${names.join(", ")}`;
-            break;
-          }
-          case "umbrella.destination.application_category_ids": {
-            const ids = Array.isArray(values) ? values : [values];
-            summaryText = `Application Categories: ${ids.join(", ")}`;
-            break;
-          }
-          case "umbrella.destination.saasTenantIds": {
-            const ids = Array.isArray(values) ? values : [values];
-            summaryText = `SaaS Tenant Controls: ${ids.join(", ")}`;
-            break;
-          }
-          case "umbrella.destination.security_group_tag_ids":
-          case "umbrella.destination.any_security_group_tag": {
-            const ids = Array.isArray(values) ? values : [values];
-            summaryText = `Security Group Tags (SGT): ${ids.join(", ")}`;
-            break;
-          }
-          case "umbrella.posture.ipsProfileId": {
-            summaryText = `IPS Profile: ${values}`;
-            break;
-          }
-          case "umbrella.posture.profileIdClientbased":
-          case "umbrella.posture.profileIdClientless":
-          case "umbrella.posture.vpnProfileId":
-          case "umbrella.posture.webProfileId": {
-            const label = type.replace("umbrella.posture.", "").replace(/([A-Z])/g, " $1");
-            summaryText = `Posture (${label}): ${values}`;
+            summaryText = `DST IP: ${parts.join(" + ")}`;
             break;
           }
           default: {
-            const humanized = type
-              .replace(/^umbrella\./, "")
-              .replace(/\./g, " ")
-              .replace(/_/g, " ")
-              .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-              .toLowerCase()
-              .trim();
-            summaryText = `Matches a specific ${humanized} condition${Array.isArray(values) ? ` (${values.join(", ")})` : ` (${values})`}`;
+            const simple = type.replace("umbrella.", "").replace("destination.", "").replace("source.", "");
+            summaryText = `${simple.toUpperCase()}: ${Array.isArray(values) ? values.join(",") : values}`;
             break;
           }
         }
-        if (summaryText) {
-          summaries.push({ text: summaryText, raw: { attributeName: type, attributeOperator: c.attributeOperator, attributeValue: values } });
-        }
+        if (summaryText) summaries.push({ text: summaryText, raw: c });
       }
-      return summaries.length ? summaries : [{ text: "Has conditions, but of unknown types", raw: null }];
+      return summaries;
     }
 
     async function update(rules, findings, identityMap, objectMap, objectMaps, identityTypeMap) {
       const lookups = await loadLookups();
       lookups.identities = identityMap || {};
       lookups.identityTypes = identityTypeMap || {};
-      // objectMap is the legacy privateResources map; objectMaps has all types
       lookups.objects = objectMap || {};
       lookups.privateResources = (objectMaps && objectMaps.privateResources) || objectMap || {};
       lookups.destinationLists = (objectMaps && objectMaps.destinationLists) || {};
       lookups.networkObjects   = (objectMaps && objectMaps.networkObjects) || {};
-      lookups.serviceObjectGroups = (objectMaps && objectMaps.serviceObjectGroups) || {};
-      lookups.applicationLists = (objectMaps && objectMaps.applicationLists) || {};
-      lookups.categoryLists    = (objectMaps && objectMaps.categoryLists) || {};
-      lookups.appRiskProfiles  = (objectMaps && objectMaps.appRiskProfiles) || {};
-      root.innerHTML = "";
+
+      rulesContainer.innerHTML = "";
       if (!rules || rules.length === 0) {
-        root.appendChild(el("p", { class: "psc-empty", style: { textAlign: "center" } }, ["No rules available."]));
+        rulesContainer.appendChild(el("p", { class: "psc-empty", style: { textAlign: "center", color: "#64748b", fontFamily: "var(--hbr-font-mono)" } }, ["// NO RULES LOADED"]));
         return;
       }
 
-      // Group findings by ruleId
       const findingsByRule = new Map();
       for (const f of findings || []) {
         if (!findingsByRule.has(f.ruleId)) findingsByRule.set(f.ruleId, []);
         findingsByRule.get(f.ruleId).push(f);
       }
 
-      // Compute worst severity per rule
-      const enrichedRules = rules.map(rule => {
+      for (const rule of rules) {
+        const rName = rule.ruleName || rule.name || "(unnamed)";
+        const rAction = (rule.ruleAction || rule.action || "allow").toLowerCase();
+        const rPrio = rule.rulePriority !== undefined ? rule.rulePriority : rule.order;
         const rId = rule.ruleId !== undefined ? rule.ruleId : rule.id;
         const ruleFindings = findingsByRule.get(rId) || [];
-        
-        let worstSevIdx = 999;
-        let worstSevStr = "none";
-        for (const f of ruleFindings) {
-          const idx = SEV_ORDER.indexOf(f.severity);
-          if (idx !== -1 && idx < worstSevIdx) {
-            worstSevIdx = idx;
-            worstSevStr = f.severity;
+
+        const card = el("details", {
+          class: "psc-rule-group",
+          "data-action": rAction,
+          "data-type": (rule.type || "").toLowerCase(),
+          style: { borderLeft: `3px solid ${rAction === "allow" ? "#10b981" : (rAction === "block" ? "#ef4444" : "#8b5cf6")}` }
+        });
+
+        const condSummaries = summarizeConditions(rule, lookups);
+
+        // Header Top Line
+        const actionCls = rAction === "allow" ? "psc-action-allow" : (rAction === "block" ? "psc-action-block" : "psc-action-isolate");
+        const topBar = el("div", { class: "psc-rule-top-line" }, [
+          el("span", { class: "psc-rule-prio" }, [`#${rPrio}`]),
+          el("span", { class: "psc-rule-name" }, [rName]),
+          el("span", { class: `psc-rule-action-pill ${actionCls}` }, [rAction.toUpperCase()]),
+        ]);
+
+        // Inline Data Chips Bar
+        const inlineChips = el("div", { class: "psc-inline-chips" });
+        condSummaries.slice(0, 3).forEach(cs => {
+          const colonIdx = cs.text.indexOf(":");
+          if (colonIdx > -1) {
+            inlineChips.appendChild(el("span", { class: "psc-chip" }, [
+              el("span", { class: "psc-chip-key" }, [cs.text.slice(0, colonIdx)]),
+              el("span", { class: "psc-chip-val" }, [cs.text.slice(colonIdx + 1)]),
+            ]));
+          } else {
+            inlineChips.appendChild(el("span", { class: "psc-chip" }, [
+              el("span", { class: "psc-chip-val" }, [cs.text]),
+            ]));
           }
-        }
-        
-        return {
-          originalRule: rule,
-          ruleFindings: ruleFindings,
-          worstSevIdx: worstSevIdx,
-          worstSevStr: worstSevStr
-        };
-      });
+        });
 
-      // Sort: worst severity first, then by priority/order
-      enrichedRules.sort((a, b) => {
-        if (a.worstSevIdx !== b.worstSevIdx) {
-          return a.worstSevIdx - b.worstSevIdx; // lower index = worse severity
-        }
-        // Fallback to priority order if available
-        const prioA = a.originalRule.rulePriority !== undefined ? a.originalRule.rulePriority : a.originalRule.order;
-        const prioB = b.originalRule.rulePriority !== undefined ? b.originalRule.rulePriority : b.originalRule.order;
-        return (prioA || 0) - (prioB || 0);
-      });
-
-      // Render cards
-      for (const er of enrichedRules) {
-        const rule       = er.originalRule;
-        const rName      = rule.ruleName   || rule.name   || "(unnamed)";
-        const rAction    = rule.ruleAction || rule.action || "unknown";
-        const rPrio      = rule.rulePriority !== undefined ? rule.rulePriority : rule.order;
-        const rId        = rule.ruleId      !== undefined ? rule.ruleId      : rule.id;
-        const rIsDefault = rule.ruleIsDefault !== undefined ? rule.ruleIsDefault === true : rule.is_default === true;
-
-        const card = el("details", { class: "psc-rule-group", style: { marginBottom: "6px" } });
-
-        // Tally findings by severity once — feeds both the static header
-        // badge and the hover tooltip's fuller breakdown below.
-        const countBySev = { critical: 0, high: 0, medium: 0, low: 0 };
-        for (const f of er.ruleFindings) {
-          const s = (f.severity || "").toLowerCase();
-          if (countBySev[s] !== undefined) countBySev[s]++;
-        }
-
-        // Header
-        const tc = COLOR[er.worstSevStr] || { bg: "var(--hbr-color-text-weak)" }; // gray dot if clean
-        const headerChildren = [
-          el("span", { class: "psc-dot", style: { background: tc.bg, width: "10px", height: "10px" } }),
-          el("span", { style: { flex: "1", fontWeight: "600", fontSize: "13px" } }, [rName]),
-          // Static, always-visible finding count — visible even collapsed,
-          // independent of the hover tooltip below (which still shows the
-          // fuller ID/priority/JSON breakdown on hover).
-          findingCountBadge(countBySev, er.worstSevStr),
-        ];
-        if (rIsDefault) headerChildren.push(defaultBadge());
-        headerChildren.push(
-          actionBadge(rAction),
-          el("span", { class: "psc-chevron", style: { marginLeft: "8px" } }, ["▼"])
-        );
-        const header = el("summary", { class: "psc-rule-group-header", style: { padding: "10px 14px", fontSize: "12px" } }, headerChildren);
-
-        // Add tooltip to collapsed header
-        let findingSummary = "Clean (No Findings)";
-        if (er.ruleFindings.length > 0) {
-          const parts = [];
-          for (const s of ["critical", "high", "medium", "low"]) {
-            if (countBySev[s] > 0) parts.push(`${countBySev[s]} ${s.toUpperCase()}`);
-          }
-          findingSummary = parts.join(", ");
-        }
-
-        addTooltip(header,
-          `${rName} — Priority ${rPrio} — ${rAction.toUpperCase()}\n` +
-          (er.ruleFindings.length === 0
-            ? "No findings — clean"
-            : `${er.ruleFindings.length} finding${er.ruleFindings.length === 1 ? "" : "s"}: ${findingSummary}`) +
-          (rIsDefault ? "\nDefault (built-in)" : "")
-        );
+        const header = el("summary", { class: "psc-rule-group-header" }, [
+          topBar,
+          inlineChips
+        ]);
 
         card.appendChild(header);
 
-        const cardBody = el("div", { class: "psc-check-list", style: { padding: "12px 14px", borderTop: "1px solid var(--hbr-color-border)", background: "var(--hbr-color-bg-card)" } });
+        // Card Body
+        const cardBody = el("div", { class: "psc-check-list" });
 
-        // Meta — the raw priority/order number is dropped here: it's
-        // already visible on the dashboard itself (the "#" row-order
-        // column), so repeating it in every card added nothing. Only shown
-        // for default/catch-all rules, since "always evaluated last" is
-        // genuinely new context — the dashboard just places them under a
-        // "Default rules" heading without explaining why.
-        if (rIsDefault) {
-          cardBody.appendChild(el("div", { class: "psc-result-meta", style: { marginBottom: "12px" } }, [
-            "Default rule (always evaluated last)"
-          ]));
-        }
-
-        // Findings OR Good indicator
-        if (er.ruleFindings.length === 0) {
-          const goodInd = el("div", { class: "psc-good-item", style: { marginBottom: "12px" } }, [
-            el("span", { style: { flex: "1", fontWeight: "600" } }, ["Passed all checks — no issues found."])
+        // Security Profile Chips
+        if (rule.security_profiles) {
+          const sp = rule.security_profiles;
+          const spRow = el("div", { class: "psc-inline-chips", style: { marginBottom: "6px" } }, [
+            el("span", { class: "psc-chip", style: { borderColor: sp.ips_enabled ? "#10b981" : "#334155" } }, [`IPS: ${sp.ips_enabled ? "ON" : "OFF"}`]),
+            el("span", { class: "psc-chip", style: { borderColor: sp.amp_malware_enabled ? "#10b981" : "#334155" } }, [`AMP: ${sp.amp_malware_enabled ? "ON" : "OFF"}`]),
+            el("span", { class: "psc-chip", style: { borderColor: sp.tls_decryption_enabled ? "#10b981" : "#334155" } }, [`TLS: ${sp.tls_decryption_enabled ? "ON" : "OFF"}`]),
+            el("span", { class: "psc-chip", style: { borderColor: sp.dlp_enabled ? "#10b981" : "#334155" } }, [`DLP: ${sp.dlp_enabled ? "ON" : "OFF"}`]),
           ]);
-          cardBody.appendChild(goodInd);
-        } else {
-          // Group rule findings by checkId
-          const checkMap = new Map();
-          for (const f of er.ruleFindings) {
-            if (!checkMap.has(f.checkId)) checkMap.set(f.checkId, []);
-            checkMap.get(f.checkId).push(f);
-          }
-          
-          const findingsList = el("div", { style: { display: "flex", flexDirection: "column", gap: "6px", marginBottom: "12px" } });
-          for (const [checkId, cFindings] of checkMap) {
-            const sortedF = [...cFindings].sort((a, b) => SEV_ORDER.indexOf(a.severity) - SEV_ORDER.indexOf(b.severity));
-            for (const f of sortedF) {
-              const fc = COLOR[f.severity] || COLOR.low;
-              const item = el("div", { class: "psc-check-item", style: {
-                borderLeftColor: fc.bg,
-                background: fc.light,
-              }}, [
-                el("div", { class: "psc-check-item-head" }, [
-                  sevBadge(f.severity),
-                  el("span", { style: { color: "var(--hbr-color-text-heading)" } }, [checkId]),
-                ]),
-                el("span", { class: "psc-check-msg" }, [f.message]),
-              ]);
-              if (f.detail) {
-                item.appendChild(el("div", { class: "psc-check-detail" }, [f.detail]));
-              }
-              
-              let detailText;
-              if (checkId === "SEC_PROFILE_MISSING" || checkId === "SEC_PROFILE_PARTIAL") {
-                const sp = rule.security_profiles || {};
-                const fmt = (v) => v === true ? "Enabled" : v === false ? "Disabled" : "Unconfirmed";
-                detailText = `Security profiles — IPS: ${fmt(sp.ips_enabled)}, AMP/Malware: ${fmt(sp.amp_malware_enabled)}, ` +
-                  `TLS Decryption: ${fmt(sp.tls_decryption_enabled)}, DLP: ${fmt(sp.dlp_enabled)}`;
-              } else if (checkId === "LOGGING_DISABLED") {
-                detailText = `Logging enabled: ${rule.logging_enabled ? "Yes" : "No"}`;
-              } else {
-                detailText = `${f.checkId} (${(f.severity || "").toUpperCase()}): ${f.message}`;
-              }
-              addTooltip(item, detailText);
-              
-              findingsList.appendChild(item);
-            }
-          }
-          cardBody.appendChild(findingsList);
+          cardBody.appendChild(spRow);
         }
 
-        // What will usually match — same clean label:value field-grid style
-        // as the Test Policy result panel (see updateResult()'s fieldRow()),
-        // for visual consistency across both places conditions get shown.
-        // summarizeConditions()'s entries are "Label: value" or
-        // "dimension = value" text (already resolved to names, not raw IDs,
-        // per the switch cases above) — splitLabelValue() below just peels
-        // that apart into the two grid columns instead of changing
-        // summarizeConditions()'s own return shape.
-        function splitLabelValue(text) {
-          const colonIdx = text.indexOf(": ");
-          if (colonIdx > -1) return { label: text.slice(0, colonIdx), value: text.slice(colonIdx + 2) };
-          const eqIdx = text.indexOf(" = ");
-          if (eqIdx > -1) return { label: text.slice(0, eqIdx), value: text.slice(eqIdx + 3) };
-          return { label: "Condition", value: text };
+        // Findings
+        if (ruleFindings.length > 0) {
+          const findingsBox = el("div", { style: { display: "flex", flexDirection: "column", gap: "4px" } });
+          ruleFindings.forEach(f => {
+            const fc = COLOR[f.severity] || COLOR.low;
+            findingsBox.appendChild(el("div", { class: "psc-check-item", style: { borderLeftColor: fc.bg } }, [
+              el("div", { class: "psc-check-item-head", style: { color: fc.border } }, [`[${f.checkId}] ${f.severity.toUpperCase()}`]),
+              el("span", { class: "psc-check-msg" }, [f.message])
+            ]));
+          });
+          cardBody.appendChild(findingsBox);
         }
-
-        const matchConds = summarizeConditions(rule, lookups);
-        const matchTitle = el("div", { class: "psc-result-cond-title", style: { display: "flex", alignItems: "center", gap: "4px", marginTop: "4px", marginBottom: "8px" } }, [
-          el("span", {}, ["What will usually match"])
-        ]);
-
-        // Always render the same 4 fixed rows (Source / Identity /
-        // Destination / App-Category-Protocol) the Test Policy result panel
-        // uses (see matcher.js's matchesRule() matchFields), instead of only
-        // a row per condition that happens to exist on this rule — a rule
-        // with just a destination condition used to show a 1-2 row grid,
-        // which read as incomplete/inconsistent next to the Test Policy
-        // panel's always-4-row grid. window.Matcher.conditionDimension()
-        // (already used for the same classification elsewhere) buckets each
-        // summarized condition into its dimension; a dimension with no
-        // conditions defaults to "Any", exactly like an unconstrained
-        // Test Policy field. Multiple conditions in the same dimension are
-        // combined into one row, values joined by "; ".
-        const DIMENSION_META = {
-          source:      { label: "Source" },
-          identity:    { label: "Identity" },
-          destination: { label: "Destination" },
-          app:         { label: "App / Category / Protocol" },
-        };
-        const buckets = { source: [], identity: [], destination: [], app: [] };
-        const unrecognized = [];
-
-        for (const mc of matchConds) {
-          // The catch-all "no specific conditions" message means every
-          // dimension is unconstrained — already covered by the buckets
-          // staying empty below, so skip adding it as its own row.
-          if (!mc.raw && /applies to all traffic/i.test(mc.text)) continue;
-
-          const attributeName = mc.raw && mc.raw.attributeName;
-          const dimension = attributeName && window.Matcher && typeof window.Matcher.conditionDimension === "function"
-            ? window.Matcher.conditionDimension(attributeName)
-            : null;
-          const { value } = splitLabelValue(mc.text);
-
-          if (dimension && buckets[dimension]) {
-            buckets[dimension].push({ value, raw: mc.raw });
-          } else {
-            // Safety net for any condition type conditionDimension() doesn't
-            // recognize yet — shown as an extra row instead of silently
-            // dropped.
-            unrecognized.push(mc);
-          }
-        }
-
-        function dimensionRow(key) {
-          const meta = DIMENSION_META[key];
-          const entries = buckets[key];
-          const isAny = entries.length === 0;
-          const value = isAny ? "Any" : entries.map(e => e.value).join("; ");
-          const row = el("div", { class: isAny ? "psc-result-field-row psc-field-unconstrained" : "psc-result-field-row" }, [
-            el("div", { class: "psc-result-field-label" }, [meta.label]),
-            el("div", { class: isAny ? "psc-result-field-value psc-field-any" : "psc-result-field-value" }, [value]),
-          ]);
-          if (entries.length === 1 && entries[0].raw) {
-            addTooltip(row, describeCondition(entries[0].raw, lookups));
-          } else if (entries.length > 1) {
-            addTooltip(row, entries.map(e => describeCondition(e.raw, lookups)).join("\n"));
-          }
-          return row;
-        }
-
-        const matchGrid = el("div", { class: "psc-result-fields" }, [
-          dimensionRow("source"),
-          dimensionRow("identity"),
-          dimensionRow("destination"),
-          dimensionRow("app"),
-          ...unrecognized.map(mc => {
-            const { label, value } = splitLabelValue(mc.text);
-            const isAny = /^any$/i.test(value.trim());
-            const row = el("div", { class: isAny ? "psc-result-field-row psc-field-unconstrained" : "psc-result-field-row" }, [
-              el("div", { class: "psc-result-field-label" }, [label]),
-              el("div", { class: isAny ? "psc-result-field-value psc-field-any" : "psc-result-field-value" }, [value]),
-            ]);
-            if (mc.raw) addTooltip(row, describeCondition(mc.raw, lookups));
-            return row;
-          }),
-        ]);
-
-        const matchBox = el("div", { style: { background: "var(--hbr-color-bg-subtle)", padding: "10px", borderRadius: "var(--hbr-radius-md)", border: "1px solid var(--hbr-color-border)" } }, [
-          matchTitle,
-          matchGrid
-        ]);
-        cardBody.appendChild(matchBox);
 
         card.appendChild(cardBody);
-        root.appendChild(card);
+        rulesContainer.appendChild(card);
       }
+
+      applyRulesFilter();
     }
 
     return { update };
   }
 
-  // ---------------------------------------------------------------------------
-  // Public API
-  // ---------------------------------------------------------------------------
   global.PopupSections = {
     buildTesterPanel,
     buildRulesList,
-    // Exposed so popup.js can build the same { categories, apps, protocols }
-    // lookups object (merged with the live identityMap) to pass into
-    // window.Matcher.matchPolicy() for the Policy Tester's "MATCHED BECAUSE"
-    // reasoning — reuses this module's cached fetch instead of duplicating
-    // the static-JSON-loading logic in popup.js.
     loadLookups,
-
-    // Kept for backward compat if anything still references old names
     buildAuditSections:    () => ({ goodSection: { update: () => {} }, badSection: { update: () => {} }, allRulesSection: { update: () => {} } }),
     buildWillMatchSection: () => ({ section: null, update: () => {} }),
     buildGoodSection:      () => ({ section: null, update: () => {} }),
