@@ -553,18 +553,61 @@
         };
       }
 
+      if (an.includes("network_object") || an.includes("networkobject")) {
+        const wanted = String(networkObjectId !== null && networkObjectId !== undefined ? networkObjectId : "");
+        if (wanted && attributeValue.some((e) => String(e) === wanted)) {
+          return {
+            matched: true,
+            note: `${dimension}: network object ${wanted} matched ${attributeName}`,
+            display: resolveDisplayValue(dimension, attributeName, wanted, lookups),
+          };
+        }
+      }
+
+      if (an.includes("service_object") || an.includes("serviceobject")) {
+        const wanted = String(serviceObjectGroupId !== null && serviceObjectGroupId !== undefined ? serviceObjectGroupId : "");
+        if (wanted && attributeValue.some((e) => String(e) === wanted)) {
+          return {
+            matched: true,
+            note: `${dimension}: service object group ${wanted} matched ${attributeName}`,
+            display: resolveDisplayValue(dimension, attributeName, wanted, lookups),
+          };
+        }
+      }
+
+      if (an.includes("application_list")) {
+        const wanted = String(applicationListId !== null && applicationListId !== undefined ? applicationListId : "");
+        if (wanted && attributeValue.some((e) => String(e) === wanted)) {
+          return {
+            matched: true,
+            note: `${dimension}: application list ${wanted} matched ${attributeName}`,
+            display: resolveDisplayValue(dimension, attributeName, wanted, lookups),
+          };
+        }
+      }
+
+      if (an.includes("category_list")) {
+        const wanted = String(categoryListId !== null && categoryListId !== undefined ? categoryListId : "");
+        if (wanted && attributeValue.some((e) => String(e) === wanted)) {
+          return {
+            matched: true,
+            note: `${dimension}: category list ${wanted} matched ${attributeName}`,
+            display: resolveDisplayValue(dimension, attributeName, wanted, lookups),
+          };
+        }
+      }
+
       // -----------------------------------------------------------------------
       // "IN" with a plain array of scalars (string/number)
-      // TODO: unconfirmed — confirm what non-composite IN arrays look like in real rules
       // -----------------------------------------------------------------------
       const matchedEntry = attributeValue.find((entry) => {
         if (typeof entry !== "string" && typeof entry !== "number") return false;
         const ev = String(entry).toLowerCase().trim();
-        const tvL = tv.toLowerCase();
+        const tvL = tv.toLowerCase().trim();
         if (dimension === "source" || dimension === "destination") {
-          return cidrMatch(tv, String(entry)) || fqdnMatch(String(entry), tv) || ev === tvL;
+          return cidrMatch(tv, String(entry)) || fqdnMatch(String(entry), tv) || ev === tvL || tvL === "";
         }
-        return ev === tvL || ev.includes(tvL) || tvL.includes(ev);
+        return ev === tvL || ev.includes(tvL) || tvL.includes(ev) || tvL === "";
       });
 
       // Identity/app dimensions carry numeric IDs (group tags, branch IDs,
@@ -606,77 +649,79 @@
 
       // Parse testInput as comma-separated numeric IDs
       let testIds = [];
-      if (dimension === "identity" && an.includes("identity_type")) {
-        // identity_type_ids - filter by identity TYPE (e.g., typeId 57 = "Roaming Computers")
-        // For now, we don't have a tester field for this, so it won't match
-        // unless we add identityTypeId to testInput
-        if (testInput && testInput.identityTypeId !== null && testInput.identityTypeId !== undefined && testInput.identityTypeId !== "") {
-          testIds.push(parseInt(testInput.identityTypeId, 10));
+      if (an.includes("identity_type")) {
+        const typeVal = (testInput && testInput.identityTypeId !== undefined && testInput.identityTypeId !== null)
+          ? testInput.identityTypeId
+          : (tvObj && tvObj.identityTypeId);
+        if (typeVal !== null && typeVal !== undefined && typeVal !== "") {
+          testIds.push(parseInt(typeVal, 10));
         }
-      } else if (dimension === "destination" && an.includes("private_resource")) {
-        // private_resource_ids / private_resource_group_ids
-        if (privateResourceId !== null && privateResourceId !== undefined && privateResourceId !== "") {
-          testIds.push(parseInt(privateResourceId, 10));
+      } else if (an.includes("private_resource")) {
+        const prVal = (testInput && testInput.privateResourceId) !== undefined ? testInput.privateResourceId : privateResourceId;
+        if (prVal !== null && prVal !== undefined && prVal !== "") {
+          testIds.push(parseInt(prVal, 10));
         }
-      } else if (dimension === "destination" && an.includes("destination_list")) {
-        if (destinationListId !== null && destinationListId !== undefined && destinationListId !== "") {
-          testIds.push(parseInt(destinationListId, 10));
+      } else if (an.includes("destination_list")) {
+        const dlVal = (testInput && testInput.destinationListId) !== undefined ? testInput.destinationListId : destinationListId;
+        if (dlVal !== null && dlVal !== undefined && dlVal !== "") {
+          testIds.push(parseInt(dlVal, 10));
         }
-      } else if (dimension === "destination" && (an.includes("network_object") || an.includes("networkobject"))) {
-        if (networkObjectId !== null && networkObjectId !== undefined && networkObjectId !== "") {
-          testIds.push(parseInt(networkObjectId, 10));
+      } else if (an.includes("network_object") || an.includes("networkobject")) {
+        const netObjVal = (testInput && testInput.networkObjectId) !== undefined ? testInput.networkObjectId : networkObjectId;
+        if (netObjVal !== null && netObjVal !== undefined && netObjVal !== "") {
+          testIds.push(parseInt(netObjVal, 10));
         }
-      } else if (dimension === "destination" && (an.includes("service_object") || an.includes("serviceobject"))) {
-        if (serviceObjectGroupId !== null && serviceObjectGroupId !== undefined && serviceObjectGroupId !== "") {
-          testIds.push(parseInt(serviceObjectGroupId, 10));
+      } else if (an.includes("service_object") || an.includes("serviceobject")) {
+        const svcObjVal = (testInput && testInput.serviceObjectGroupId) !== undefined ? testInput.serviceObjectGroupId : serviceObjectGroupId;
+        if (svcObjVal !== null && svcObjVal !== undefined && svcObjVal !== "") {
+          testIds.push(parseInt(svcObjVal, 10));
         }
-      } else if (dimension === "destination" && an.includes("application_list")) {
-        if (applicationListId !== null && applicationListId !== undefined && applicationListId !== "") {
-          testIds.push(parseInt(applicationListId, 10));
+      } else if (an.includes("application_list")) {
+        const appListVal = (testInput && testInput.applicationListId) !== undefined ? testInput.applicationListId : applicationListId;
+        if (appListVal !== null && appListVal !== undefined && appListVal !== "") {
+          testIds.push(parseInt(appListVal, 10));
         }
-      } else if (dimension === "destination" && an.includes("category_list")) {
-        if (categoryListId !== null && categoryListId !== undefined && categoryListId !== "") {
-          testIds.push(parseInt(categoryListId, 10));
+      } else if (an.includes("category_list")) {
+        const catListVal = (testInput && testInput.categoryListId) !== undefined ? testInput.categoryListId : categoryListId;
+        if (catListVal !== null && catListVal !== undefined && catListVal !== "") {
+          testIds.push(parseInt(catListVal, 10));
         }
+      } else if (an.includes("category")) {
+        const catVal = (tvObj && tvObj.categoryId) !== undefined ? tvObj.categoryId : (testInput && testInput.categoryId);
+        if (catVal !== null && catVal !== undefined && catVal !== "") {
+          testIds.push(parseInt(catVal, 10));
+        }
+      } else if (an.includes("application")) {
+        const appVal = (tvObj && tvObj.applicationId) !== undefined ? tvObj.applicationId : (testInput && testInput.applicationId);
+        const protoVal = (tvObj && tvObj.protocolId) !== undefined ? tvObj.protocolId : (testInput && testInput.protocolId);
+        if (appVal !== null && appVal !== undefined && appVal !== "") testIds.push(parseInt(appVal, 10));
+        if (protoVal !== null && protoVal !== undefined && protoVal !== "") testIds.push(parseInt(protoVal, 10));
       } else if (tvObj) {
-        // NOTE: the category attributeName is NOT universal across orgs/tenants —
-        // confirmed variants so far: "umbrella.destination.application_category_ids"
-        // (org 8415583) and "umbrella.destination.category_ids" (org 8416432).
-        // Both represent the same category-ID INTERSECT match, so match on the
-        // "category" substring generically rather than a specific field name.
-        if (an.includes("category")) {
-          if (tvObj.categoryId !== null) testIds.push(parseInt(tvObj.categoryId, 10));
-        } else if (an.includes("application")) {
-          // CONFIRMED via live API payload: umbrella.destination.application_ids is
-          // the ONLY field used for BOTH "Internet Application" and "Application
-          // Protocol" selections — there is no separate protocol_ids field (the
-          // dead "protocol" branch that used to sit here has been removed). Both
-          // dropdown inputs must be checked against this same condition, since
-          // there's no reliable way to tell which "kind" a given ID is without a
-          // lookup (see summarizeConditions() in popup-sections.js, which resolves
-          // apps-lookup.json first, then falls back to protocols-lookup.json).
-          //
-          // TODO: unconfirmed — this "application" substring check ALSO catches
-          // umbrella.destination.application_list_ids (seen live on org 8176184,
-          // "Pseudoco AUP Internet Block", raw ID 20230), a DIFFERENT condition
-          // type from application_ids. Testing it via applicationId/protocolId
-          // is very likely wrong (that field probably references a named
-          // "application list" object, not a single app/protocol ID directly —
-          // same idea as private_resource_group_ids referencing a group rather
-          // than an individual resource), so a rule that depends on this
-          // condition will currently never match through the tester, even with
-          // an Internet Application/Protocol value filled in. Needs its own
-          // confirmed endpoint/lookup and a dedicated branch here once that
-          // shape is known, rather than falling through to applicationId/
-          // protocolId matching by accident.
-          if (tvObj.applicationId !== null) testIds.push(parseInt(tvObj.applicationId, 10));
-          if (tvObj.protocolId !== null) testIds.push(parseInt(tvObj.protocolId, 10));
-        }
+        if (tvObj.applicationId) testIds.push(parseInt(tvObj.applicationId, 10));
+        if (tvObj.protocolId) testIds.push(parseInt(tvObj.protocolId, 10));
       } else {
         testIds = tv.split(",").map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n));
       }
       
       if (testIds.length === 0) {
+        // String array INTERSECT matching (geolocations, resource types, etc.)
+        if (Array.isArray(attributeValue) && attributeValue.some((e) => typeof e === "string")) {
+          const matchedStr = attributeValue.find((entry) => {
+            if (typeof entry === "string") {
+              const ev = entry.toLowerCase().trim();
+              const tvL = tv.toLowerCase().trim();
+              return ev === tvL || tvL.includes(ev) || ev.includes(tvL) || tvL === "";
+            }
+            return false;
+          });
+          if (matchedStr !== undefined) {
+            return {
+              matched: true,
+              note: `${dimension}: '${matchedStr}' matched ${attributeName}`,
+              display: matchedStr,
+            };
+          }
+        }
         return {
           matched: false,
           note: `${dimension}: test input contained no valid numeric IDs for INTERSECT (${attributeName})`,
@@ -786,7 +831,7 @@
     } = testInput;
     const hasSource      = source.trim() !== "" || sgt.trim() !== "" || location.trim() !== "" || internalNetwork.trim() !== "" || (sourceNetworkObjectId !== null && sourceNetworkObjectId !== "") || tunnel.trim() !== "" || posture.trim() !== "" || networkDevice.trim() !== "";
     const hasIdentity    = identity.trim()    !== "" || (identityTypeId !== null && identityTypeId !== "");
-    const hasApp         = categoryId !== null || applicationId !== null || protocolId !== null;
+    const hasApp         = categoryId !== null || applicationId !== null || protocolId !== null || (applicationListId !== null && applicationListId !== "") || (categoryListId !== null && categoryListId !== "");
     const hasDestination = destination.trim() !== "" || 
                           (privateResourceId !== null && privateResourceId !== "") ||
                           (destinationListId !== null && destinationListId !== "") ||
@@ -865,7 +910,7 @@
       } else {
         const displays = [];
         for (const cond of idConds) {
-          const result = matchConditionValue(cond, "identity", identity, null, lookups);
+          const result = matchConditionValue(cond, "identity", identity, null, lookups, testInput);
           if (!result.matched) return NO_MATCH;
           matchedConditions.push(result.note);
           if (result.display) displays.push(result.display);
