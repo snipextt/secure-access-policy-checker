@@ -1885,17 +1885,7 @@
           }
         });
 
-        const header = el("summary", { class: "psc-rule-group-header" }, [
-          topBar,
-          inlineChips
-        ]);
-
-        card.appendChild(header);
-
-        // Card Body
-        const cardBody = el("div", { class: "psc-check-list" });
-
-        // Security Profile Chips
+        // Add Security Profile Chips directly to header bar
         if (rule.security_profiles) {
           const sp = rule.security_profiles;
           const makeSpChip = (label, enabled) => {
@@ -1909,14 +1899,21 @@
               }
             }, [`${label}: ${enabled ? "ON" : "OFF"}`]);
           };
-          const spRow = el("div", { class: "psc-inline-chips", style: { marginBottom: "6px" } }, [
-            makeSpChip("IPS", sp.ips_enabled),
-            makeSpChip("AMP", sp.amp_malware_enabled),
-            makeSpChip("TLS", sp.tls_decryption_enabled),
-            makeSpChip("DLP", sp.dlp_enabled),
-          ]);
-          cardBody.appendChild(spRow);
+          inlineChips.appendChild(makeSpChip("IPS", sp.ips_enabled));
+          inlineChips.appendChild(makeSpChip("AMP", sp.amp_malware_enabled));
+          inlineChips.appendChild(makeSpChip("TLS", sp.tls_decryption_enabled));
+          inlineChips.appendChild(makeSpChip("DLP", sp.dlp_enabled));
         }
+
+        const header = el("summary", { class: "psc-rule-group-header" }, [
+          topBar,
+          inlineChips
+        ]);
+
+        card.appendChild(header);
+
+        // Card Body
+        const cardBody = el("div", { class: "psc-check-list" });
 
         // Findings / Audit Feedback section
         const findingsBox = el("div", { style: { display: "flex", flexDirection: "column", gap: "4px" } });
