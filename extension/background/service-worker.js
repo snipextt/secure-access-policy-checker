@@ -1408,8 +1408,20 @@ const OBJECT_ENDPOINTS = [
       }));
     },
   },
+  {
+    name: "posture_profiles",
+    tokenKey: "sse_token",
+    buildUrl: (orgId) =>
+      `https://api.umbrella.com/v1/organizations/${orgId}/postureprofiles`,
+    parse: (json) => {
+      const items = Array.isArray(json) ? json : (json?.items || json?.data || []);
+      return items.map((e) => ({
+        id: e.postureProfileId || e.id,
+        name: e.postureProfileName || e.name,
+      }));
+    },
+  },
 ];
-
 // Collect all object IDs referenced in rule conditions, grouped by type.
 // These are needed by endpoints that require ?ids= parameters (networkObjects,
 // serviceObjectGroups, etc.)
@@ -1481,6 +1493,7 @@ async function resolveObjectRefs(orgId, tabId, rules) {
     applicationLists: {},
     categoryLists: {},
     appRiskProfiles: {},
+    postureProfiles: {},
   };
   
   await Promise.all(
@@ -1530,6 +1543,7 @@ async function resolveObjectRefs(orgId, tabId, rules) {
           endpoint.name === "application_lists" ? "applicationLists" :
           endpoint.name === "category_lists" ? "categoryLists" :
           endpoint.name === "app_risk_profiles" ? "appRiskProfiles" :
+          endpoint.name === "posture_profiles" ? "postureProfiles" :
           null;
         
         if (mapKey && maps[mapKey]) {
