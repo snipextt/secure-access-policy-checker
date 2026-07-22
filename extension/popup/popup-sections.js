@@ -116,111 +116,140 @@
         width: 100%;
       }
 
-      /* Source/Destination IP:Port Fields — no enclosing box, space-between layout */
-      .psc-ip-fields-row {
-        display: flex;
+      /* 2-Column Grid Layout: SOURCE on Left, DESTINATION on Right */
+      .psc-criteria-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
         gap: 16px;
         width: 100%;
+        box-sizing: border-box;
       }
-      .psc-ip-fields-row .psc-field-group {
-        flex: 1;
-        min-width: 0;
-      }
-      .psc-ip-fields-row .psc-field-label {
-        font-size: 10.5px;
-        font-weight: 700;
-        color: #0f172a;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
+      @media (max-width: 640px) {
+        .psc-criteria-grid {
+          grid-template-columns: 1fr;
+        }
       }
 
-      /* Settings Popover (top, next to source/destination) */
-      .psc-settings-toggle {
-        background: #f8fafc;
+      .psc-section-box {
         border: 1px solid #e2e8f0;
+        border-radius: 4px;
+        background: #f8fafc;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        position: relative;
+      }
+
+      .psc-section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid #cbd5e1;
+        padding-bottom: 6px;
+        margin-bottom: 2px;
+      }
+
+      .psc-section-title {
+        font-size: 11px;
+        font-weight: 800;
+        color: #0f172a;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        font-family: var(--hbr-font-mono, monospace);
+      }
+
+      .psc-section-toggle {
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
         border-radius: 2px;
-        padding: 6px 12px;
+        padding: 4px 8px;
         font-size: 10px;
         font-weight: 700;
         color: #0f172a;
         cursor: pointer;
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: 4px;
         font-family: var(--hbr-font-mono, monospace);
         text-transform: uppercase;
         letter-spacing: 0.04em;
-        margin-top: 4px;
-        align-self: flex-start;
+        transition: all 0.15s;
       }
-      .psc-settings-toggle:hover {
+      .psc-section-toggle:hover {
         background: #f1f5f9;
-        border-color: #cbd5e1;
+        border-color: #0f172a;
       }
-      .psc-settings-arrow {
-        font-size: 9px;
-        transition: transform 0.2s ease;
-      }
-      .psc-settings-toggle:hover .psc-settings-arrow {
-        transform: rotate(180deg);
-      }
-      .psc-settings-popover {
+
+      .psc-section-popover {
         position: absolute;
-        top: 100%;
-        left: 0;
+        top: 38px;
+        right: 12px;
         z-index: 100;
         display: none;
         background: #ffffff;
-        border: 1px solid #e2e8f0;
-        border-radius: 2px;
-        padding: 8px;
-        min-width: 240px;
-        box-shadow: 0 4px 16px rgba(15, 23, 42, 0.1);
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        padding: 10px;
+        min-width: 220px;
+        box-shadow: 0 4px 16px rgba(15, 23, 42, 0.15);
       }
-      .psc-settings-popover.open {
+      .psc-section-popover.open {
         display: block;
       }
-      .psc-settings-group {
-        margin-bottom: 8px;
-      }
-      .psc-settings-group:last-child {
-        margin-bottom: 0;
-      }
-      .psc-settings-group-title {
-        font-size: 8px;
-        font-weight: 700;
-        color: #64748b;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        font-family: var(--hbr-font-mono, monospace);
-        margin-bottom: 4px;
-      }
+
       .psc-setting-row {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 4px 0;
+        padding: 5px 0;
         font-size: 11px;
         color: #1e293b;
         font-family: var(--hbr-font-mono, monospace);
+        border-bottom: 1px solid #f1f5f9;
+      }
+      .psc-setting-row:last-child {
+        border-bottom: none;
       }
       .psc-setting-label {
         color: #475569;
         font-size: 10.5px;
+        font-weight: 600;
+      }
+      .psc-setting-toggle {
+        width: 32px;
+        height: 16px;
+        border-radius: 8px;
+        border: 1px solid #cbd5e1;
+        background: #cbd5e1;
+        position: relative;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .psc-setting-toggle.active {
+        background: #0f172a;
+        border-color: #0f172a;
+      }
+      .psc-setting-toggle::after {
+        content: "";
+        position: absolute;
+        top: 1px;
+        left: 1px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #ffffff;
+        transition: transform 0.15s;
+      }
+      .psc-setting-toggle.active::after {
+        transform: translateX(16px);
       }
 
-      /* Enabled Fields Container (vertical rendering) */
-      .psc-enabled-fields {
+      /* Vertical List of Enabled Inputs */
+      .psc-section-fields {
         display: flex;
         flex-direction: column;
-        gap: 8px;
-        margin-top: 8px;
-        width: 100%;
-      }
-      .psc-enabled-fields .psc-field-group {
-        width: 100%;
-      }
-      .psc-enabled-fields .psc-dropdown-wrapper {
+        gap: 10px;
         width: 100%;
       }
 
@@ -920,33 +949,6 @@
     const body = el("div", { id: "psc-panel-body" });
     const formRow = el("div", { id: "psc-form-row" });
 
-    // --- 1. SOURCE / DESTINATION IP:Port (no enclosing box, space-between) ---
-    const ipFieldsRow = el("div", { class: "psc-ip-fields-row" });
-
-    // Source IP:Port Input
-    const sourceInput = el("input", {
-      id: "psc-src",
-      type: "text",
-      placeholder: "192.168.1.50:443 or CIDR (e.g. 10.0.0.0/16)",
-      autocomplete: "off",
-    });
-    ipFieldsRow.appendChild(el("div", { class: "psc-field-group" }, [
-      el("label", { class: "psc-field-label", htmlFor: "psc-src" }, ["SOURCE"]),
-      sourceInput,
-    ]));
-
-    // Destination IP:Port Input
-    const destInput = el("input", {
-      id: "psc-dest",
-      type: "text",
-      placeholder: "10.0.0.1:80 or Domain (e.g. cisco.com:443)",
-      autocomplete: "off",
-    });
-    ipFieldsRow.appendChild(el("div", { class: "psc-field-group" }, [
-      el("label", { class: "psc-field-label", htmlFor: "psc-dest" }, ["DESTINATION"]),
-      destInput,
-    ]));
-
     // Helper: wrap a plain input in a field group component object
     function createFieldGroup(labelStr, input) {
       const element = el("div", { class: "psc-field-group" }, [
@@ -961,7 +963,17 @@
       };
     }
 
-    // Source inputs
+    // =========================================================================
+    // 1. SOURCE SECTION COMPONENTS
+    // =========================================================================
+    const sourceInput = el("input", {
+      id: "psc-src",
+      type: "text",
+      placeholder: "192.168.1.50:443 or CIDR (e.g. 10.0.0.0/16)",
+      autocomplete: "off",
+    });
+    const srcIpField = createFieldGroup("Source IP / CIDR / Port", sourceInput);
+
     const identityItems = {};
     if (Array.isArray(identityOptions)) {
       identityOptions.forEach(id => {
@@ -985,7 +997,93 @@
     const postureField = createFieldGroup("Device Posture Profile", el("input", { id: "psc-posture", type: "text", placeholder: "Search Device Posture Profile name...", autocomplete: "off" }));
     const netDevField = createFieldGroup("Network Device", el("input", { id: "psc-network-device", type: "text", placeholder: "Search Network Device hostname or IP...", autocomplete: "off" }));
 
-    // Destination inputs
+    const sourceInputMap = {
+      identity: identitySelect,
+      identityType: identityTypeSelect,
+      sgt: sgtField,
+      location: locField,
+      internalNetwork: intNetField,
+      networkObject: srcNetObjSelect,
+      tunnel: tunnelField,
+      posture: postureField,
+      networkDevice: netDevField,
+    };
+
+    const sourceSettingsToggles = {
+      identity: { label: "Identity", enabled: true },
+      identityType: { label: "Identity Type", enabled: true },
+      sgt: { label: "Security Group Tag", enabled: true },
+      location: { label: "Location / Branch", enabled: false },
+      internalNetwork: { label: "Internal Network", enabled: false },
+      networkObject: { label: "Network Object", enabled: false },
+      tunnel: { label: "Network Tunnel", enabled: false },
+      posture: { label: "Device Posture Profile", enabled: false },
+      networkDevice: { label: "Network Device", enabled: false },
+    };
+
+    // Source Section Box
+    const srcBox = el("div", { class: "psc-section-box", id: "psc-src-box" });
+    const srcSettingsToggle = el("button", { type: "button", class: "psc-section-toggle", id: "psc-src-settings-toggle" }, [
+      el("span", {}, ["⚙ FIELDS"]),
+      el("span", { class: "psc-settings-arrow" }, ["▼"])
+    ]);
+    const srcSettingsPopover = el("div", { class: "psc-section-popover", id: "psc-src-popover" });
+    const srcEnabledContainer = el("div", { class: "psc-section-fields", id: "psc-src-enabled-fields" });
+
+    function renderSourceFields() {
+      srcEnabledContainer.innerHTML = "";
+      Object.entries(sourceSettingsToggles).forEach(([key, cfg]) => {
+        if (cfg.enabled) {
+          const sel = sourceInputMap[key];
+          if (sel && sel.element) srcEnabledContainer.appendChild(sel.element);
+        }
+      });
+    }
+
+    Object.entries(sourceSettingsToggles).forEach(([key, cfg]) => {
+      const toggle = el("div", { class: "psc-setting-toggle" + (cfg.enabled ? " active" : ""), "data-setting": key });
+      toggle.addEventListener("click", () => {
+        toggle.classList.toggle("active");
+        const isActive = toggle.classList.contains("active");
+        cfg.enabled = isActive;
+        if (sourceInputMap[key] && sourceInputMap[key].input) {
+          sourceInputMap[key].input.disabled = !isActive;
+        }
+        renderSourceFields();
+      });
+      srcSettingsPopover.appendChild(el("div", { class: "psc-setting-row" }, [
+        el("label", { class: "psc-setting-label" }, [cfg.label]),
+        toggle
+      ]));
+    });
+
+    srcSettingsToggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      dstSettingsPopover.classList.remove("open");
+      srcSettingsPopover.classList.toggle("open");
+    });
+
+    const srcHeader = el("div", { class: "psc-section-header" }, [
+      el("span", { class: "psc-section-title" }, ["SOURCE"]),
+      srcSettingsToggle
+    ]);
+
+    srcBox.appendChild(srcHeader);
+    srcBox.appendChild(srcSettingsPopover);
+    srcBox.appendChild(srcIpField.element);
+    srcBox.appendChild(srcEnabledContainer);
+
+    // =========================================================================
+    // 2. DESTINATION SECTION COMPONENTS
+    // =========================================================================
+    const destInput = el("input", {
+      id: "psc-dest",
+      type: "text",
+      placeholder: "10.0.0.1:80 or Domain (e.g. cisco.com:443)",
+      autocomplete: "off",
+    });
+    const dstIpField = createFieldGroup("Destination IP / Domain / Port", destInput);
+
     const appSelect = createSearchableSelect("Internet Application", "Search applications by name...", "psc-app", {});
     const protoSelect = createSearchableSelect("Application Protocol", "Search protocols by name...", "psc-proto", {});
     const catSelect = createSearchableSelect("Content Category", "Search categories by name...", "psc-cat", {});
@@ -1002,17 +1100,7 @@
     const catListSelect = createSearchableSelect("Category List", "Search category lists by name...", "psc-catlist", maps.categoryLists || {});
     catListSelect.input.disabled = false;
 
-    // Component map for all toggleable criteria
-    const inputMap = {
-      identity: identitySelect,
-      identityType: identityTypeSelect,
-      sgt: sgtField,
-      location: locField,
-      internalNetwork: intNetField,
-      networkObject: srcNetObjSelect,
-      tunnel: tunnelField,
-      posture: postureField,
-      networkDevice: netDevField,
+    const destInputMap = {
       app: appSelect,
       protocol: protoSelect,
       category: catSelect,
@@ -1024,127 +1112,87 @@
       catList: catListSelect,
     };
 
-    // --- 4. SETTINGS POPOVER (top, next to source/destination) ---
-    const settingsToggle = el("button", {
-      type: "button",
-      class: "psc-settings-toggle",
-      id: "psc-settings-toggle"
-    }, [
-      el("span", {}, ["⚙ FIELD SETTINGS"]),
-      el("span", { class: "psc-settings-arrow" }, ["▼"])
-    ]);
-
-    const settingsPopover = el("div", { class: "psc-settings-popover", id: "psc-settings-popover" });
-
-    // Settings toggles definition
-    const settingsToggles = {
-      identity: { label: "Identity", enabled: true, category: "source" },
-      identityType: { label: "Identity Type", enabled: true, category: "source" },
-      sgt: { label: "Security Group Tag", enabled: true, category: "source" },
-      location: { label: "Location / Branch", enabled: false, category: "source" },
-      internalNetwork: { label: "Internal Network", enabled: false, category: "source" },
-      networkObject: { label: "Network Object", enabled: false, category: "source" },
-      tunnel: { label: "Network Tunnel", enabled: false, category: "source" },
-      posture: { label: "Device Posture Profile", enabled: false, category: "source" },
-      networkDevice: { label: "Network Device", enabled: false, category: "source" },
-      app: { label: "Internet Application", enabled: true, category: "destination" },
-      protocol: { label: "Application Protocol", enabled: true, category: "destination" },
-      category: { label: "Content Category", enabled: true, category: "destination" },
-      privateResource: { label: "Private Resource", enabled: false, category: "destination" },
-      destinationList: { label: "Destination List", enabled: false, category: "destination" },
-      netObject: { label: "Network Object (Dest)", enabled: false, category: "destination" },
-      serviceObject: { label: "Service Object Group", enabled: false, category: "destination" },
-      appList: { label: "Application List", enabled: false, category: "destination" },
-      catList: { label: "Category List", enabled: false, category: "destination" },
+    const destSettingsToggles = {
+      app: { label: "Internet Application", enabled: true },
+      protocol: { label: "Application Protocol", enabled: true },
+      category: { label: "Content Category", enabled: true },
+      privateResource: { label: "Private Resource", enabled: false },
+      destinationList: { label: "Destination List", enabled: false },
+      netObject: { label: "Network Object", enabled: false },
+      serviceObject: { label: "Service Object Group", enabled: false },
+      appList: { label: "Application List", enabled: false },
+      catList: { label: "Category List", enabled: false },
     };
 
-    // Group settings by category
-    const sourceSettings = Object.entries(settingsToggles).filter(([_, cfg]) => cfg.category === "source");
-    const destSettings = Object.entries(settingsToggles).filter(([_, cfg]) => cfg.category === "destination");
+    // Destination Section Box
+    const dstBox = el("div", { class: "psc-section-box", id: "psc-dst-box" });
+    const dstSettingsToggle = el("button", { type: "button", class: "psc-section-toggle", id: "psc-dst-settings-toggle" }, [
+      el("span", {}, ["⚙ FIELDS"]),
+      el("span", { class: "psc-settings-arrow" }, ["▼"])
+    ]);
+    const dstSettingsPopover = el("div", { class: "psc-section-popover", id: "psc-dst-popover" });
+    const dstEnabledContainer = el("div", { class: "psc-section-fields", id: "psc-dst-enabled-fields" });
 
-    // Helper: create a setting row with toggle
-    function createSettingRow(key, cfg) {
-      const toggle = el("div", {
-        class: "psc-setting-toggle" + (cfg.enabled ? " active" : ""),
-        "data-setting": key
+    function renderDestFields() {
+      dstEnabledContainer.innerHTML = "";
+      Object.entries(destSettingsToggles).forEach(([key, cfg]) => {
+        if (cfg.enabled) {
+          const sel = destInputMap[key];
+          if (sel && sel.element) dstEnabledContainer.appendChild(sel.element);
+        }
       });
+    }
+
+    Object.entries(destSettingsToggles).forEach(([key, cfg]) => {
+      const toggle = el("div", { class: "psc-setting-toggle" + (cfg.enabled ? " active" : ""), "data-setting": key });
       toggle.addEventListener("click", () => {
         toggle.classList.toggle("active");
         const isActive = toggle.classList.contains("active");
         cfg.enabled = isActive;
-        const sel = inputMap[key];
-        if (sel && sel.input) {
-          sel.input.disabled = !isActive;
+        if (destInputMap[key] && destInputMap[key].input) {
+          destInputMap[key].input.disabled = !isActive;
         }
-        renderEnabledFields();
+        renderDestFields();
       });
-
-      const row = el("div", { class: "psc-setting-row" }, [
+      dstSettingsPopover.appendChild(el("div", { class: "psc-setting-row" }, [
         el("label", { class: "psc-setting-label" }, [cfg.label]),
         toggle
-      ]);
-      return row;
-    }
-
-    const sourceGroup = el("div", { class: "psc-settings-group" });
-    sourceGroup.appendChild(el("div", { class: "psc-settings-group-title" }, ["SOURCE FIELDS"]));
-    sourceSettings.forEach(([key, cfg]) => {
-      sourceGroup.appendChild(createSettingRow(key, cfg));
+      ]));
     });
 
-    const destGroup = el("div", { class: "psc-settings-group" });
-    destGroup.appendChild(el("div", { class: "psc-settings-group-title" }, ["DESTINATION FIELDS"]));
-    destSettings.forEach(([key, cfg]) => {
-      destGroup.appendChild(createSettingRow(key, cfg));
-    });
-
-    settingsPopover.appendChild(sourceGroup);
-    settingsPopover.appendChild(destGroup);
-
-    // Toggle button handler
-    settingsToggle.addEventListener("click", (e) => {
+    dstSettingsToggle.addEventListener("click", (e) => {
       e.stopPropagation();
-      settingsPopover.classList.toggle("open");
+      srcSettingsPopover.classList.remove("open");
+      dstSettingsPopover.classList.toggle("open");
     });
 
-    // Close popover when clicking outside
-    document.addEventListener("click", (e) => {
-      if (!settingsPopover.contains(e.target) && e.target !== settingsToggle) {
-        settingsPopover.classList.remove("open");
-      }
-    });
-
-    // Container for vertically rendered enabled fields
-    const enabledFieldsContainer = el("div", { class: "psc-enabled-fields", id: "psc-enabled-fields" });
-
-    function renderEnabledFields() {
-      enabledFieldsContainer.innerHTML = "";
-      Object.entries(settingsToggles).forEach(([key, cfg]) => {
-        if (cfg.enabled) {
-          const sel = inputMap[key];
-          if (sel && sel.element) {
-            enabledFieldsContainer.appendChild(sel.element);
-          }
-        }
-      });
-    }
-
-    // Top control bar (Title/Desc + Settings Popover Button)
-    const topHeaderRow = el("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", position: "relative", marginBottom: "8px" } }, [
-      el("div", {}, [
-        el("div", { id: "psc-panel-title" }, ["SIMULATE TRAFFIC MATCH"]),
-        el("div", { id: "psc-panel-desc" }, ["Default mode evaluates Source/Destination IP:Port. Toggle field settings to enable additional criteria."])
-      ]),
-      settingsToggle
+    const dstHeader = el("div", { class: "psc-section-header" }, [
+      el("span", { class: "psc-section-title" }, ["DESTINATION"]),
+      dstSettingsToggle
     ]);
 
-    formRow.appendChild(topHeaderRow);
-    formRow.appendChild(settingsPopover);
-    formRow.appendChild(ipFieldsRow);
-    formRow.appendChild(enabledFieldsContainer);
+    dstBox.appendChild(dstHeader);
+    dstBox.appendChild(dstSettingsPopover);
+    dstBox.appendChild(dstIpField.element);
+    dstBox.appendChild(dstEnabledContainer);
+
+    // Close popovers when clicking outside
+    document.addEventListener("click", (e) => {
+      if (!srcBox.contains(e.target)) srcSettingsPopover.classList.remove("open");
+      if (!dstBox.contains(e.target)) dstSettingsPopover.classList.remove("open");
+    });
+
+    // Grid row containing SOURCE on left, DESTINATION on right
+    const criteriaGrid = el("div", { class: "psc-criteria-grid" }, [
+      srcBox,
+      dstBox
+    ]);
+
+    formRow.appendChild(criteriaGrid);
     body.appendChild(formRow);
 
-    renderEnabledFields();
+    renderSourceFields();
+    renderDestFields();
 
     // Asynchronously populate lookups
     loadLookups().then(lookups => {
