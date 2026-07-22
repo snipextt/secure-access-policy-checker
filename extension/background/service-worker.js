@@ -1052,20 +1052,30 @@ const IDENTITY_ENDPOINTS = [
       `https://management.api.umbrella.com/identity/v2/organizations/${orgId}/search?id=${ids.join(",")}`,
     parse: (json, ids) => {
       if (!json) return [];
+      // Helper: extract id and name from a single entry, checking all known field names
+      const extract = (e) => {
+        if (!e || typeof e !== "object") return null;
+        // ID fields: originId is the primary key in /search responses, id is secondary
+        const id = e.originId !== undefined ? e.originId : (e.id !== undefined ? e.id : null);
+        // Name fields: label is primary, name/friendlyName are fallbacks
+        const name = e.label || e.name || e.friendlyName || e.displayName || null;
+        if (id !== null && id !== undefined && name) return { id: String(id), name };
+        return null;
+      };
       if (Array.isArray(json)) {
-        return json.map((e) => ({ id: e.id || e.originId, name: e.label || e.name }));
+        return json.map(extract).filter(Boolean);
       }
       if (Array.isArray(json.data)) {
-        return json.data.map((e) => ({ id: e.id || e.originId, name: e.label || e.name }));
+        return json.data.map(extract).filter(Boolean);
       }
       if (Array.isArray(json.items)) {
-        return json.items.map((e) => ({ id: e.id || e.originId, name: e.label || e.name }));
+        return json.items.map(extract).filter(Boolean);
       }
       if (typeof json === "object") {
         const entries = [];
         for (const [key, val] of Object.entries(json)) {
           if (val && typeof val === "object") {
-            const name = val.label || val.name || val.friendlyName;
+            const name = val.label || val.name || val.friendlyName || val.displayName;
             if (name) entries.push({ id: key, name });
           } else if (typeof val === "string") {
             entries.push({ id: key, name: val });
