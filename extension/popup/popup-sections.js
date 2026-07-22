@@ -1885,25 +1885,45 @@
           }
         });
 
-        // Add Security Profile Chips directly to header bar
-        if (rule.security_profiles) {
-          const sp = rule.security_profiles;
-          const makeSpChip = (label, enabled) => {
-            return el("span", {
-              class: "psc-chip",
-              style: {
-                background: enabled ? "#f0fdf4" : "#f8fafc",
-                borderColor: enabled ? "#bbf7d0" : "#cbd5e1",
-                color: enabled ? "#166534" : "#64748b",
-                fontWeight: enabled ? "700" : "500"
-              }
-            }, [`${label}: ${enabled ? "ON" : "OFF"}`]);
+        // Add Security Profile Chips directly to header bar (dynamically read live ruleSettings)
+        const sp = (function() {
+          const settings = (rule.raw && rule.raw.ruleSettings) || rule.ruleSettings || [];
+          const getVal = (pattern) => {
+            const found = settings.find(s => s.settingName === pattern || (s.settingName && s.settingName.toLowerCase().includes(pattern.toLowerCase())));
+            return found ? found.settingValue : undefined;
           };
-          inlineChips.appendChild(makeSpChip("IPS", sp.ips_enabled));
-          inlineChips.appendChild(makeSpChip("AMP", sp.amp_malware_enabled));
-          inlineChips.appendChild(makeSpChip("TLS", sp.tls_decryption_enabled));
-          inlineChips.appendChild(makeSpChip("DLP", sp.dlp_enabled));
-        }
+
+          const ipsVal = getVal("ipsProfileId") || getVal("ips");
+          const webVal = getVal("webProfileId") || getVal("tls") || getVal("decryption");
+          const ampVal = getVal("profileIdClientbased") || getVal("profileIdClientless") || getVal("amp") || getVal("malware");
+          const dlpVal = getVal("tenantControlProfileId") || getVal("dlp");
+
+          const isReal = (v) => v !== undefined && v !== null && v !== "" && v !== "DISABLED" && v !== "NONE" && v !== false && v !== 0;
+          const pre = rule.security_profiles || {};
+
+          return {
+            ips_enabled: isReal(ipsVal) || pre.ips_enabled === true,
+            amp_malware_enabled: isReal(ampVal) || pre.amp_malware_enabled === true,
+            tls_decryption_enabled: isReal(webVal) || pre.tls_decryption_enabled === true,
+            dlp_enabled: isReal(dlpVal) || pre.dlp_enabled === true,
+          };
+        })();
+
+        const makeSpChip = (label, enabled) => {
+          return el("span", {
+            class: "psc-chip",
+            style: {
+              background: enabled ? "#f0fdf4" : "#f8fafc",
+              borderColor: enabled ? "#bbf7d0" : "#cbd5e1",
+              color: enabled ? "#166534" : "#64748b",
+              fontWeight: enabled ? "700" : "500"
+            }
+          }, [`${label}: ${enabled ? "ON" : "OFF"}`]);
+        };
+        inlineChips.appendChild(makeSpChip("IPS", sp.ips_enabled));
+        inlineChips.appendChild(makeSpChip("AMP", sp.amp_malware_enabled));
+        inlineChips.appendChild(makeSpChip("TLS", sp.tls_decryption_enabled));
+        inlineChips.appendChild(makeSpChip("DLP", sp.dlp_enabled));
 
         const header = el("summary", { class: "psc-rule-group-header" }, [
           topBar,
