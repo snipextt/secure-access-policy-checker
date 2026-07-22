@@ -1278,6 +1278,24 @@
       return String(val);
     }
 
+    // resolveCountryCode — turns ISO 3166-1 alpha-2 country codes into
+    // full country names for the geolocations/location condition display.
+    // Uses Intl.DisplayNames (available in all Chromium-based browsers) so
+    // we don't need a bundled country-name lookup table. Falls back to the
+    // raw code if resolution fails.
+    function resolveCountryCode(code) {
+      if (!code || typeof code !== "string") return String(code || "");
+      const trimmed = code.trim();
+      // Already a full name (more than 2 chars or contains a space) — pass through
+      if (trimmed.length !== 2 || !/^[A-Za-z]{2}$/.test(trimmed)) return trimmed;
+      try {
+        const dn = new Intl.DisplayNames(["en"], { type: "region" });
+        return dn.of(trimmed.toUpperCase()) || trimmed;
+      } catch {
+        return trimmed;
+      }
+    }
+
     function summarizeConditions(rule, lookups) {
       const conds = rule.ruleConditions || rule.conditions || [];
       if (!Array.isArray(conds) || conds.length === 0) {
@@ -1291,90 +1309,213 @@
         if (!type || values === undefined) continue;
 
         let summaryText = "";
-        const tLower = type.toLowerCase();
-
-        if (tLower.includes("source.all") || tLower.includes("destination.all")) {
-          if (values === true) summaryText = `${tLower.includes("source") ? "SOURCE" : "DESTINATION"}: ANY`;
-        } else if (tLower.includes("identity_type")) {
-          const typeNames = (Array.isArray(values) ? values : [values]).map((id) => {
-            return lookupItemName(lookups.identityTypes, id) || lookupItemName(DEFAULT_IDENTITY_TYPES, id) || `Type #${id}`;
-          });
-          summaryText = `Identity Type: ${typeNames.join(", ")}`;
-        } else if (tLower.includes("identity_ids") || tLower.includes("identities")) {
-          const identityNames = (Array.isArray(values) ? values : [values]).map((id) => {
-            return lookupItemName(lookups.identities, id) || `Identity #${id}`;
-          });
-          summaryText = `Identity: ${identityNames.join(", ")}`;
-        } else if (tLower.includes("application_ids")) {
-          const appMatches = [];
-          for (const id of Array.isArray(values) ? values : [values]) {
-            const name = lookupItemName(lookups.apps, id) || lookupItemName(lookups.protocols, id);
-            appMatches.push(name || `App #${id}`);
+        switch (type) {
+          case "umbrella.source.all":
+          case "umbrella.destination.all":
+            if (values === true) summaryText = `${type.split(".")[1].toUpperCase()}: ANY`;
+            break;
+          case "umbrella.source.identity_ids":
+          case "umbrella.source.identity_ids_shared": {
+            const identityNames = (Array.isArray(values) ? values : [values]).map((id) => {
+              return lookupItemName(lookups.identities, id) || `Identity #${id}`;
+            });
+            summaryText = `Identity: ${identityNames.join(", ")}`;
+            break;
           }
-          summaryText = `App: ${appMatches.join(", ")}`;
-        } else if (tLower.includes("application_category") || tLower.includes("category_ids")) {
-          const catMatches = [];
-          for (const id of Array.isArray(values) ? values : [values]) {
-            const name = lookupItemName(lookups.categories, id);
-            catMatches.push(name || `Category #${id}`);
-          }
-          summaryText = `Category: ${catMatches.join(", ")}`;
-        } else if (tLower.includes("private_resource")) {
-          const resMatches = [];
-          for (const id of Array.isArray(values) ? values : [values]) {
-            const name = lookupItemName(lookups.privateResources, id) || lookupItemName(lookups.objects, id);
-            resMatches.push(name || `Private Resource #${id}`);
-          }
-          summaryText = `Private Resource: ${resMatches.join(", ")}`;
-        } else if (tLower.includes("destination_list")) {
-          const listMatches = [];
-          for (const id of Array.isArray(values) ? values : [values]) {
-            const name = lookupItemName(lookups.destinationLists, id);
-            listMatches.push(name || `Destination List #${id}`);
-          }
-          summaryText = `Destination List: ${listMatches.join(", ")}`;
-        } else if (tLower.includes("network_object")) {
-          const objMatches = [];
-          for (const id of Array.isArray(values) ? values : [values]) {
-            const name = lookupItemName(lookups.networkObjects, id);
-            objMatches.push(name || `Network Object #${id}`);
-          }
-          summaryText = `Network Object: ${objMatches.join(", ")}`;
-        } else if (tLower.includes("service_object")) {
-          const objMatches = [];
-          for (const id of Array.isArray(values) ? values : [values]) {
-            const name = lookupItemName(lookups.serviceObjectGroups, id);
-            objMatches.push(name || `Service Group #${id}`);
-          }
-          summaryText = `Service Group: ${objMatches.join(", ")}`;
-        } else if (tLower.includes("application_list")) {
-          const listMatches = [];
-          for (const id of Array.isArray(values) ? values : [values]) {
-            const name = lookupItemName(lookups.applicationLists, id);
-            listMatches.push(name || `App List #${id}`);
-          }
-          summaryText = `App List: ${listMatches.join(", ")}`;
-        } else if (tLower.includes("composite_inline_ip")) {
-          const items = Array.isArray(values) ? values : [values];
-          const parts = items.map((item) => {
-            if (item && typeof item === "object") {
-              const ip = Array.isArray(item.ip) ? item.ip.join(",") : (item.ip || "*");
-              const port = Array.isArray(item.port) ? item.port.join(",") : (item.port || "*");
-              return `${ip}:${port}`;
+          case "umbrella.destination.application_ids": {
+            const appMatches = [];
+            for (const id of Array.isArray(values) ? values : [values]) {
+              const name = lookupItemName(lookups.apps, id) || lookupItemName(lookups.protocols, id);
+              appMatches.push(name || `App #${id}`);
             }
-            return String(item);
-          });
-          summaryText = `Dst IP/Port: ${parts.join(" + ")}`;
-        } else if (tLower.includes("sgt")) {
-          summaryText = `SGT: ${Array.isArray(values) ? values.join(", ") : values}`;
-        } else if (tLower.includes("location")) {
-          summaryText = `Location: ${Array.isArray(values) ? values.join(", ") : values}`;
-        } else if (tLower.includes("tunnel")) {
-          summaryText = `Tunnel: ${Array.isArray(values) ? values.join(", ") : values}`;
-        } else {
-          const simple = type.replace(/^umbrella\./i, "").replace(/^(source|destination)\./i, "").replace(/_/g, " ");
-          const valStr = Array.isArray(values) ? values.map(v => typeof v === "object" ? JSON.stringify(v) : v).join(", ") : values;
-          summaryText = `${simple.toUpperCase()}: ${valStr}`;
+            summaryText = `App: ${appMatches.join(", ")}`;
+            break;
+          }
+          case "umbrella.destination.application_category_ids":
+          case "umbrella.destination.category_ids": {
+            const catMatches = [];
+            for (const id of Array.isArray(values) ? values : [values]) {
+              const name = lookupItemName(lookups.categories, id);
+              catMatches.push(name || `Category #${id}`);
+            }
+            summaryText = `Category: ${catMatches.join(", ")}`;
+            break;
+          }
+          case "umbrella.destination.private_resource_ids":
+          case "umbrella.destination.private_resource_group_ids": {
+            const resMatches = [];
+            for (const id of Array.isArray(values) ? values : [values]) {
+              const name = lookupItemName(lookups.privateResources, id) || lookupItemName(lookups.objects, id);
+              resMatches.push(name || `Private Resource #${id}`);
+            }
+            summaryText = `Private Resource: ${resMatches.join(", ")}`;
+            break;
+          }
+          case "umbrella.destination.destination_list_ids": {
+            const listMatches = [];
+            for (const id of Array.isArray(values) ? values : [values]) {
+              const name = lookupItemName(lookups.destinationLists, id);
+              listMatches.push(name || `Destination List #${id}`);
+            }
+            summaryText = `Destination List: ${listMatches.join(", ")}`;
+            break;
+          }
+          case "umbrella.source.networkObjectIds":
+          case "umbrella.source.networkObjectIds_shared": {
+            const objMatches = [];
+            for (const id of Array.isArray(values) ? values : [values]) {
+              const name = lookupItemName(lookups.networkObjects, id);
+              objMatches.push(name || `Network Object #${id}`);
+            }
+            summaryText = `Network Object: ${objMatches.join(", ")}`;
+            break;
+          }
+          case "umbrella.source.networkObjectGroupIds":
+          case "umbrella.source.networkObjectGroupIds_shared": {
+            const grpMatches = [];
+            for (const id of Array.isArray(values) ? values : [values]) {
+              const name = lookupItemName(lookups.networkObjects, id);
+              grpMatches.push(name || `Network Group #${id}`);
+            }
+            summaryText = `Network Group: ${grpMatches.join(", ")}`;
+            break;
+          }
+          case "umbrella.destination.networkObjectGroupIds": {
+            const grpMatches = [];
+            for (const id of Array.isArray(values) ? values : [values]) {
+              const name = lookupItemName(lookups.networkObjects, id);
+              grpMatches.push(name || `Network Group #${id}`);
+            }
+            summaryText = `Network Group: ${grpMatches.join(", ")}`;
+            break;
+          }
+          case "umbrella.destination.serviceObjectIds": {
+            const svcMatches = [];
+            for (const id of Array.isArray(values) ? values : [values]) {
+              const name = lookupItemName(lookups.serviceObjectGroups, id);
+              svcMatches.push(name || `Service Group #${id}`);
+            }
+            summaryText = `Service Group: ${svcMatches.join(", ")}`;
+            break;
+          }
+          case "umbrella.destination.application_list_ids": {
+            const listMatches = [];
+            for (const id of Array.isArray(values) ? values : [values]) {
+              const name = lookupItemName(lookups.applicationLists, id);
+              listMatches.push(name || `App List #${id}`);
+            }
+            summaryText = `App List: ${listMatches.join(", ")}`;
+            break;
+          }
+          case "umbrella.destination.composite_inline_ip": {
+            const items = Array.isArray(values) ? values : [values];
+            const parts = items.map((item) => {
+              if (item && typeof item === "object") {
+                const ip = Array.isArray(item.ip) ? item.ip.join(",") : (item.ip || "*");
+                const port = Array.isArray(item.port) ? item.port.join(",") : (item.port || "*");
+                const proto = item.protocol || "ANY";
+                return `${ip}:${port}/${proto}`;
+              }
+              return String(item);
+            });
+            summaryText = `Dst IP/Port/Proto: ${parts.join(" + ")}`;
+            break;
+          }
+          case "umbrella.source.composite_inline_ip": {
+            const items = Array.isArray(values) ? values : [values];
+            const parts = items.map((item) => {
+              if (item && typeof item === "object") {
+                const ip = Array.isArray(item.ip) ? item.ip.join(",") : (item.ip || "*");
+                const port = Array.isArray(item.port) ? item.port.join(",") : (item.port || "*");
+                const proto = item.protocol || "ANY";
+                return `${ip}:${port}/${proto}`;
+              }
+              return String(item);
+            });
+            summaryText = `Src IP/Port/Proto: ${parts.join(" + ")}`;
+            break;
+          }
+          case "umbrella.destination.security_group_tag_ids":
+          case "umbrella.destination.any_security_group_tag": {
+            const ids = Array.isArray(values) ? values : [values];
+            summaryText = `SGT: ${ids.join(", ")}`;
+            break;
+          }
+          case "umbrella.source.geolocations": {
+            const geos = Array.isArray(values) ? values : [values];
+            const names = geos.map((g) => resolveCountryCode(g));
+            summaryText = `Source Countries: ${names.join(", ")}`;
+            break;
+          }
+          case "umbrella.destination.geolocations": {
+            const geos = Array.isArray(values) ? values : [values];
+            const names = geos.map((g) => resolveCountryCode(g));
+            summaryText = `Destination Countries: ${names.join(", ")}`;
+            break;
+          }
+          case "umbrella.source.location":
+          case "umbrella.destination.location": {
+            const locs = Array.isArray(values) ? values : [values];
+            summaryText = `Location: ${locs.join(", ")}`;
+            break;
+          }
+          case "umbrella.source.tunnel":
+          case "umbrella.destination.tunnel": {
+            const tunnels = Array.isArray(values) ? values : [values];
+            summaryText = `Tunnel: ${tunnels.join(", ")}`;
+            break;
+          }
+          case "umbrella.source.sgt":
+          case "umbrella.destination.sgt": {
+            const sgts = Array.isArray(values) ? values : [values];
+            summaryText = `SGT: ${sgts.join(", ")}`;
+            break;
+          }
+          case "umbrella.posture.ipsProfileId": {
+            summaryText = `IPS Profile: ${values}`;
+            break;
+          }
+          case "umbrella.posture.profileIdClientbased":
+          case "umbrella.posture.profileIdClientless":
+          case "umbrella.posture.vpnProfileId":
+          case "umbrella.posture.webProfileId": {
+            const label = type.replace("umbrella.posture.", "").replace(/([A-Z])/g, " $1");
+            summaryText = `${label}: ${values}`;
+            break;
+          }
+          case "umbrella.destination.saasTenantIds": {
+            const ids = Array.isArray(values) ? values : [values];
+            summaryText = `SaaS Tenant: ${ids.join(", ")}`;
+            break;
+          }
+          case "umbrella.destination.appRiskProfileId": {
+            const ids = Array.isArray(values) ? values : [values];
+            const names = ids.map((id) => {
+              const name = lookups.appRiskProfiles && lookups.appRiskProfiles[String(id)];
+              return name || `App Risk Profile #${String(id).substring(0, 8)}…`;
+            });
+            summaryText = `App Risk Profile: ${names.join(", ")}`;
+            break;
+          }
+          case "umbrella.destination.private_resource_types": {
+            const items = Array.isArray(values) ? values : [values];
+            const labels = items.map((v) => {
+              if (v === "apps") return "Applications";
+              if (v === "networks") return "Networks";
+              if (v === "websites") return "Websites";
+              return String(v).charAt(0).toUpperCase() + String(v).slice(1);
+            });
+            summaryText = `Resource Types: ${labels.join(", ")}`;
+            break;
+          }
+          default: {
+            // Fallback: strip umbrella. prefix and source./destination. prefix,
+            // replace underscores with spaces, uppercase the dimension name.
+            const simple = type.replace(/^umbrella\./i, "").replace(/^(source|destination)\./i, "").replace(/_/g, " ");
+            const valStr = Array.isArray(values) ? values.map(v => typeof v === "object" ? JSON.stringify(v) : v).join(", ") : values;
+            summaryText = `${simple.toUpperCase()}: ${valStr}`;
+            break;
+          }
         }
 
         if (summaryText) summaries.push({ text: summaryText, raw: c });

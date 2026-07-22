@@ -678,7 +678,15 @@ function summarizeConditions(rule, lookups) {
       }
       case "umbrella.source.geolocations": {
         const geos = Array.isArray(values) ? values : [values];
-        summaryText = `Source Countries/Regions: ${geos.join(", ")}`;
+        const names = geos.map((g) => {
+          if (!g || typeof g !== "string" || g.length !== 2 || !/^[A-Za-z]{2}$/.test(g)) return g;
+          try {
+            return new Intl.DisplayNames(["en"], { type: "region" }).of(g.toUpperCase()) || g;
+          } catch {
+            return g;
+          }
+        });
+        summaryText = `Source Countries: ${names.join(", ")}`;
         break;
       }
       case "umbrella.destination.networkObjectGroupIds": {
