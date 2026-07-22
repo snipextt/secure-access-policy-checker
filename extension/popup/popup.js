@@ -18,11 +18,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const testerRoot = document.getElementById("tester-root");
   const rulesRoot = document.getElementById("rules-root");
 
-  // Embedded (iframe-in-dashboard) context gets a transparent body so the
-  // outer #sec-embed-panel's backdrop-filter blur in content-script.js
-  // actually shows the real dashboard page through the glass.
-  if (isEmbeddedInPage()) {
-    document.body.classList.add("sec-embedded");
+  // ---------------------------------------------------------------------------
+  // Header close button logic
+  // ---------------------------------------------------------------------------
+  const closeBtn = document.getElementById("toolbar-close");
+  if (closeBtn) {
+    closeBtn.addEventListener("click", () => {
+      minimizeEmbeddedPanel();
+    });
   }
 
   // ---------------------------------------------------------------------------

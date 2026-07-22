@@ -74,12 +74,13 @@
 
       #psc-form-row {
         display: flex;
-        gap: 14px;
+        flex-direction: column;
+        gap: 16px;
         padding: 16px 20px 0;
+        width: 100%;
       }
       #psc-form-row .psc-panel-section {
-        flex: 1 1 0;
-        min-width: 0;
+        width: 100%;
       }
 
       #psc-form-footer {
@@ -118,16 +119,11 @@
         font-size: 11.5px;
         font-weight: 600;
         color: var(--hbr-color-text-heading);
-        margin: 0 0 var(--hbr-space-xs) 0;
+        margin: 0 0 4px 0;
         display: block;
       }
       .psc-field-hint {
-        font-size: 10.5px;
-        color: var(--hbr-color-text-weak);
-        font-style: italic;
-        margin: 0 0 var(--hbr-space-sm) 0;
-        line-height: 1.45;
-        display: block;
+        display: none;
       }
 
       .psc-refine-divider {
@@ -933,7 +929,7 @@
     const identityItems = {};
     if (Array.isArray(identityOptions)) {
       identityOptions.forEach(id => {
-        const label = identityMap && identityMap[id] ? `${identityMap[id]} (${id})` : id;
+        const label = identityMap && identityMap[id] ? identityMap[id] : id;
         identityItems[id] = label;
       });
     }
