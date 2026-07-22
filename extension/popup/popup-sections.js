@@ -951,8 +951,6 @@
     ]));
 
     // Identity Type dropdown — tests umbrella.source.identity_type_ids
-    // identityTypeMap is passed in from RUN_SCAN's resolveIdentityTypes()
-    // (see service-worker.js), mapping typeId → type name (e.g., "57" → "Roaming Computers")
     const identityTypeSelect = createSearchableSelect(
       "Identity Type",
       "Search identity types (e.g., AD Groups, Roaming Computers).",
@@ -961,6 +959,103 @@
     );
     identityTypeSelect.input.disabled = false;
     sourceSection.appendChild(identityTypeSelect.element);
+
+    // Source Refinement Divider
+    sourceSection.appendChild(el("div", { class: "psc-refine-divider" }, [
+      el("span", {}, ["Additional Sources "]),
+      el("span", { class: "psc-refine-divider-optional" }, ["(optional)"]),
+    ]));
+
+    const srcDropdownContainer = el("div", { id: "psc-src-refine-group" });
+    sourceSection.appendChild(srcDropdownContainer);
+
+    // Security Group Tag (SGT) — tests umbrella.source.any_security_group_tag / security_group_tag_ids
+    const sgtInput = el("input", {
+      id: "psc-sgt",
+      type: "text",
+      placeholder: "SGT Tag / ID (e.g. 10 or 'Sales_SGT')",
+      autocomplete: "off",
+    });
+    srcDropdownContainer.appendChild(el("div", { class: "psc-field-group" }, [
+      el("label", { class: "psc-field-label", htmlFor: "psc-sgt" }, ["Security Group Tag (SGT)"]),
+      el("span",  { class: "psc-field-hint" }, ["Enter SGT name, ID, or tag number."]),
+      sgtInput,
+    ]));
+
+    // Location / Network — tests umbrella.source.location_ids
+    const locInput = el("input", {
+      id: "psc-location",
+      type: "text",
+      placeholder: "Location name or ID (e.g. 'San Jose HQ')",
+      autocomplete: "off",
+    });
+    srcDropdownContainer.appendChild(el("div", { class: "psc-field-group" }, [
+      el("label", { class: "psc-field-label", htmlFor: "psc-location" }, ["Location / Branch"]),
+      el("span",  { class: "psc-field-hint" }, ["Enter location or branch office name/ID."]),
+      locInput,
+    ]));
+
+    // Internal Network — tests umbrella.source.internal_network_ids
+    const intNetInput = el("input", {
+      id: "psc-internal-net",
+      type: "text",
+      placeholder: "Internal Network name/ID (e.g. '10.10.0.0/16')",
+      autocomplete: "off",
+    });
+    srcDropdownContainer.appendChild(el("div", { class: "psc-field-group" }, [
+      el("label", { class: "psc-field-label", htmlFor: "psc-internal-net" }, ["Internal Network"]),
+      el("span",  { class: "psc-field-hint" }, ["Enter internal network range or ID."]),
+      intNetInput,
+    ]));
+
+    // Source Network Object / Group — tests networkObjectIds_shared / networkObjectGroupIds_shared
+    const srcNetObjSelect = createSearchableSelect(
+      "Source Network Object / Group",
+      "Search network objects (IP ranges, hosts, groups).",
+      "psc-netobj-src",
+      maps.networkObjects || {}
+    );
+    srcNetObjSelect.input.disabled = false;
+    srcDropdownContainer.appendChild(srcNetObjSelect.element);
+
+    // Network Tunnel — tests umbrella.source.tunnel_ids
+    const tunnelInput = el("input", {
+      id: "psc-tunnel",
+      type: "text",
+      placeholder: "Tunnel name or ID (e.g. 'IPsec-Branch-1')",
+      autocomplete: "off",
+    });
+    srcDropdownContainer.appendChild(el("div", { class: "psc-field-group" }, [
+      el("label", { class: "psc-field-label", htmlFor: "psc-tunnel" }, ["Network Tunnel"]),
+      el("span",  { class: "psc-field-hint" }, ["Enter IPsec or network tunnel name/ID."]),
+      tunnelInput,
+    ]));
+
+    // Device Posture Profile — tests umbrella.posture.*
+    const postureInput = el("input", {
+      id: "psc-posture",
+      type: "text",
+      placeholder: "Posture Profile (e.g. 'Encrypted_OS')",
+      autocomplete: "off",
+    });
+    srcDropdownContainer.appendChild(el("div", { class: "psc-field-group" }, [
+      el("label", { class: "psc-field-label", htmlFor: "psc-posture" }, ["Device Posture Profile"]),
+      el("span",  { class: "psc-field-hint" }, ["Enter posture profile or compliance state."]),
+      postureInput,
+    ]));
+
+    // Network Device — tests umbrella.source.network_device_ids
+    const netDevInput = el("input", {
+      id: "psc-network-device",
+      type: "text",
+      placeholder: "Network Device name or ID (e.g. 'Router-SJC-01')",
+      autocomplete: "off",
+    });
+    srcDropdownContainer.appendChild(el("div", { class: "psc-field-group" }, [
+      el("label", { class: "psc-field-label", htmlFor: "psc-network-device" }, ["Network Device"]),
+      el("span",  { class: "psc-field-hint" }, ["Enter network device hostname, IP, or ID."]),
+      netDevInput,
+    ]));
 
     formRow.appendChild(sourceSection);
 
@@ -1301,10 +1396,17 @@
       const appListId = appListSelect.getValue();
       const catListId = catListSelect.getValue();
       const identityTypeIdVal = identityTypeSelect.getValue();
-
       const identityVal = identitySelect.getValue();
 
-      if (!srcVal && !destVal && !appId && !protoId && !catId && !identityVal && !identityTypeIdVal && !privResId && !destListId && !netObjId && !svcObjId && !appListId && !catListId) {
+      const sgtVal = sgtInput.value.trim();
+      const locVal = locInput.value.trim();
+      const intNetVal = intNetInput.value.trim();
+      const srcNetObjId = srcNetObjSelect.getValue();
+      const tunnelVal = tunnelInput.value.trim();
+      const postureVal = postureInput.value.trim();
+      const netDevVal = netDevInput.value.trim();
+
+      if (!srcVal && !destVal && !appId && !protoId && !catId && !identityVal && !identityTypeIdVal && !privResId && !destListId && !netObjId && !svcObjId && !appListId && !catListId && !sgtVal && !locVal && !intNetVal && !srcNetObjId && !tunnelVal && !postureVal && !netDevVal) {
         errorLine.textContent = "Fill in at least one field before running the test.";
         return;
       }
@@ -1326,21 +1428,28 @@
       runBtn.textContent   = "Testing…";
       
       const testInput = {
-        source:          srcParsed.ipCidr,
-        sourcePort:      srcParsed.port,
-        identity:        identityVal,
-        identityTypeId:  identityTypeIdVal,
-        applicationId:   appId,
-        protocolId:      protoId,
-        categoryId:      catId,
-        destination:     destParsed.ipCidr,
-        destinationPort: destParsed.port,
-        privateResourceId: privResId,
-        destinationListId: destListId,
-        networkObjectId: netObjId,
-        serviceObjectGroupId: svcObjId,
-        applicationListId: appListId,
-        categoryListId: catListId,
+        source:                srcParsed.ipCidr,
+        sourcePort:            srcParsed.port,
+        identity:              identityVal,
+        identityTypeId:        identityTypeIdVal,
+        sgt:                   sgtVal,
+        location:              locVal,
+        internalNetwork:       intNetVal,
+        sourceNetworkObjectId: srcNetObjId,
+        tunnel:                tunnelVal,
+        posture:               postureVal,
+        networkDevice:         netDevVal,
+        applicationId:         appId,
+        protocolId:            protoId,
+        categoryId:            catId,
+        destination:           destParsed.ipCidr,
+        destinationPort:       destParsed.port,
+        privateResourceId:     privResId,
+        destinationListId:     destListId,
+        networkObjectId:       netObjId,
+        serviceObjectGroupId:  svcObjId,
+        applicationListId:     appListId,
+        categoryListId:        catListId,
       };
 
       setTimeout(() => {
@@ -1369,6 +1478,13 @@
       appListSelect.reset();
       catListSelect.reset();
       identityTypeSelect.reset();
+      srcNetObjSelect.reset();
+      sgtInput.value      = "";
+      locInput.value      = "";
+      intNetInput.value   = "";
+      tunnelInput.value   = "";
+      postureInput.value  = "";
+      netDevInput.value   = "";
       destInput.value     = "";
       errorLine.textContent = "";
       onReset();

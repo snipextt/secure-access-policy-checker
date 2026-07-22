@@ -1032,33 +1032,29 @@ function ensureEmbeddedPopupStyle() {
     }
     #sec-embed-toggle:hover { filter: brightness(1.06); }
 
-    /* Glassmorphism pass: translucent frosted border/background + blur on
-       the panel FRAME (the iframe's own document — popup.html — carries a
-       matching soft gradient-wash background internally, since true
-       cross-document blur of the live dashboard through the iframe would
-       need the iframe's document background made fully transparent, which
-       risks visual bugs we can't verify live against the real dashboard).
-       overflow: hidden means this also clips the blur/rounding to the
-       panel's rounded corners. */
+    /* Full-height right side drawer panel design */
     #sec-embed-panel {
       position: fixed;
-      bottom: 88px;
-      right: 24px;
-      width: ${EMBED_PANEL_WIDTH}px;
-      height: ${EMBED_PANEL_HEIGHT}px;
-      max-width: calc(100vw - 48px);
-      max-height: calc(100vh - 120px);
-      background: rgba(255, 255, 255, 0.7);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid rgba(255, 255, 255, 0.55);
-      border-radius: 0.50rem;
-      box-shadow: 0 10px 40px rgba(35, 40, 46, 0.22);
+      top: 0;
+      bottom: 0;
+      right: 0;
+      width: 520px;
+      height: 100vh;
+      max-width: 100vw;
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border-left: 1px solid rgba(226, 232, 240, 0.9);
+      box-shadow: -10px 0 40px rgba(15, 23, 42, 0.2);
       overflow: hidden;
       z-index: 2147483646;
-      display: none;
+      display: block;
+      transform: translateX(100%);
+      transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
     }
-    #sec-embed-panel.sec-embed-open { display: block; }
+    #sec-embed-panel.sec-embed-open {
+      transform: translateX(0);
+    }
 
     #sec-embed-iframe {
       width: 100%;

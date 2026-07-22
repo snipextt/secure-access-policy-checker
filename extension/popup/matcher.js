@@ -765,6 +765,13 @@
       sourcePort = null, 
       identity = "", 
       identityTypeId = null,
+      sgt = "",
+      location = "",
+      internalNetwork = "",
+      sourceNetworkObjectId = null,
+      tunnel = "",
+      posture = "",
+      networkDevice = "",
       categoryId = null, 
       applicationId = null, 
       protocolId = null, 
@@ -777,7 +784,7 @@
       applicationListId = null,
       categoryListId = null,
     } = testInput;
-    const hasSource      = source.trim()      !== "";
+    const hasSource      = source.trim() !== "" || sgt.trim() !== "" || location.trim() !== "" || internalNetwork.trim() !== "" || (sourceNetworkObjectId !== null && sourceNetworkObjectId !== "") || tunnel.trim() !== "" || posture.trim() !== "" || networkDevice.trim() !== "";
     const hasIdentity    = identity.trim()    !== "" || (identityTypeId !== null && identityTypeId !== "");
     const hasApp         = categoryId !== null || applicationId !== null || protocolId !== null;
     const hasDestination = destination.trim() !== "" || 
