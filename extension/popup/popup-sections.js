@@ -85,11 +85,10 @@
       #psc-panel-title {
         padding: 14px 18px 2px;
         font-size: 13px;
-        font-weight: 800;
+        font-weight: 700;
         color: #0f172a;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        font-family: var(--hbr-font-mono, monospace);
+        letter-spacing: 0.02em;
+        font-family: var(--hbr-font-family);
         display: flex;
         align-items: center;
         gap: 8px;
@@ -151,12 +150,11 @@
       }
 
       .psc-section-title {
-        font-size: 11px;
-        font-weight: 800;
+        font-size: 11.5px;
+        font-weight: 700;
         color: #0f172a;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        font-family: var(--hbr-font-mono, monospace);
+        letter-spacing: 0.02em;
+        font-family: var(--hbr-font-family);
       }
 
       .psc-section-toggle {
@@ -164,16 +162,14 @@
         border: 1px solid #cbd5e1;
         border-radius: 2px;
         padding: 4px 8px;
-        font-size: 10px;
-        font-weight: 700;
+        font-size: 10.5px;
+        font-weight: 600;
         color: #0f172a;
         cursor: pointer;
         display: flex;
         align-items: center;
         gap: 4px;
-        font-family: var(--hbr-font-mono, monospace);
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
+        font-family: var(--hbr-font-family);
         transition: all 0.15s;
       }
       .psc-section-toggle:hover {
@@ -205,7 +201,7 @@
         padding: 5px 0;
         font-size: 11px;
         color: #1e293b;
-        font-family: var(--hbr-font-mono, monospace);
+        font-family: var(--hbr-font-family);
         border-bottom: 1px solid #f1f5f9;
       }
       .psc-setting-row:last-child {
@@ -214,7 +210,7 @@
       .psc-setting-label {
         color: #475569;
         font-size: 10.5px;
-        font-weight: 600;
+        font-weight: 500;
       }
       .psc-setting-toggle {
         width: 32px;
@@ -273,11 +269,10 @@
 
       .psc-hud-title {
         font-size: 10.5px;
-        font-weight: 700;
+        font-weight: 600;
         color: #0f172a;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        font-family: var(--hbr-font-mono, monospace);
+        letter-spacing: 0.02em;
+        font-family: var(--hbr-font-family);
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -290,7 +285,7 @@
         border-radius: 2px;
         padding: 8px 12px;
         font-size: 11px;
-        font-weight: 700;
+        font-weight: 600;
         color: #475569;
         cursor: pointer;
         display: flex;
@@ -298,9 +293,8 @@
         justify-content: space-between;
         transition: all 0.15s;
         width: 100%;
-        font-family: var(--hbr-font-mono, monospace);
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
+        font-family: var(--hbr-font-family);
+        letter-spacing: 0.02em;
       }
       .psc-toggle-btn:hover {
         background: #f1f5f9;
@@ -342,8 +336,8 @@
         color: #475569;
         margin: 0 0 4px 0;
         display: block;
-        font-family: var(--hbr-font-mono, monospace);
-        letter-spacing: 0.02em;
+        font-family: var(--hbr-font-family);
+        letter-spacing: 0.01em;
       }
 
       .psc-field-group input,
@@ -354,7 +348,7 @@
         border: 1px solid #cbd5e1 !important;
         border-radius: 2px !important;
         font-size: 12px;
-        font-family: var(--hbr-font-mono, monospace) !important;
+        font-family: var(--hbr-font-family) !important;
         color: #0f172a !important;
         background: #ffffff !important;
         outline: none;
@@ -379,7 +373,7 @@
       }
       .psc-dropdown-list li {
         padding: 7px 10px; font-size: 11px; cursor: pointer;
-        color: #1e293b; font-family: var(--hbr-font-mono, monospace);
+        color: #1e293b; font-family: var(--hbr-font-family);
         transition: background 0.1s;
       }
       .psc-dropdown-list li:hover { background: #f1f5f9; color: #0f172a; }
@@ -400,12 +394,11 @@
         border: 1px solid #cbd5e1;
         color: #475569;
         font-size: 11px;
-        font-weight: 700;
+        font-weight: 600;
         cursor: pointer;
         padding: 7px 14px;
         border-radius: 2px;
-        font-family: var(--hbr-font-mono, monospace);
-        text-transform: uppercase;
+        font-family: var(--hbr-font-family);
         transition: all 0.15s;
       }
       #psc-reset-btn:hover { color: #0f172a; border-color: #94a3b8; background: #f8fafc; }
@@ -416,11 +409,10 @@
         border-radius: 2px;
         padding: 7px 22px;
         font-size: 11px;
-        font-weight: 800;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
+        font-weight: 700;
+        letter-spacing: 0.02em;
         cursor: pointer;
-        font-family: var(--hbr-font-mono, monospace);
+        font-family: var(--hbr-font-family);
         transition: all 0.15s;
       }
       #psc-run-btn:hover:not(:disabled) {
@@ -428,7 +420,7 @@
         border-color: #1e293b;
       }
       #psc-run-btn:disabled { background: #e2e8f0; border-color: #cbd5e1; color: #94a3b8; cursor: not-allowed; }
-      #psc-form-error { font-size: 11px; color: #b91c1c; min-height: 16px; margin-bottom: 6px; font-family: var(--hbr-font-mono, monospace); }
+      #psc-form-error { font-size: 11px; color: #b91c1c; min-height: 16px; margin-bottom: 6px; font-family: var(--hbr-font-family); }
 
       /* Results Area */
       #psc-result-col {
@@ -444,7 +436,7 @@
         background: #f8fafc;
         border: 1px dashed #cbd5e1;
         border-radius: 2px;
-        font-family: var(--hbr-font-mono, monospace);
+        font-family: var(--hbr-font-family);
       }
 
       /* Hero Decision Card */
@@ -500,12 +492,11 @@
 
       .psc-hero-action-badge {
         font-size: 11px;
-        font-weight: 800;
+        font-weight: 700;
         padding: 4px 12px;
         border-radius: 2px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        font-family: var(--hbr-font-mono, monospace);
+        letter-spacing: 0.02em;
+        font-family: var(--hbr-font-family);
       }
       .psc-hero-allow .psc-hero-action-badge { background: #166534; color: #ffffff; }
       .psc-hero-block .psc-hero-action-badge { background: #991b1b; color: #ffffff; }
@@ -520,21 +511,20 @@
         font-size: 11px;
         color: #0f172a;
         margin-bottom: 10px;
-        font-family: var(--hbr-font-mono, monospace);
+        font-family: var(--hbr-font-family);
       }
 
       .psc-result-details { margin-top: 4px; }
       .psc-result-details summary {
         font-size: 11px;
-        font-weight: 700;
+        font-weight: 600;
         color: #0f172a;
         cursor: pointer;
         padding: 4px 0;
         user-select: none;
         list-style: none;
-        font-family: var(--hbr-font-mono, monospace);
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
+        font-family: var(--hbr-font-family);
+        letter-spacing: 0.02em;
       }
       .psc-result-details summary::-webkit-details-marker { display: none; }
       .psc-result-details[open] summary { margin-bottom: 8px; }
@@ -555,14 +545,13 @@
         padding: 6px 10px;
         font-size: 11px;
         border-bottom: 1px solid #f1f5f9;
-        font-family: var(--hbr-font-mono, monospace);
+        font-family: var(--hbr-font-family);
       }
       .psc-result-field-row:last-child { border-bottom: none; }
       .psc-result-field-label {
         color: #64748b;
-        font-weight: 700;
-        text-transform: uppercase;
-        font-size: 10px;
+        font-weight: 600;
+        font-size: 10.5px;
       }
       .psc-result-field-value { color: #0f172a; word-break: break-word; }
       .psc-result-field-value.psc-field-any { color: #94a3b8; font-style: italic; }
@@ -574,7 +563,7 @@
         background: #f8fafc;
         font-size: 11px;
         color: #1e293b;
-        font-family: var(--hbr-font-mono, monospace);
+        font-family: var(--hbr-font-family);
       }
 
       /* Rules Filter Bar */
@@ -593,7 +582,7 @@
         border: 1px solid #cbd5e1;
         border-radius: 2px;
         font-size: 11px;
-        font-family: var(--hbr-font-mono, monospace);
+        font-family: var(--hbr-font-family);
         outline: none;
         background: #ffffff;
         color: #0f172a;
@@ -616,11 +605,10 @@
         border-radius: 2px;
         padding: 4px 10px;
         font-size: 10.5px;
-        font-weight: 700;
+        font-weight: 600;
         color: #475569;
         cursor: pointer;
-        font-family: var(--hbr-font-mono, monospace);
-        text-transform: uppercase;
+        font-family: var(--hbr-font-family);
         transition: all 0.15s;
         max-width: 100%;
         overflow: hidden;
@@ -658,32 +646,31 @@
         margin-bottom: 8px;
       }
       .psc-audit-summary-title {
-        font-size: 11px;
-        font-weight: 800;
+        font-size: 11.5px;
+        font-weight: 700;
         color: #0f172a;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        font-family: var(--hbr-font-mono, monospace);
+        letter-spacing: 0.02em;
+        font-family: var(--hbr-font-family);
       }
       .psc-audit-badge-warning {
         background: #fff7ed;
         color: #c2410c;
         border: 1px solid #fed7aa;
-        font-size: 10px;
-        font-weight: 800;
+        font-size: 10.5px;
+        font-weight: 700;
         padding: 2px 8px;
         border-radius: 2px;
-        font-family: var(--hbr-font-mono, monospace);
+        font-family: var(--hbr-font-family);
       }
       .psc-audit-badge-pass {
         background: #f0fdf4;
         color: #166534;
         border: 1px solid #bbf7d0;
-        font-size: 10px;
-        font-weight: 800;
+        font-size: 10.5px;
+        font-weight: 700;
         padding: 2px 8px;
         border-radius: 2px;
-        font-family: var(--hbr-font-mono, monospace);
+        font-family: var(--hbr-font-family);
       }
       .psc-audit-stats-row {
         display: flex;
@@ -696,14 +683,14 @@
         border: 1px solid #e2e8f0;
         border-radius: 2px;
         padding: 3px 8px;
-        font-size: 10px;
-        font-family: var(--hbr-font-mono, monospace);
+        font-size: 10.5px;
+        font-family: var(--hbr-font-family);
         display: flex;
         gap: 4px;
         align-items: center;
       }
-      .psc-audit-stat-label { color: #64748b; font-weight: 600; }
-      .psc-audit-stat-val { color: #0f172a; font-weight: 800; }
+      .psc-audit-stat-label { color: #64748b; font-weight: 500; }
+      .psc-audit-stat-val { color: #0f172a; font-weight: 700; }
       .psc-audit-stat-chip.has-issues {
         background: #fff7ed;
         border-color: #fed7aa;
@@ -761,22 +748,22 @@
         max-width: 100%;
       }
       .psc-rule-meta-chip {
-        font-size: 9px;
-        font-weight: 600;
+        font-size: 9.5px;
+        font-weight: 500;
         color: #64748b;
         background: #f1f5f9;
         border: 1px solid #e2e8f0;
         border-radius: 2px;
         padding: 2px 6px;
-        font-family: var(--hbr-font-mono, monospace);
+        font-family: var(--hbr-font-family);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
         max-width: 100%;
       }
       .psc-rule-prio {
-        font-family: var(--hbr-font-mono, monospace);
-        font-size: 10px;
+        font-family: var(--hbr-font-family);
+        font-size: 10.5px;
         font-weight: 700;
         color: #0f172a;
         background: #f1f5f9;
@@ -787,7 +774,7 @@
       }
       .psc-rule-name {
         flex: 1;
-        font-weight: 700;
+        font-weight: 600;
         font-size: 12px;
         color: #0f172a;
         white-space: nowrap;
@@ -796,13 +783,12 @@
         min-width: 0;
       }
       .psc-rule-action-pill {
-        font-family: var(--hbr-font-mono, monospace);
-        font-size: 10px;
-        font-weight: 800;
+        font-family: var(--hbr-font-family);
+        font-size: 10.5px;
+        font-weight: 700;
         padding: 2px 8px;
         border-radius: 2px;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
+        letter-spacing: 0.02em;
         flex-shrink: 0;
       }
       .psc-action-allow { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
@@ -814,8 +800,8 @@
         display: flex;
         gap: 6px;
         flex-wrap: wrap;
-        font-family: var(--hbr-font-mono, monospace);
-        font-size: 10px;
+        font-family: var(--hbr-font-family);
+        font-size: 10.5px;
         width: 100%;
         max-width: 100%;
         min-width: 0;
@@ -834,7 +820,7 @@
         overflow-wrap: anywhere;
         word-break: break-word;
       }
-      .psc-chip-key { color: #64748b; font-weight: 700; flex-shrink: 0; }
+      .psc-chip-key { color: #64748b; font-weight: 600; flex-shrink: 0; }
       .psc-chip-val { color: #0f172a; font-weight: 600; overflow-wrap: anywhere; word-break: break-word; }
 
       .psc-check-list { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; background: #f8fafc; border-top: 1px solid #e2e8f0; max-width: 100%; box-sizing: border-box; overflow-x: hidden; }
@@ -851,12 +837,12 @@
         align-items: center;
         gap: 6px;
         margin-bottom: 2px;
-        font-weight: 700;
+        font-weight: 600;
         font-size: 10.5px;
-        font-family: var(--hbr-font-mono, monospace);
+        font-family: var(--hbr-font-family);
       }
       .psc-check-msg { color: #1e293b; display: block; }
-      .psc-check-detail { color: #64748b; font-size: 10px; margin-top: 2px; font-family: var(--hbr-font-mono, monospace); }
+      .psc-check-detail { color: #64748b; font-size: 10.5px; margin-top: 2px; font-family: var(--hbr-font-family); }
 
       /* Tooltip */
       #psc-tooltip {
@@ -868,7 +854,7 @@
         padding: 8px 12px;
         border-radius: 2px;
         font-size: 11px;
-        font-family: var(--hbr-font-mono, monospace);
+        font-family: var(--hbr-font-family);
         line-height: 1.45;
         white-space: pre-wrap;
         z-index: 99999;
@@ -1099,7 +1085,7 @@
     // Source Section Box
     const srcBox = el("div", { class: "psc-section-box", id: "psc-src-box" });
     const srcSettingsToggle = el("button", { type: "button", class: "psc-section-toggle", id: "psc-src-settings-toggle" }, [
-      el("span", {}, ["⚙ FIELDS"]),
+      el("span", {}, ["⚙ Fields"]),
       el("span", { class: "psc-settings-arrow" }, ["▼"])
     ]);
     const srcSettingsPopover = el("div", { class: "psc-section-popover", id: "psc-src-popover" });
@@ -1139,7 +1125,7 @@
     });
 
     const srcHeader = el("div", { class: "psc-section-header" }, [
-      el("span", { class: "psc-section-title" }, ["SOURCE"]),
+      el("span", { class: "psc-section-title" }, ["Source"]),
       srcSettingsToggle
     ]);
 
@@ -1202,7 +1188,7 @@
     // Destination Section Box
     const dstBox = el("div", { class: "psc-section-box", id: "psc-dst-box" });
     const dstSettingsToggle = el("button", { type: "button", class: "psc-section-toggle", id: "psc-dst-settings-toggle" }, [
-      el("span", {}, ["⚙ FIELDS"]),
+      el("span", {}, ["⚙ Fields"]),
       el("span", { class: "psc-settings-arrow" }, ["▼"])
     ]);
     const dstSettingsPopover = el("div", { class: "psc-section-popover", id: "psc-dst-popover" });
@@ -1242,7 +1228,7 @@
     });
 
     const dstHeader = el("div", { class: "psc-section-header" }, [
-      el("span", { class: "psc-section-title" }, ["DESTINATION"]),
+      el("span", { class: "psc-section-title" }, ["Destination"]),
       dstSettingsToggle
     ]);
 
@@ -1292,8 +1278,8 @@
     const errorLine = el("p", { id: "psc-form-error" });
     formFooter.appendChild(errorLine);
 
-    const runBtn   = el("button", { id: "psc-run-btn",   type: "button" }, ["RUN SIMULATION"]);
-    const resetBtn = el("button", { id: "psc-reset-btn", type: "button" }, ["RESET"]);
+    const runBtn   = el("button", { id: "psc-run-btn",   type: "button" }, ["Run Simulation"]);
+    const resetBtn = el("button", { id: "psc-reset-btn", type: "button" }, ["Reset"]);
     formFooter.appendChild(el("div", { id: "psc-form-actions" }, [resetBtn, runBtn]));
 
     body.appendChild(formFooter);
@@ -1321,7 +1307,7 @@
 
       if (result === "NO_MATCH") {
         resultCol.appendChild(el("div", { class: "psc-no-match-card" }, [
-          el("span", {}, ["⚠️ NO SPECIFIC RULE MATCHED — DEFAULT POLICY ACTION APPLIES."]),
+          el("span", {}, ["⚠️ No specific rule matched — default policy action applies."]),
         ]));
         return;
       }
@@ -1341,8 +1327,8 @@
         el("div", { class: "psc-hero-info" }, [
           el("div", { class: "psc-hero-rule-title" }, [displayName]),
           el("div", { class: "psc-hero-rule-sub" }, [
-            el("span", {}, [`[ PRIORITY #${displayPrio} ]`]),
-            rule.logging_enabled ? el("span", {}, ["• LOGS: ENABLED"]) : null,
+            el("span", {}, [`Priority #${displayPrio}`]),
+            rule.logging_enabled ? el("span", {}, ["• Logs: Enabled"]) : null,
           ].filter(Boolean)),
         ]),
         el("div", { class: "psc-hero-action-badge" }, [displayAction]),
@@ -1369,16 +1355,16 @@
           );
 
       const summaryText = matchFields
-        ? `${matchFields.identity.constrained ? matchFields.identity.display : 'ANY IDENTITY'} ➔ ${matchFields.destination.constrained ? matchFields.destination.display : (matchFields.app.constrained ? matchFields.app.display : 'ANY TRAFFIC')}`
-        : "MATCHED RULE CONDITIONS";
+        ? `${matchFields.identity.constrained ? matchFields.identity.display : 'Any Identity'} ➔ ${matchFields.destination.constrained ? matchFields.destination.display : (matchFields.app.constrained ? matchFields.app.display : 'Any Traffic')}`
+        : "Matched rule conditions";
 
       const summaryBox = el("div", { class: "psc-summary-box" }, [
-        el("strong", {}, ["MATCH REASON: "]),
+        el("strong", {}, ["Match Reason: "]),
         summaryText
       ]);
 
       const detailsElem = el("details", { class: "psc-result-details" }, [
-        el("summary", {}, ["▶ VIEW FULL MATCH MATRIX & ATTRIBUTES"]),
+        el("summary", {}, ["▶ View full match matrix & attributes"]),
         matchedGrid
       ]);
 
@@ -1877,10 +1863,10 @@
       summaryContainer.innerHTML = "";
       const summaryCard = el("div", { class: "psc-audit-summary-card" });
       const summaryHeader = el("div", { class: "psc-audit-summary-header" }, [
-        el("span", { class: "psc-audit-summary-title" }, ["POLICY AUDIT & OVERLAP SUMMARY"]),
+        el("span", { class: "psc-audit-summary-title" }, ["Policy Audit & Overlap Summary"]),
         totalIssues > 0
-          ? el("span", { class: "psc-audit-badge-warning" }, [`⚠️ ${totalIssues} ISSUE${totalIssues > 1 ? "S" : ""} DETECTED`])
-          : el("span", { class: "psc-audit-badge-pass" }, ["✓ 100% HEALTHY"])
+          ? el("span", { class: "psc-audit-badge-warning" }, [`⚠️ ${totalIssues} Issue${totalIssues > 1 ? "s" : ""} Detected`])
+          : el("span", { class: "psc-audit-badge-pass" }, ["✓ 100% Healthy"])
       ]);
 
       const statsRow = el("div", { class: "psc-audit-stats-row" }, [
@@ -1911,14 +1897,14 @@
 
       if (totalIssues > 0) {
         const detailsBox = el("details", { class: "psc-result-details", style: { marginTop: "6px" } });
-        const summaryLabel = el("summary", { style: { fontSize: "10.5px", fontWeight: "700", color: "#c2410c", cursor: "pointer", fontFamily: "var(--hbr-font-mono, monospace)" } }, [
-          `▶ VIEW OVERLAP & CONFLICT BREAKDOWN (${totalIssues})`
+        const summaryLabel = el("summary", { style: { fontSize: "10.5px", fontWeight: "600", color: "#c2410c", cursor: "pointer", fontFamily: "var(--hbr-font-family)" } }, [
+          `▶ View overlap & conflict breakdown (${totalIssues})`
         ]);
         const issuesList = el("div", { style: { display: "flex", flexDirection: "column", gap: "4px", marginTop: "6px" } });
         allFindings.forEach(f => {
           const fc = COLOR[f.severity] || COLOR.low;
           issuesList.appendChild(el("div", { class: "psc-check-item", style: { borderLeftColor: fc.text, background: fc.bg } }, [
-            el("div", { class: "psc-check-item-head", style: { color: fc.text } }, [`[${(f.checkId || "AUDIT").toUpperCase()}] ${f.severity ? f.severity.toUpperCase() : ""}`]),
+            el("div", { class: "psc-check-item-head", style: { color: fc.text } }, [`[${f.checkId || "Audit"}] ${f.severity ? f.severity : ""}`]),
             el("span", { class: "psc-check-msg" }, [f.message]),
             f.detail ? el("span", { class: "psc-check-detail" }, [f.detail]) : null
           ].filter(Boolean)));
