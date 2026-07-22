@@ -22,26 +22,40 @@
     "https://api.umbrella.com/*",
     "https://management.api.umbrella.com/*",
     "https://api.opendns.com/*",
-    "https://*.cisco.com/*"
+    "https://*.cisco.com/*",
+    "https://*.sse.cisco.com/*",
+    "https://dashboard.sse.cisco.com/*"
   ],
   "background": {
     "service_worker": "background/service-worker.js"
   },
   "content_scripts": [
     {
-      "matches": ["https://*.cisco.com/*"],
+      "matches": [
+        "https://*.cisco.com/*",
+        "https://*.sse.cisco.com/*",
+        "https://dashboard.sse.cisco.com/*"
+      ],
       "js": ["content/content-script.js"],
       "css": ["content/styles.css"],
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://*.cisco.com/*"],
+      "matches": [
+        "https://*.cisco.com/*",
+        "https://*.sse.cisco.com/*",
+        "https://dashboard.sse.cisco.com/*"
+      ],
       "js": ["content/token-sniffer.js"],
       "run_at": "document_start",
       "world": "MAIN"
     },
     {
-      "matches": ["https://*.cisco.com/*"],
+      "matches": [
+        "https://*.cisco.com/*",
+        "https://*.sse.cisco.com/*",
+        "https://dashboard.sse.cisco.com/*"
+      ],
       "js": ["content/token-relay.js"],
       "run_at": "document_start",
       "world": "ISOLATED"
@@ -70,7 +84,11 @@
         "data/apps-lookup.json",
         "data/protocols-lookup.json"
       ],
-      "matches": ["https://*.cisco.com/*"]
+      "matches": [
+        "https://*.cisco.com/*",
+        "https://*.sse.cisco.com/*",
+        "https://dashboard.sse.cisco.com/*"
+      ]
     }
   ]
 }

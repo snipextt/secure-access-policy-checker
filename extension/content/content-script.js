@@ -1070,8 +1070,14 @@ function ensureEmbeddedPopupStyle() {
 }
 
 function initEmbeddedPopup() {
+  if (!document.body) {
+    document.addEventListener("DOMContentLoaded", initEmbeddedPopup);
+    return;
+  }
   const oldBtn = document.getElementById("sec-embed-toggle");
   if (oldBtn) oldBtn.remove();
+  const oldPanel = document.getElementById("sec-embed-panel");
+  if (oldPanel) oldPanel.remove();
 
   ensureEmbeddedPopupStyle();
 
@@ -1177,21 +1183,29 @@ function initEmbeddedPopup() {
 }
 
 // ---------------------------------------------------------------------------
-// Message listener — allows popup to trigger annotation or highlight
+// ---------------------------------------------------------------------------
+// Run on page load & watch SPA route re-hydration
 // ---------------------------------------------------------------------------
 
-api.runtime.onMessage.addListener((msg) => {
-  if (msg.type === "TRIGGER_ANNOTATE") initAnnotations();
+function setupPersistence() {
+  initAnnotations();
+  initHoverPopover();
+  initEmbeddedPopup();
 
-  if (msg.type === "HIGHLIGHT_RULE") {
-    highlightRule(msg.ruleName, msg.matchedConditions);
+  // Re-check on DOM mutations in case Cisco Angular SPA replaces body children
+  if (window.MutationObserver && document.body) {
+    const observer = new MutationObserver(() => {
+      if (!document.getElementById("sec-embed-toggle") && document.body) {
+        initEmbeddedPopup();
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: false });
   }
-});
+}
 
-// ---------------------------------------------------------------------------
-// Run on page load
-// ---------------------------------------------------------------------------
-
-initAnnotations();
-initHoverPopover();
-initEmbeddedPopup();
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", setupPersistence);
+} else {
+  setupPersistence();
+}
+window.addEventListener("load", setupPersistence);

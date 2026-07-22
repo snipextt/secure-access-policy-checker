@@ -30,6 +30,17 @@ api.runtime.onStartup.addListener(() => {
   api.storage.session.get("__sw_keepalive").catch(() => {});
 });
 
+// Auto-inject content script whenever a Cisco dashboard tab loads/reloads
+api.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  const url = tab.url || changeInfo.url || "";
+  if (url.includes("cisco.com")) {
+    api.scripting.executeScript({
+      target: { tabId },
+      files: ["content/content-script.js"]
+    }).catch(() => {});
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Token storage
 //
