@@ -94,10 +94,6 @@
         align-items: center;
         gap: 8px;
       }
-      #psc-panel-title::before {
-        content: "//";
-        color: #64748b;
-      }
       #psc-panel-desc {
         padding: 0 18px 10px;
         font-size: 11px;
@@ -803,7 +799,7 @@
     const primaryCard = el("div", { class: "psc-hud-card" });
     primaryCard.appendChild(el("div", { class: "psc-hud-title" }, [
       el("span", {}, ["PRIMARY IP / PORT CRITERIA"]),
-      el("span", { style: { fontSize: "9px", color: "#64748b" } }, ["[DEFAULT ACTIVE]"])
+      el("span", { style: { fontSize: "9px", color: "#64748b" } }, ["DEFAULT ACTIVE"])
     ]));
 
     // Source IP:Port Input
@@ -834,7 +830,7 @@
 
     // --- 2. TOGGLEABLE ADVANCED SOURCE CRITERIA ---
     const srcAdvToggle = el("button", { type: "button", class: "psc-toggle-btn", id: "psc-toggle-src-adv" }, [
-      el("span", {}, ["⚙️ [ + ADVANCED SOURCE CRITERIA ]"]),
+      el("span", {}, ["+ ADVANCED SOURCE CRITERIA"]),
       el("span", { class: "psc-toggle-arrow" }, ["▼"])
     ]);
 
@@ -907,7 +903,7 @@
 
     // --- 3. TOGGLEABLE ADVANCED DESTINATION CRITERIA ---
     const dstAdvToggle = el("button", { type: "button", class: "psc-toggle-btn", id: "psc-toggle-dst-adv" }, [
-      el("span", {}, ["⚙️ [ + ADVANCED DESTINATION CRITERIA ]"]),
+      el("span", {}, ["+ ADVANCED DESTINATION CRITERIA"]),
       el("span", { class: "psc-toggle-arrow" }, ["▼"])
     ]);
 
@@ -985,7 +981,7 @@
     // Results container
     const resultCol = el("div", { id: "psc-result-col" });
     const placeholder = el("div", { id: "psc-result-placeholder" }, [
-      "// ENTER CRITERIA ABOVE AND CLICK RUN SIMULATION"
+      "Enter search criteria above and click Run Simulation"
     ]);
     resultCol.appendChild(placeholder);
     body.appendChild(resultCol);
@@ -998,7 +994,7 @@
 
       if (!result) {
         resultCol.appendChild(el("div", { id: "psc-result-placeholder" }, [
-          "// ENTER CRITERIA ABOVE AND CLICK RUN SIMULATION"
+          "Enter search criteria above and click Run Simulation"
         ]));
         return;
       }
@@ -1212,17 +1208,17 @@
     const searchInput = el("input", {
       type: "text",
       class: "psc-search-input",
-      placeholder: "// SEARCH RULES BY NAME, IDENTITY, DESTINATION, OR APP...",
+      placeholder: "Search rules by name, identity, destination, or app...",
       autocomplete: "off",
     });
 
     const pillsContainer = el("div", { class: "psc-filter-pills" });
     const filterOptions = [
-      { id: "all", label: "[ ALL ]" },
-      { id: "allow", label: "[ PERMIT ]" },
-      { id: "block", label: "[ DENY ]" },
-      { id: "private", label: "[ PRIVATE ACCESS ]" },
-      { id: "internet", label: "[ INTERNET ACCESS ]" },
+      { id: "all", label: "All" },
+      { id: "allow", label: "Permit" },
+      { id: "block", label: "Deny" },
+      { id: "private", label: "Private Access" },
+      { id: "internet", label: "Internet Access" },
     ];
 
     let activeFilter = "all";
@@ -1400,7 +1396,7 @@
 
       rulesContainer.innerHTML = "";
       if (!rules || rules.length === 0) {
-        rulesContainer.appendChild(el("p", { class: "psc-empty", style: { textAlign: "center", color: "#64748b", fontFamily: "var(--hbr-font-mono)" } }, ["// NO RULES LOADED"]));
+        rulesContainer.appendChild(el("p", { class: "psc-empty", style: { textAlign: "center", color: "#64748b", fontFamily: "var(--hbr-font-mono)" } }, ["No rules loaded"]));
         return;
       }
 

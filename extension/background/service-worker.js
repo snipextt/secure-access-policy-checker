@@ -1035,15 +1035,34 @@ const IDENTITY_ENDPOINTS = [
   {
     name: "identity_search",
     tokenKey: "mgmt_authz_token",
-    // CONFIRMED via CDP intercept: dashboard uses ?id= with specific IDs,
-    // NOT ?label=&type= which returns 403.
+    // CONFIRMED via CDP intercept: dashboard uses ?id= with specific IDs.
+    // Handles arrays, { data: [...] }, { items: [...] }, and direct ID-keyed maps.
     buildUrl: (orgId, ids) =>
       `https://management.api.umbrella.com/identity/v2/organizations/${orgId}/search?id=${ids.join(",")}`,
     parse: (json, ids) => {
-      const idSet = new Set(ids.map(String));
-      return (Array.isArray(json && json.data) ? json.data : [])
-        .filter((e) => idSet.has(String(e.id)))
-        .map((e) => ({ id: e.id, name: e.label }));
+      if (!json) return [];
+      if (Array.isArray(json)) {
+        return json.map((e) => ({ id: e.id || e.originId, name: e.label || e.name }));
+      }
+      if (Array.isArray(json.data)) {
+        return json.data.map((e) => ({ id: e.id || e.originId, name: e.label || e.name }));
+      }
+      if (Array.isArray(json.items)) {
+        return json.items.map((e) => ({ id: e.id || e.originId, name: e.label || e.name }));
+      }
+      if (typeof json === "object") {
+        const entries = [];
+        for (const [key, val] of Object.entries(json)) {
+          if (val && typeof val === "object") {
+            const name = val.label || val.name || val.friendlyName;
+            if (name) entries.push({ id: key, name });
+          } else if (typeof val === "string") {
+            entries.push({ id: key, name: val });
+          }
+        }
+        return entries;
+      }
+      return [];
     },
   },
 ];

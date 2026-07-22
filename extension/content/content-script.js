@@ -1005,7 +1005,8 @@ const EMBED_PANEL_WIDTH = 680;
 const EMBED_PANEL_HEIGHT = 480;
 
 function ensureEmbeddedPopupStyle() {
-  if (document.getElementById("sec-embed-popup-style")) return;
+  const oldStyle = document.getElementById("sec-embed-popup-style");
+  if (oldStyle) oldStyle.remove();
   const style = document.createElement("style");
   style.id = "sec-embed-popup-style";
   style.textContent = `
@@ -1016,21 +1017,22 @@ function ensureEmbeddedPopupStyle() {
       width: 52px;
       height: 52px;
       border-radius: 9999px;
-      background: #2774D9; /* Cisco blue brand header — matches extension popup toolbar (--hbr-color-header in popup.html) */
-      color: #fff;
-      border: none;
-      font-size: 22px;
-      line-height: 1;
+      background: #0f172a !important;
+      color: #ffffff !important;
+      border: 1px solid #1e293b !important;
       cursor: pointer;
-      box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+      box-shadow: 0 4px 16px rgba(15, 23, 42, 0.25) !important;
       z-index: 2147483646;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      transition: transform 0.15s ease, background 0.15s ease;
       padding: 0;
     }
-    #sec-embed-toggle:hover { filter: brightness(1.06); }
+    #sec-embed-toggle:hover {
+      background: #1e293b !important;
+      transform: scale(1.05);
+    }
 
     /* Full-height right side drawer panel design */
     #sec-embed-panel {
@@ -1068,14 +1070,18 @@ function ensureEmbeddedPopupStyle() {
 }
 
 function initEmbeddedPopup() {
-  if (document.getElementById("sec-embed-toggle")) return; // already injected
+  const oldBtn = document.getElementById("sec-embed-toggle");
+  if (oldBtn) oldBtn.remove();
 
   ensureEmbeddedPopupStyle();
 
   const toggleBtn = document.createElement("button");
   toggleBtn.id = "sec-embed-toggle";
   toggleBtn.title = "Secure Access Policy Checker";
-  toggleBtn.textContent = "🛡️";
+  toggleBtn.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 2L3 6V11.5C3 16.8 6.8 21.5 12 22.8C17.2 21.5 21 16.8 21 11.5V6L12 2Z" fill="#0F172A" stroke="#0F172A" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M8.5 12L11 14.5L16 9.5" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
 
   const panel = document.createElement("div");
   panel.id = "sec-embed-panel";
