@@ -2073,9 +2073,9 @@
         // Card Body
         const cardBody = el("div", { class: "psc-check-list" });
 
-        // Findings / Audit Feedback section
-        const findingsBox = el("div", { style: { display: "flex", flexDirection: "column", gap: "4px" } });
+        // Findings / Audit Feedback section — render ONLY when issues exist
         if (ruleFindings.length > 0) {
+          const findingsBox = el("div", { style: { display: "flex", flexDirection: "column", gap: "4px" } });
           ruleFindings.forEach(f => {
             const fc = COLOR[f.severity] || COLOR.low;
             findingsBox.appendChild(el("div", { class: "psc-check-item", style: { borderLeftColor: fc.text, background: fc.bg } }, [
@@ -2084,14 +2084,8 @@
               f.detail ? el("span", { class: "psc-check-detail" }, [f.detail]) : null
             ].filter(Boolean)));
           });
-        } else {
-          // Pass indicator when zero audit findings are flagged
-          findingsBox.appendChild(el("div", { class: "psc-check-item", style: { borderLeftColor: "#166534", background: "#f0fdf4" } }, [
-            el("div", { class: "psc-check-item-head", style: { color: "#15803d" } }, ["✓ AUDIT PASS"]),
-            el("span", { class: "psc-check-msg", style: { color: "#166534" } }, ["Rule satisfies security posture checks with logging & inspection enabled."])
-          ]));
+          cardBody.appendChild(findingsBox);
         }
-        cardBody.appendChild(findingsBox);
 
         card.appendChild(cardBody);
         rulesContainer.appendChild(card);
