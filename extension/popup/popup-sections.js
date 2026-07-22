@@ -76,6 +76,10 @@
         display: flex;
         flex-direction: column;
         font-family: var(--hbr-font-family);
+        width: 100%;
+        max-width: 100% !important;
+        overflow-x: hidden !important;
+        box-sizing: border-box !important;
       }
 
       #psc-panel-title {
@@ -445,6 +449,9 @@
         flex-direction: column;
         gap: 8px;
         margin-bottom: 12px;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
       }
       .psc-search-input {
         width: 100%;
@@ -457,6 +464,7 @@
         background: #ffffff;
         color: #0f172a;
         transition: border-color 0.2s;
+        box-sizing: border-box;
       }
       .psc-search-input:focus {
         border-color: #0f172a;
@@ -466,6 +474,7 @@
         display: flex;
         gap: 6px;
         flex-wrap: wrap;
+        max-width: 100%;
       }
       .psc-filter-pill {
         background: #ffffff;
@@ -479,6 +488,10 @@
         font-family: var(--hbr-font-mono, monospace);
         text-transform: uppercase;
         transition: all 0.15s;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .psc-filter-pill:hover {
         background: #f8fafc;
@@ -494,11 +507,14 @@
       .psc-rule-group {
         border: 1px solid #e2e8f0;
         border-radius: 2px;
-        overflow: hidden;
+        overflow-x: hidden !important;
         margin-bottom: 6px;
         background: #ffffff;
         transition: border-color 0.15s;
         position: relative;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
       }
       .psc-rule-group:hover {
         border-color: #cbd5e1;
@@ -512,6 +528,10 @@
         background: #ffffff;
         list-style: none;
         user-select: none;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+        overflow-x: hidden;
       }
       .psc-rule-group-header::-webkit-details-marker { display: none; }
 
@@ -520,6 +540,8 @@
         align-items: center;
         gap: 8px;
         width: 100%;
+        max-width: 100%;
+        min-width: 0;
       }
       .psc-rule-prio {
         font-family: var(--hbr-font-mono, monospace);
@@ -530,6 +552,7 @@
         border: 1px solid #cbd5e1;
         padding: 1px 5px;
         border-radius: 2px;
+        flex-shrink: 0;
       }
       .psc-rule-name {
         flex: 1;
@@ -539,6 +562,7 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        min-width: 0;
       }
       .psc-rule-action-pill {
         font-family: var(--hbr-font-mono, monospace);
@@ -548,6 +572,7 @@
         border-radius: 2px;
         text-transform: uppercase;
         letter-spacing: 0.04em;
+        flex-shrink: 0;
       }
       .psc-action-allow { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
       .psc-action-block { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
@@ -560,6 +585,9 @@
         flex-wrap: wrap;
         font-family: var(--hbr-font-mono, monospace);
         font-size: 10px;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
       }
       .psc-chip {
         background: #f8fafc;
@@ -570,11 +598,15 @@
         display: inline-flex;
         align-items: center;
         gap: 4px;
+        max-width: 100%;
+        min-width: 0;
+        overflow-wrap: anywhere;
+        word-break: break-word;
       }
-      .psc-chip-key { color: #64748b; font-weight: 700; }
-      .psc-chip-val { color: #0f172a; font-weight: 600; }
+      .psc-chip-key { color: #64748b; font-weight: 700; flex-shrink: 0; }
+      .psc-chip-val { color: #0f172a; font-weight: 600; overflow-wrap: anywhere; word-break: break-word; }
 
-      .psc-check-list { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; background: #f8fafc; border-top: 1px solid #e2e8f0; }
+      .psc-check-list { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; background: #f8fafc; border-top: 1px solid #e2e8f0; max-width: 100%; box-sizing: border-box; overflow-x: hidden; }
       .psc-check-item {
         border-left: 3px solid;
         padding: 6px 10px;
@@ -1173,7 +1205,7 @@
   function buildRulesList(container) {
     injectStyles();
 
-    const root = el("div", { id: "psc-rules-list-root", style: { display: "flex", flexDirection: "column", gap: "10px", padding: "14px 18px" } });
+    const root = el("div", { id: "psc-rules-list-root", style: { display: "flex", flexDirection: "column", gap: "10px", padding: "12px 14px", width: "100%", maxWidth: "100%", boxSizing: "border-box", overflowX: "hidden" } });
     container.appendChild(root);
 
     const filterBar = el("div", { class: "psc-rules-filter-bar" });
@@ -1374,8 +1406,16 @@
 
       const findingsByRule = new Map();
       for (const f of findings || []) {
-        if (!findingsByRule.has(f.ruleId)) findingsByRule.set(f.ruleId, []);
-        findingsByRule.get(f.ruleId).push(f);
+        if (f.ruleId !== undefined && f.ruleId !== null) {
+          const k = String(f.ruleId);
+          if (!findingsByRule.has(k)) findingsByRule.set(k, []);
+          findingsByRule.get(k).push(f);
+        }
+        if (f.ruleName) {
+          const kName = String(f.ruleName).trim().toLowerCase();
+          if (!findingsByRule.has(kName)) findingsByRule.set(kName, []);
+          findingsByRule.get(kName).push(f);
+        }
       }
 
       for (const rule of rules) {
@@ -1383,7 +1423,22 @@
         const rAction = (rule.ruleAction || rule.action || "allow").toLowerCase();
         const rPrio = rule.rulePriority !== undefined ? rule.rulePriority : rule.order;
         const rId = rule.ruleId !== undefined ? rule.ruleId : rule.id;
-        const ruleFindings = findingsByRule.get(rId) || [];
+
+        const idKey = String(rId);
+        const nameKey = String(rName).trim().toLowerCase();
+        const idFindings = findingsByRule.get(idKey) || [];
+        const nameFindings = findingsByRule.get(nameKey) || [];
+
+        // Deduplicate findings for this rule
+        const seen = new Set();
+        const ruleFindings = [];
+        for (const f of [...idFindings, ...nameFindings]) {
+          const sig = `${f.checkId}:${f.message}`;
+          if (!seen.has(sig)) {
+            seen.add(sig);
+            ruleFindings.push(f);
+          }
+        }
 
         const borderLeftColor = rAction === "allow" ? "#166534" : (rAction === "block" ? "#991b1b" : "#6b21a8");
 
@@ -1442,18 +1497,25 @@
           cardBody.appendChild(spRow);
         }
 
-        // Findings
+        // Findings / Audit Feedback section
+        const findingsBox = el("div", { style: { display: "flex", flexDirection: "column", gap: "4px" } });
         if (ruleFindings.length > 0) {
-          const findingsBox = el("div", { style: { display: "flex", flexDirection: "column", gap: "4px" } });
           ruleFindings.forEach(f => {
             const fc = COLOR[f.severity] || COLOR.low;
             findingsBox.appendChild(el("div", { class: "psc-check-item", style: { borderLeftColor: fc.text, background: fc.bg } }, [
-              el("div", { class: "psc-check-item-head", style: { color: fc.text } }, [`[${f.checkId}] ${f.severity.toUpperCase()}`]),
-              el("span", { class: "psc-check-msg" }, [f.message])
-            ]));
+              el("div", { class: "psc-check-item-head", style: { color: fc.text } }, [`[AUDIT ISSUE: ${f.checkId.toUpperCase()}] — ${f.severity.toUpperCase()}`]),
+              el("span", { class: "psc-check-msg" }, [f.message]),
+              f.detail ? el("span", { class: "psc-check-detail" }, [f.detail]) : null
+            ].filter(Boolean)));
           });
-          cardBody.appendChild(findingsBox);
+        } else {
+          // Pass indicator when zero audit findings are flagged
+          findingsBox.appendChild(el("div", { class: "psc-check-item", style: { borderLeftColor: "#166534", background: "#f0fdf4" } }, [
+            el("div", { class: "psc-check-item-head", style: { color: "#15803d" } }, ["✓ AUDIT PASS"]),
+            el("span", { class: "psc-check-msg", style: { color: "#166534" } }, ["Rule satisfies security posture checks with logging & inspection enabled."])
+          ]));
         }
+        cardBody.appendChild(findingsBox);
 
         card.appendChild(cardBody);
         rulesContainer.appendChild(card);

@@ -1038,15 +1038,14 @@ function ensureEmbeddedPopupStyle() {
       top: 0;
       bottom: 0;
       right: 0;
-      width: 520px;
+      width: 600px;
       height: 100vh;
       max-width: 100vw;
-      background: rgba(255, 255, 255, 0.96);
-      backdrop-filter: blur(24px);
-      -webkit-backdrop-filter: blur(24px);
-      border-left: 1px solid rgba(226, 232, 240, 0.9);
-      box-shadow: -10px 0 40px rgba(15, 23, 42, 0.2);
-      overflow: hidden;
+      background: #ffffff;
+      border-left: 1px solid #cbd5e1;
+      box-shadow: -10px 0 30px rgba(15, 23, 42, 0.15);
+      overflow-x: hidden;
+      overflow-y: hidden;
       z-index: 2147483646;
       display: block;
       transform: translateX(100%);
@@ -1062,6 +1061,7 @@ function ensureEmbeddedPopupStyle() {
       border: none;
       display: block;
       background: transparent;
+      overflow-x: hidden;
     }
   `;
   document.head.appendChild(style);
@@ -1086,6 +1086,7 @@ function initEmbeddedPopup() {
   // manifest.json's web_accessible_resources — see manifest.json.
   const iframe = document.createElement("iframe");
   iframe.id = "sec-embed-iframe";
+  iframe.style.overflowX = "hidden";
   
   // Extract orgId from URL and pass it directly in the iframe src
   // This is more reliable than the postMessage handshake
