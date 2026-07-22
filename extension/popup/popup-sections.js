@@ -1666,6 +1666,7 @@
             summaryText = `Posture (${label}): ${values}`;
             break;
           }
+          default: {
             const humanized = type
               .replace(/^umbrella\./, "")
               .replace(/\./g, " ")

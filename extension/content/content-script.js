@@ -721,6 +721,7 @@ function summarizeConditions(rule, lookups) {
         summaryText = `Posture (${label}): ${values}`;
         break;
       }
+      default: {
         // Generic fallback for any unrecognized umbrella.* condition type —
         // see popup-sections.js for the full comment on why this exists.
         const humanized = type
