@@ -1990,7 +1990,7 @@
 
         const condSummaries = summarizeConditions(rule, lookups);
 
-        // Header Top Line
+        // Header Top Line: Priority Badge, Rule Name, Action Pill
         const actionCls = rAction === "allow" ? "psc-action-allow" : (rAction === "block" ? "psc-action-block" : "psc-action-isolate");
         const topBar = el("div", { class: "psc-rule-top-line" }, [
           el("span", { class: "psc-rule-prio" }, [`#${rPrio}`]),
@@ -2010,12 +2010,12 @@
         if (rawRule.ruleExternalId) metaFields.push({ label: "EXT ID", value: String(rawRule.ruleExternalId) });
         if (rawRule.ruleIName) metaFields.push({ label: "I-NAME", value: rawRule.ruleIName });
 
+        let metaRow = null;
         if (metaFields.length > 0) {
-          const metaRow = el("div", { class: "psc-rule-meta-row" });
+          metaRow = el("div", { class: "psc-rule-meta-row" });
           metaFields.slice(0, 3).forEach(m => {
             metaRow.appendChild(el("span", { class: "psc-rule-meta-chip" }, [`${m.label}: ${m.value}`]));
           });
-          topBar.appendChild(metaRow);
         }
 
         // Inline Data Chips Bar
@@ -2074,10 +2074,11 @@
         inlineChips.appendChild(makeSpChip("TLS", sp.tls_decryption_enabled));
         inlineChips.appendChild(makeSpChip("DLP", sp.dlp_enabled));
 
-        const header = el("summary", { class: "psc-rule-group-header" }, [
-          topBar,
-          inlineChips
-        ]);
+        const headerChildren = [topBar];
+        if (metaRow) headerChildren.push(metaRow);
+        headerChildren.push(inlineChips);
+
+        const header = el("summary", { class: "psc-rule-group-header" }, headerChildren);
 
         card.appendChild(header);
 
