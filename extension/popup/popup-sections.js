@@ -33,14 +33,14 @@
   // ---------------------------------------------------------------------------
   // Inject the shared stylesheet once
   // ---------------------------------------------------------------------------
-  function injectStyles() {
+    function injectStyles() {
     if (document.getElementById("psc-style")) return;
     const s = document.createElement("style");
     s.id = "psc-style";
     s.textContent = `
 
       /* ================================================================== */
-      /* TESTER PANEL                                                       */
+      /* TESTER PANEL & MINIMALIST UI                                       */
       /* ================================================================== */
       #psc-panel {
         background: var(--hbr-color-bg-card);
@@ -51,21 +51,19 @@
       }
 
       #psc-panel-title {
-        padding: 18px 20px 4px;
+        padding: 16px 20px 2px;
         font-size: 15px;
         font-weight: 700;
         color: var(--hbr-color-text-heading);
         letter-spacing: -0.01em;
       }
       #psc-panel-desc {
-        padding: 0 20px 14px;
+        padding: 0 20px 12px;
         font-size: 11.5px;
         color: var(--hbr-color-text-weak);
-        line-height: 1.55;
+        line-height: 1.5;
         border-bottom: 1px solid var(--hbr-color-border);
       }
-      #psc-panel-desc a { color: var(--hbr-color-accent); text-decoration: none; }
-      #psc-panel-desc a:hover { text-decoration: underline; }
 
       #psc-panel-body {
         display: flex;
@@ -75,46 +73,87 @@
       #psc-form-row {
         display: flex;
         flex-direction: column;
-        gap: 16px;
-        padding: 16px 20px 0;
-        width: 100%;
-      }
-      #psc-form-row .psc-panel-section {
+        gap: 12px;
+        padding: 14px 20px 0;
         width: 100%;
       }
 
-      #psc-form-footer {
-        padding: 12px 20px 16px;
-        border-bottom: 1px solid var(--hbr-color-border);
-      }
-
-      /* Source / Destination cards */
-      .psc-panel-section {
+      /* Essential Primary Card */
+      .psc-essential-card {
         border: 1px solid var(--hbr-color-border);
         border-radius: var(--hbr-radius-lg);
-        padding: 14px;
-        background: var(--hbr-color-bg-subtle);
+        padding: 14px 16px;
+        background: #fff;
         box-shadow: var(--glass-shadow-sm);
-        transition: box-shadow 0.2s;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
       }
-      .psc-panel-section:hover {
-        box-shadow: var(--glass-shadow);
-      }
-      .psc-panel-section-title {
+      .psc-essential-title {
         font-size: 11px;
         font-weight: 700;
         color: var(--hbr-color-accent);
-        margin: 0;
         text-transform: uppercase;
         letter-spacing: 0.06em;
-        border-bottom: 1px solid var(--hbr-color-border);
-        padding-bottom: 8px;
+        margin-bottom: 2px;
       }
 
-      .psc-field-group { margin: 0; }
-      .psc-field-group--first { margin-top: var(--hbr-space-lg); }
-      .psc-field-group:not(.psc-field-group--first) { margin-top: var(--hbr-space-md); }
+      /* Advanced Conditions Toggle & Container */
+      .psc-advanced-toggle {
+        background: var(--hbr-color-bg-subtle);
+        border: 1px solid var(--hbr-color-border);
+        border-radius: var(--hbr-radius-md);
+        padding: 8px 12px;
+        font-size: 11.5px;
+        font-weight: 600;
+        color: var(--hbr-color-text-body);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        transition: background 0.15s, border-color 0.15s;
+        width: 100%;
+        margin-top: 4px;
+      }
+      .psc-advanced-toggle:hover {
+        background: #eef2ff;
+        border-color: #c7d2fe;
+        color: var(--hbr-color-accent);
+      }
+      .psc-advanced-arrow {
+        font-size: 10px;
+        transition: transform 0.2s ease;
+      }
+      .psc-advanced-toggle.active .psc-advanced-arrow {
+        transform: rotate(180deg);
+      }
 
+      .psc-advanced-container {
+        display: none;
+        flex-direction: column;
+        gap: 12px;
+        padding: 14px;
+        border: 1px solid var(--hbr-color-border);
+        border-radius: var(--hbr-radius-lg);
+        background: #fafafa;
+        margin-top: 4px;
+      }
+      .psc-advanced-container.open {
+        display: flex;
+      }
+      .psc-advanced-section-title {
+        font-size: 10.5px;
+        font-weight: 700;
+        color: var(--hbr-color-text-weak);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding-bottom: 4px;
+        border-bottom: 1px dashed var(--hbr-color-border);
+        margin-bottom: 2px;
+      }
+
+      /* Fields */
+      .psc-field-group { margin: 0; }
       .psc-field-label {
         font-size: 11.5px;
         font-weight: 600;
@@ -122,32 +161,8 @@
         margin: 0 0 4px 0;
         display: block;
       }
-      .psc-field-hint {
-        display: none;
-      }
+      .psc-field-hint { display: none; }
 
-      .psc-refine-divider {
-        margin-top: var(--hbr-space-md);
-        padding-top: var(--hbr-space-sm);
-        border-top: 1px dashed var(--hbr-color-border);
-        font-size: 10px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: var(--hbr-color-text-weak);
-      }
-      .psc-refine-divider-optional {
-        font-weight: 400;
-        text-transform: none;
-        letter-spacing: normal;
-        font-style: italic;
-      }
-      #psc-refine-group .psc-field-label {
-        font-weight: 500;
-        color: var(--hbr-color-text-weak);
-      }
-
-      /* Inputs */
       .psc-field-group input,
       .psc-field-group select {
         width: 100%;
@@ -156,7 +171,6 @@
         border-radius: var(--hbr-radius-md);
         font-size: 12px;
         font-family: inherit;
-        font-weight: 400;
         color: var(--hbr-color-text-body);
         background: #fff;
         outline: none;
@@ -169,7 +183,11 @@
       }
       .psc-field-group input::placeholder { color: #9ca3af; }
 
-      /* Form actions */
+      /* Footer & Actions */
+      #psc-form-footer {
+        padding: 12px 20px;
+        border-bottom: 1px solid var(--hbr-color-border);
+      }
       #psc-form-actions {
         display: flex;
         align-items: center;
@@ -183,7 +201,7 @@
         font-size: 12px;
         font-weight: 500;
         cursor: pointer;
-        padding: 6px 10px;
+        padding: 6px 12px;
         font-family: inherit;
         border-radius: var(--hbr-radius-md);
         transition: color 0.15s, background 0.15s;
@@ -194,10 +212,9 @@
         color: #fff;
         border: none;
         border-radius: var(--hbr-radius-md);
-        padding: 8px 22px;
+        padding: 8px 24px;
         font-size: 12px;
         font-weight: 600;
-        letter-spacing: 0.02em;
         cursor: pointer;
         font-family: inherit;
         transition: box-shadow 0.2s, transform 0.1s;
@@ -207,99 +224,122 @@
         box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
         transform: translateY(-1px);
       }
-      #psc-run-btn:active:not(:disabled) { transform: translateY(0); }
       #psc-run-btn:disabled { background: #93b4e8; box-shadow: none; cursor: not-allowed; }
-
-      #psc-form-error {
-        font-size: 11px;
-        color: #dc2626;
-        min-height: 16px;
-        margin-bottom: 6px;
-      }
+      #psc-form-error { font-size: 11px; color: #dc2626; min-height: 16px; margin-bottom: 6px; }
 
       /* Results area */
       #psc-result-col {
-        padding: 18px 20px;
+        padding: 16px 20px;
         display: flex;
         flex-direction: column;
-        align-items: stretch;
-        justify-content: flex-start;
       }
       #psc-result-placeholder {
-        flex: 1;
-        display: flex;
-        align-items: center;
-        justify-content: center;
         color: var(--hbr-color-text-weak);
-        font-size: 12.5px;
+        font-size: 12px;
         font-style: italic;
         text-align: center;
-        padding: 24px;
-        min-height: 160px;
+        padding: 20px;
+        background: #f9fafb;
+        border: 1px dashed var(--hbr-color-border);
+        border-radius: var(--hbr-radius-lg);
       }
 
-      /* Result card */
-      .psc-result-card {
-        border: 1px solid var(--hbr-color-border);
+      /* Hero Decision Card */
+      .psc-hero-card {
         border-radius: var(--hbr-radius-lg);
         overflow: hidden;
-        font-size: 12px;
         background: #fff;
+        border: 1px solid var(--hbr-color-border);
         box-shadow: var(--glass-shadow-sm);
       }
-      .psc-result-header {
+      .psc-hero-banner {
+        padding: 14px 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .psc-hero-allow {
+        background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+        border-bottom: 1px solid #bbf7d0;
+      }
+      .psc-hero-block {
+        background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+        border-bottom: 1px solid #fecaca;
+      }
+      .psc-hero-isolate {
+        background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+        border-bottom: 1px solid #ddd6fe;
+      }
+      .psc-hero-unknown {
+        background: #f9fafb;
+        border-bottom: 1px solid var(--hbr-color-border);
+      }
+
+      .psc-hero-info {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .psc-hero-rule-title {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--hbr-color-text-heading);
+      }
+      .psc-hero-rule-sub {
+        font-size: 11px;
+        color: var(--hbr-color-text-weak);
         display: flex;
         align-items: center;
         gap: 8px;
-        padding: 10px 14px;
-        font-weight: 600;
-        font-size: 12px;
       }
-      .psc-result-allow { background: #f0fdf4; color: #166534; border-bottom: 1px solid #bbf7d0; }
-      .psc-result-block { background: #fef2f2; color: #991b1b; border-bottom: 1px solid #fecaca; }
-      .psc-result-isolate { background: #f5f3ff; color: #5b21b6; border-bottom: 1px solid #ddd6fe; }
-      .psc-result-unknown { background: #f9fafb; color: var(--hbr-color-text-weak); border-bottom: 1px solid var(--hbr-color-border); }
-      .psc-result-body { padding: 12px 14px; }
-      .psc-result-rule-name {
-        font-weight: 600;
-        color: var(--hbr-color-text-heading);
-        margin-bottom: 4px;
-        font-size: 13px;
-      }
-      .psc-result-meta {
-        font-size: 10.5px;
-        color: var(--hbr-color-text-weak);
-        margin-bottom: 10px;
-      }
-      .psc-result-cond-title {
-        font-size: 10px;
-        font-weight: 700;
-        color: var(--hbr-color-text-weak);
-        margin-bottom: 6px;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-      }
-      .psc-result-cond-list {
-        list-style: none;
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-      }
-      .psc-result-cond-list li {
+
+      .psc-hero-action-badge {
         font-size: 11px;
+        font-weight: 800;
+        padding: 4px 14px;
+        border-radius: var(--hbr-radius-pill);
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+      }
+      .psc-hero-allow .psc-hero-action-badge { background: #16a34a; color: #fff; }
+      .psc-hero-block .psc-hero-action-badge { background: #dc2626; color: #fff; }
+      .psc-hero-isolate .psc-hero-action-badge { background: #7c3aed; color: #fff; }
+
+      /* Summary highlight box */
+      .psc-hero-body {
+        padding: 12px 16px;
+      }
+      .psc-summary-box {
+        background: var(--hbr-color-bg-subtle);
+        border: 1px solid var(--hbr-color-border);
+        border-radius: var(--hbr-radius-md);
+        padding: 8px 12px;
+        font-size: 11.5px;
         color: var(--hbr-color-text-body);
-        display: flex;
-        align-items: flex-start;
-        gap: 6px;
+        margin-bottom: 10px;
         line-height: 1.45;
       }
-      .psc-result-cond-list li::before {
-        content: "\u2192";
-        color: var(--hbr-color-accent);
-        flex-shrink: 0;
-        margin-top: 1px;
-        font-weight: 600;
+
+      /* Collapsible details */
+      .psc-result-details {
+        margin-top: 6px;
       }
+      .psc-result-details summary {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--hbr-color-accent);
+        cursor: pointer;
+        padding: 4px 0;
+        user-select: none;
+        list-style: none;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .psc-result-details summary::-webkit-details-marker { display: none; }
+      .psc-result-details[open] summary { margin-bottom: 8px; }
 
       /* Field grid */
       .psc-result-fields {
@@ -311,7 +351,7 @@
       }
       .psc-result-field-row {
         display: grid;
-        grid-template-columns: 108px 1fr;
+        grid-template-columns: 110px 1fr;
         gap: 8px;
         padding: 7px 12px;
         font-size: 11px;
@@ -328,25 +368,16 @@
         font-size: 10px;
         padding-top: 1px;
       }
-      .psc-result-field-value {
-        color: var(--hbr-color-text-body);
-        word-break: break-word;
-      }
-      .psc-result-field-value.psc-field-any {
-        color: #9ca3af;
-        font-style: italic;
-      }
+      .psc-result-field-value { color: var(--hbr-color-text-body); word-break: break-word; }
+      .psc-result-field-value.psc-field-any { color: #9ca3af; font-style: italic; }
 
       .psc-no-match-card {
         border: 1px solid var(--hbr-color-border);
         border-radius: var(--hbr-radius-lg);
-        padding: 14px;
+        padding: 14px 16px;
         background: #f9fafb;
         font-size: 12px;
         color: var(--hbr-color-text-weak);
-        display: flex;
-        gap: 8px;
-        align-items: flex-start;
       }
 
       /* Badges */
@@ -365,14 +396,11 @@
       .psc-badge-default {
         display: inline-flex;
         align-items: center;
-        padding: 2px 10px;
+        padding: 2px 8px;
         border-radius: var(--hbr-radius-pill);
         font-size: 10px;
         font-weight: 600;
-        letter-spacing: 0.04em;
         text-transform: uppercase;
-        white-space: nowrap;
-        flex-shrink: 0;
         background: #f3f4f6;
         color: var(--hbr-color-text-weak);
         border: 1px solid rgba(0,0,0,0.06);
@@ -384,11 +412,8 @@
         border-radius: var(--hbr-radius-pill);
         font-size: 10px;
         font-weight: 700;
-        letter-spacing: 0.03em;
         text-transform: uppercase;
         color: #fff;
-        flex-shrink: 0;
-        vertical-align: middle;
       }
       .psc-badge-findings {
         display: inline-flex;
@@ -397,9 +422,7 @@
         border-radius: var(--hbr-radius-pill);
         font-size: 10px;
         font-weight: 700;
-        letter-spacing: 0.02em;
         white-space: nowrap;
-        flex-shrink: 0;
         color: #fff;
       }
       .psc-badge-findings-clean {
@@ -409,77 +432,51 @@
         font-weight: 600;
       }
 
-      /* Highlight button */
-      #psc-highlight-btn {
-        margin-top: 12px;
-        padding: 6px 14px;
-        font-size: 11px;
-        font-weight: 600;
-        border: 1.5px solid var(--hbr-color-accent);
-        background: var(--hbr-color-accent-light);
-        color: var(--hbr-color-accent);
-        border-radius: var(--hbr-radius-md);
-        cursor: pointer;
-        font-family: inherit;
-        transition: background 0.15s;
-        display: inline-block;
-      }
-      #psc-highlight-btn:hover { background: #dbeafe; }
-
-      /* ================================================================== */
-      /* AUDIT SECTIONS                                                     */
-      /* ================================================================== */
-      #psc-audit-root {
+      /* Rules Filter Bar */
+      .psc-rules-filter-bar {
         display: flex;
         flex-direction: column;
-        gap: 0;
-      }
-
-      .psc-section {
-        border-top: 1px solid var(--hbr-color-border);
-        background: var(--hbr-color-bg-card);
-        font-size: 12px;
-      }
-      .psc-section summary {
-        display: flex;
-        align-items: center;
         gap: 8px;
-        padding: 12px 20px;
-        cursor: pointer;
-        font-weight: 600;
-        font-size: 12px;
-        list-style: none;
-        user-select: none;
-        color: var(--hbr-color-text-heading);
-        transition: background 0.15s;
+        margin-bottom: 12px;
       }
-      .psc-section summary:hover { background: rgba(0,0,0,0.02); }
-      .psc-section summary::-webkit-details-marker { display: none; }
-      .psc-section .psc-chevron {
-        margin-left: auto;
-        font-size: 10px;
-        color: var(--hbr-color-text-weak);
-        transition: transform 0.2s ease;
-      }
-      .psc-section[open] .psc-chevron { transform: rotate(180deg); }
-      .psc-section-body {
-        padding: 8px 20px 16px;
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-      }
-      .psc-empty { color: var(--hbr-color-text-weak); font-style: italic; font-size: 11.5px; }
-
-      .psc-good-item {
-        display: flex;
-        align-items: center;
-        gap: 7px;
-        padding: 6px 10px;
+      .psc-search-input {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid var(--hbr-color-border);
         border-radius: var(--hbr-radius-md);
-        background: #f0fdf4;
-        border: 1px solid #bbf7d0;
-        font-size: 11.5px;
-        color: #166534;
+        font-size: 12px;
+        font-family: inherit;
+        outline: none;
+        background: #fff;
+        transition: border-color 0.2s;
+      }
+      .psc-search-input:focus {
+        border-color: var(--hbr-color-accent);
+      }
+      .psc-filter-pills {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .psc-filter-pill {
+        background: #f3f4f6;
+        border: 1px solid rgba(0,0,0,0.06);
+        border-radius: var(--hbr-radius-pill);
+        padding: 4px 12px;
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--hbr-color-text-weak);
+        cursor: pointer;
+        transition: background 0.15s, color 0.15s;
+      }
+      .psc-filter-pill:hover {
+        background: #e5e7eb;
+        color: var(--hbr-color-text-heading);
+      }
+      .psc-filter-pill.active {
+        background: var(--hbr-color-accent);
+        color: #fff;
+        border-color: var(--hbr-color-accent);
       }
 
       /* Rule groups */
@@ -487,30 +484,27 @@
         border: 1px solid rgba(0,0,0,0.06);
         border-radius: var(--hbr-radius-lg);
         overflow: hidden;
-        margin-bottom: 4px;
+        margin-bottom: 6px;
         background: #fff;
         box-shadow: var(--glass-shadow-sm);
         transition: box-shadow 0.2s;
       }
-      .psc-rule-group:hover {
-        box-shadow: var(--glass-shadow);
-      }
+      .psc-rule-group:hover { box-shadow: var(--glass-shadow); }
       .psc-rule-group-header {
         display: flex;
         align-items: center;
         gap: 8px;
-        padding: 9px 12px;
+        padding: 10px 14px;
         cursor: pointer;
         font-weight: 600;
         font-size: 12px;
         background: #f9fafb;
         list-style: none;
         user-select: none;
-        border-bottom: 1px solid transparent;
         transition: background 0.15s;
       }
       .psc-rule-group-header:hover { background: #f3f4f6; }
-      .psc-rule-group[open] .psc-rule-group-header { border-bottom-color: rgba(0,0,0,0.06); }
+      .psc-rule-group[open] .psc-rule-group-header { border-bottom: 1px solid rgba(0,0,0,0.06); }
       .psc-rule-group-header::-webkit-details-marker { display: none; }
       .psc-rule-group-header .psc-chevron {
         margin-left: auto;
@@ -519,7 +513,7 @@
         transition: transform 0.2s ease;
       }
       .psc-rule-group[open] .psc-rule-group-header .psc-chevron { transform: rotate(180deg); }
-      .psc-check-list { padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; }
+      .psc-check-list { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
       .psc-check-item {
         border-left: 3px solid;
         padding: 6px 10px;
@@ -881,8 +875,6 @@
   function buildTesterPanel(container, identityOptions, objectMaps, identityTypeMap, identityMap, onRun, onReset) {
     injectStyles();
 
-    // Normalize objectMaps — support both the new multi-map structure and
-    // the legacy single objectMap (backward compat for older SW versions)
     const maps = objectMaps && objectMaps.privateResources ? objectMaps : {
       privateResources: objectMaps || {},
       destinationLists: {},
@@ -894,38 +886,20 @@
 
     const panel = el("div", { id: "psc-panel" });
 
-    // Title + description
+    // Header
     panel.appendChild(el("div", { id: "psc-panel-title" }, ["Policy Tester"]));
     panel.appendChild(el("div", { id: "psc-panel-desc" }, [
-      "Test whether a destination will be allowed or blocked for an identity. " +
-      "If you receive results you don't expect, reorder or refine your policies and run the test again."
+      "Simulate policy matching by selecting primary criteria below. Expand additional conditions if needed."
     ]));
 
     const body = el("div", { id: "psc-panel-body" });
-
-    // ---- TOP: Source + Destination side-by-side row ----
     const formRow = el("div", { id: "psc-form-row" });
 
-    // SOURCE panel
-    const sourceSection = el("div", { class: "psc-panel-section" });
-    sourceSection.appendChild(el("div", { class: "psc-panel-section-title" }, ["Source"]));
+    // --- 1. Essential Primary Criteria Card ---
+    const primaryCard = el("div", { class: "psc-essential-card" });
+    primaryCard.appendChild(el("div", { class: "psc-essential-title" }, ["Primary Criteria"]));
 
-    const sourceInput = el("input", {
-      id: "psc-src",
-      type: "text",
-      placeholder: "IP, CIDR, or IP:Port (e.g. 93.184.216.5:8080)",
-      autocomplete: "off",
-    });
-    sourceSection.appendChild(el("div", { class: "psc-field-group psc-field-group--first" }, [
-      el("label", { class: "psc-field-label", htmlFor: "psc-src" }, ["Source IP / CIDR"]),
-      el("span",  { class: "psc-field-hint" }, ["Enter IPv4 address, CIDR block, or IP:Port."]),
-      sourceInput,
-    ]));
-
-    // Identity — autocomplete dropdown using stored identity records
-    // identityOptions is a string[] from getIdentityOptions(rules) containing
-    // all identity IDs referenced by rules. Use identityMap (id → name) to
-    // show friendly labels in the dropdown while keeping the ID as the value.
+    // Identity Select
     const identityItems = {};
     if (Array.isArray(identityOptions)) {
       identityOptions.forEach(id => {
@@ -935,269 +909,143 @@
     }
     const identitySelect = createSearchableSelect(
       "Identity",
-      "Search identities (AD groups, users, devices).",
+      "Search user, AD group, or device...",
       "psc-identity",
       identityItems
     );
     identitySelect.input.disabled = false;
-    sourceSection.appendChild(el("div", { class: "psc-field-group" }, [
-      el("label", { class: "psc-field-label", htmlFor: "psc-identity" }, ["Identity"]),
-      el("span",  { class: "psc-field-hint" }, ["Select or search for an identity from your rules."]),
-      identitySelect.wrapper,
-    ]));
+    primaryCard.appendChild(identitySelect.element);
 
-    // Identity Type dropdown — tests umbrella.source.identity_type_ids
-    const identityTypeSelect = createSearchableSelect(
-      "Identity Type",
-      "Search identity types (e.g., AD Groups, Roaming Computers).",
-      "psc-identity-type",
-      identityTypeMap || {}
-    );
-    identityTypeSelect.input.disabled = false;
-    sourceSection.appendChild(identityTypeSelect.element);
-
-    // Source Refinement Divider
-    sourceSection.appendChild(el("div", { class: "psc-refine-divider" }, [
-      el("span", {}, ["Additional Sources "]),
-      el("span", { class: "psc-refine-divider-optional" }, ["(optional)"]),
-    ]));
-
-    const srcDropdownContainer = el("div", { id: "psc-src-refine-group" });
-    sourceSection.appendChild(srcDropdownContainer);
-
-    // Security Group Tag (SGT) — tests umbrella.source.any_security_group_tag / security_group_tag_ids
-    const sgtInput = el("input", {
-      id: "psc-sgt",
-      type: "text",
-      placeholder: "SGT Tag / ID (e.g. 10 or 'Sales_SGT')",
-      autocomplete: "off",
-    });
-    srcDropdownContainer.appendChild(el("div", { class: "psc-field-group" }, [
-      el("label", { class: "psc-field-label", htmlFor: "psc-sgt" }, ["Security Group Tag (SGT)"]),
-      el("span",  { class: "psc-field-hint" }, ["Enter SGT name, ID, or tag number."]),
-      sgtInput,
-    ]));
-
-    // Location / Network — tests umbrella.source.location_ids
-    const locInput = el("input", {
-      id: "psc-location",
-      type: "text",
-      placeholder: "Location name or ID (e.g. 'San Jose HQ')",
-      autocomplete: "off",
-    });
-    srcDropdownContainer.appendChild(el("div", { class: "psc-field-group" }, [
-      el("label", { class: "psc-field-label", htmlFor: "psc-location" }, ["Location / Branch"]),
-      el("span",  { class: "psc-field-hint" }, ["Enter location or branch office name/ID."]),
-      locInput,
-    ]));
-
-    // Internal Network — tests umbrella.source.internal_network_ids
-    const intNetInput = el("input", {
-      id: "psc-internal-net",
-      type: "text",
-      placeholder: "Internal Network name/ID (e.g. '10.10.0.0/16')",
-      autocomplete: "off",
-    });
-    srcDropdownContainer.appendChild(el("div", { class: "psc-field-group" }, [
-      el("label", { class: "psc-field-label", htmlFor: "psc-internal-net" }, ["Internal Network"]),
-      el("span",  { class: "psc-field-hint" }, ["Enter internal network range or ID."]),
-      intNetInput,
-    ]));
-
-    // Source Network Object / Group — tests networkObjectIds_shared / networkObjectGroupIds_shared
-    const srcNetObjSelect = createSearchableSelect(
-      "Source Network Object / Group",
-      "Search network objects (IP ranges, hosts, groups).",
-      "psc-netobj-src",
-      maps.networkObjects || {}
-    );
-    srcNetObjSelect.input.disabled = false;
-    srcDropdownContainer.appendChild(srcNetObjSelect.element);
-
-    // Network Tunnel — tests umbrella.source.tunnel_ids
-    const tunnelInput = el("input", {
-      id: "psc-tunnel",
-      type: "text",
-      placeholder: "Tunnel name or ID (e.g. 'IPsec-Branch-1')",
-      autocomplete: "off",
-    });
-    srcDropdownContainer.appendChild(el("div", { class: "psc-field-group" }, [
-      el("label", { class: "psc-field-label", htmlFor: "psc-tunnel" }, ["Network Tunnel"]),
-      el("span",  { class: "psc-field-hint" }, ["Enter IPsec or network tunnel name/ID."]),
-      tunnelInput,
-    ]));
-
-    // Device Posture Profile — tests umbrella.posture.*
-    const postureInput = el("input", {
-      id: "psc-posture",
-      type: "text",
-      placeholder: "Posture Profile (e.g. 'Encrypted_OS')",
-      autocomplete: "off",
-    });
-    srcDropdownContainer.appendChild(el("div", { class: "psc-field-group" }, [
-      el("label", { class: "psc-field-label", htmlFor: "psc-posture" }, ["Device Posture Profile"]),
-      el("span",  { class: "psc-field-hint" }, ["Enter posture profile or compliance state."]),
-      postureInput,
-    ]));
-
-    // Network Device — tests umbrella.source.network_device_ids
-    const netDevInput = el("input", {
-      id: "psc-network-device",
-      type: "text",
-      placeholder: "Network Device name or ID (e.g. 'Router-SJC-01')",
-      autocomplete: "off",
-    });
-    srcDropdownContainer.appendChild(el("div", { class: "psc-field-group" }, [
-      el("label", { class: "psc-field-label", htmlFor: "psc-network-device" }, ["Network Device"]),
-      el("span",  { class: "psc-field-hint" }, ["Enter network device hostname, IP, or ID."]),
-      netDevInput,
-    ]));
-
-    formRow.appendChild(sourceSection);
-
-    // DESTINATION panel
-    const destSection = el("div", { class: "psc-panel-section" });
-    destSection.appendChild(el("div", { class: "psc-panel-section-title" }, ["Destination"]));
-
+    // Destination IP / CIDR
     const destInput = el("input", {
       id: "psc-dest",
       type: "text",
-      placeholder: "IP, CIDR, or IP:Port (e.g. 93.184.216.5:8080)",
+      placeholder: "Destination IP, CIDR, or Domain (e.g. 10.0.0.1 or cisco.com)",
       autocomplete: "off",
     });
-    destSection.appendChild(el("div", { class: "psc-field-group psc-field-group--first" }, [
+    primaryCard.appendChild(el("div", { class: "psc-field-group" }, [
       el("label", { class: "psc-field-label", htmlFor: "psc-dest" }, ["Destination IP / CIDR"]),
-      el("span",  { class: "psc-field-hint" }, ["Enter IPv4 address, CIDR block, or IP:Port."]),
       destInput,
     ]));
 
-    // Visual divider marking the three dropdowns below as secondary
-    // refinements of the primary Destination IP/CIDR match, not equal-weight
-    // fields — reinforces IP-based Source/Destination matching as the core
-    // mental model. Purely presentational: matcher.js still evaluates all
-    // four with identical, full logical weight (see matchesRule()).
-    destSection.appendChild(el("div", { class: "psc-refine-divider" }, [
-      el("span", {}, ["Refine by "]),
-      el("span", { class: "psc-refine-divider-optional" }, ["(optional)"]),
+    // Application Select
+    const appSelect = createSearchableSelect("Internet Application", "Search applications...", "psc-app", {});
+    primaryCard.appendChild(appSelect.element);
+
+    formRow.appendChild(primaryCard);
+
+    // --- 2. Advanced Criteria Toggle & Container ---
+    const advToggleBtn = el("button", { type: "button", class: "psc-advanced-toggle" }, [
+      el("span", {}, ["⚙️ Additional Conditions (IP, Posture, SGT, Location...)"]),
+      el("span", { class: "psc-advanced-arrow" }, ["▼"])
+    ]);
+
+    const advContainer = el("div", { class: "psc-advanced-container" });
+
+    // Source Refinements
+    advContainer.appendChild(el("div", { class: "psc-advanced-section-title" }, ["Source Refinements"]));
+
+    const sourceInput = el("input", { id: "psc-src", type: "text", placeholder: "Source IP or CIDR (e.g. 192.168.1.50)", autocomplete: "off" });
+    advContainer.appendChild(el("div", { class: "psc-field-group" }, [
+      el("label", { class: "psc-field-label", htmlFor: "psc-src" }, ["Source IP / CIDR"]),
+      sourceInput,
     ]));
 
-    // New Dropdowns
-    const dropdownContainer = el("div", { id: "psc-refine-group" });
-    destSection.appendChild(dropdownContainer);
-    
-    // We will build them synchronously but disabled, then enable them
-    const appSelect = createSearchableSelect("Internet Application", "Search applications.", "psc-app", {});
-    const protoSelect = createSearchableSelect("Application Protocol", "Search protocols.", "psc-proto", {});
-    const catSelect = createSearchableSelect("Content Category", "Search categories.", "psc-cat", {});
+    const identityTypeSelect = createSearchableSelect("Identity Type", "Search identity types...", "psc-identity-type", identityTypeMap || {});
+    identityTypeSelect.input.disabled = false;
+    advContainer.appendChild(identityTypeSelect.element);
 
-    // Private Resource / Resource Group — tests Private Access rule
-    // destinations (private_resource_ids / private_resource_group_ids),
-    // e.g. "Segmented Devices". Unlike apps/protocols/categories above,
-    // objectMaps is live per-org data already resolved by RUN_SCAN's
-    // resolveObjectRefs() (see service-worker.js) and passed in as a
-    // parameter, not a separate static-JSON fetch — so this one doesn't
-    // need the disabled-then-async-enable pattern, it's populated and
-    // enabled immediately. maps.privateResources merges both
-    // private_resources and private_resource_groups into one { id: name }
-    // map; matcher.js's private_resource matching doesn't need to know
-    // which kind an ID is.
-    const privResSelect = createSearchableSelect(
-      "Private Resource / Resource Group",
-      "Search private resources or groups (Private Access rule destinations).",
-      "psc-privres",
-      maps.privateResources || {}
-    );
-    // createSearchableSelect() always starts its input disabled — a sane
-    // default for appSelect/protoSelect/catSelect, which start with zero
-    // items and only get enabled once loadLookups() resolves below. This
-    // one is different: objectMaps is already-resolved, fully-populated data
-    // by the time buildTesterPanel() is called (not a separate async fetch
-    // this function kicks off itself), so there's no later step that would
-    // otherwise flip this back on — has to be done explicitly right here.
+    const sgtInput = el("input", { id: "psc-sgt", type: "text", placeholder: "Security Group Tag / ID", autocomplete: "off" });
+    advContainer.appendChild(el("div", { class: "psc-field-group" }, [
+      el("label", { class: "psc-field-label", htmlFor: "psc-sgt" }, ["Security Group Tag (SGT)"]),
+      sgtInput,
+    ]));
+
+    const locInput = el("input", { id: "psc-location", type: "text", placeholder: "Location / Branch name or ID", autocomplete: "off" });
+    advContainer.appendChild(el("div", { class: "psc-field-group" }, [
+      el("label", { class: "psc-field-label", htmlFor: "psc-location" }, ["Location / Branch"]),
+      locInput,
+    ]));
+
+    const intNetInput = el("input", { id: "psc-internal-net", type: "text", placeholder: "Internal Network CIDR", autocomplete: "off" });
+    advContainer.appendChild(el("div", { class: "psc-field-group" }, [
+      el("label", { class: "psc-field-label", htmlFor: "psc-internal-net" }, ["Internal Network"]),
+      intNetInput,
+    ]));
+
+    const srcNetObjSelect = createSearchableSelect("Source Network Object", "Search network objects...", "psc-netobj-src", maps.networkObjects || {});
+    srcNetObjSelect.input.disabled = false;
+    advContainer.appendChild(srcNetObjSelect.element);
+
+    const tunnelInput = el("input", { id: "psc-tunnel", type: "text", placeholder: "Tunnel name or ID", autocomplete: "off" });
+    advContainer.appendChild(el("div", { class: "psc-field-group" }, [
+      el("label", { class: "psc-field-label", htmlFor: "psc-tunnel" }, ["Network Tunnel"]),
+      tunnelInput,
+    ]));
+
+    const postureInput = el("input", { id: "psc-posture", type: "text", placeholder: "Device Posture Profile", autocomplete: "off" });
+    advContainer.appendChild(el("div", { class: "psc-field-group" }, [
+      el("label", { class: "psc-field-label", htmlFor: "psc-posture" }, ["Device Posture Profile"]),
+      postureInput,
+    ]));
+
+    const netDevInput = el("input", { id: "psc-network-device", type: "text", placeholder: "Network Device hostname/IP", autocomplete: "off" });
+    advContainer.appendChild(el("div", { class: "psc-field-group" }, [
+      el("label", { class: "psc-field-label", htmlFor: "psc-network-device" }, ["Network Device"]),
+      netDevInput,
+    ]));
+
+    // Destination Refinements
+    advContainer.appendChild(el("div", { class: "psc-advanced-section-title", style: { marginTop: "8px" } }, ["Destination Refinements"]));
+
+    const protoSelect = createSearchableSelect("Application Protocol", "Search protocols...", "psc-proto", {});
+    const catSelect = createSearchableSelect("Content Category", "Search categories...", "psc-cat", {});
+    const privResSelect = createSearchableSelect("Private Resource", "Search private resources...", "psc-privres", maps.privateResources || {});
     privResSelect.input.disabled = false;
 
-    // Destination List — tests umbrella.destination.destination_list_ids
-    const destListSelect = createSearchableSelect(
-      "Destination List",
-      "Search destination lists (URL/domain/IP lists).",
-      "psc-destlist",
-      maps.destinationLists || {}
-    );
+    const destListSelect = createSearchableSelect("Destination List", "Search destination lists...", "psc-destlist", maps.destinationLists || {});
     destListSelect.input.disabled = false;
 
-    // Network Object — tests umbrella.destination.networkObjectIds
-    const netObjSelect = createSearchableSelect(
-      "Network Object",
-      "Search network objects (IP ranges, hosts).",
-      "psc-netobj",
-      maps.networkObjects || {}
-    );
+    const netObjSelect = createSearchableSelect("Network Object", "Search network objects...", "psc-netobj", maps.networkObjects || {});
     netObjSelect.input.disabled = false;
 
-    // Service Object Group — tests umbrella.destination.serviceObjectGroupIds
-    const svcObjSelect = createSearchableSelect(
-      "Service Object Group",
-      "Search service object groups (protocol/port combinations).",
-      "psc-svcobj",
-      maps.serviceObjectGroups || {}
-    );
+    const svcObjSelect = createSearchableSelect("Service Object Group", "Search service groups...", "psc-svcobj", maps.serviceObjectGroups || {});
     svcObjSelect.input.disabled = false;
 
-    // Application List — tests umbrella.destination.application_list_ids
-    const appListSelect = createSearchableSelect(
-      "Application List",
-      "Search application lists (predefined app groups).",
-      "psc-applist",
-      maps.applicationLists || {}
-    );
+    const appListSelect = createSearchableSelect("Application List", "Search application lists...", "psc-applist", maps.applicationLists || {});
     appListSelect.input.disabled = false;
 
-    // Category List — tests umbrella.destination.category_list_ids
-    const catListSelect = createSearchableSelect(
-      "Category List",
-      "Search category lists (predefined category groups).",
-      "psc-catlist",
-      maps.categoryLists || {}
-    );
+    const catListSelect = createSearchableSelect("Category List", "Search category lists...", "psc-catlist", maps.categoryLists || {});
     catListSelect.input.disabled = false;
 
-    dropdownContainer.appendChild(appSelect.element);
-    dropdownContainer.appendChild(protoSelect.element);
-    dropdownContainer.appendChild(catSelect.element);
-    dropdownContainer.appendChild(privResSelect.element);
-    dropdownContainer.appendChild(destListSelect.element);
-    dropdownContainer.appendChild(netObjSelect.element);
-    dropdownContainer.appendChild(svcObjSelect.element);
-    dropdownContainer.appendChild(appListSelect.element);
-    dropdownContainer.appendChild(catListSelect.element);
+    advContainer.appendChild(protoSelect.element);
+    advContainer.appendChild(catSelect.element);
+    advContainer.appendChild(privResSelect.element);
+    advContainer.appendChild(destListSelect.element);
+    advContainer.appendChild(netObjSelect.element);
+    advContainer.appendChild(svcObjSelect.element);
+    advContainer.appendChild(appListSelect.element);
+    advContainer.appendChild(catListSelect.element);
 
-    // Asynchronously populate from lookups
+    advToggleBtn.addEventListener("click", () => {
+      advToggleBtn.classList.toggle("active");
+      advContainer.classList.toggle("open");
+    });
+
+    formRow.appendChild(advToggleBtn);
+    formRow.appendChild(advContainer);
+    body.appendChild(formRow);
+
+    // Asynchronously populate lookups
     loadLookups().then(lookups => {
-      // Re-initialize with data by replacing the elements
-      const newAppSelect = createSearchableSelect("Internet Application", "Search applications.", "psc-app", lookups.apps);
-      const newProtoSelect = createSearchableSelect("Application Protocol", "Search protocols.", "psc-proto", lookups.protocols);
-      const newCatSelect = createSearchableSelect("Content Category", "Search categories.", "psc-cat", lookups.categories);
+      const newAppSelect = createSearchableSelect("Internet Application", "Search applications...", "psc-app", lookups.apps);
+      const newProtoSelect = createSearchableSelect("Application Protocol", "Search protocols...", "psc-proto", lookups.protocols);
+      const newCatSelect = createSearchableSelect("Content Category", "Search categories...", "psc-cat", lookups.categories);
       
       newAppSelect.input.disabled = false;
       newProtoSelect.input.disabled = false;
       newCatSelect.input.disabled = false;
       
-      dropdownContainer.innerHTML = "";
-      dropdownContainer.appendChild(newAppSelect.element);
-      dropdownContainer.appendChild(newProtoSelect.element);
-      dropdownContainer.appendChild(newCatSelect.element);
-      // These aren't re-created here — they're sourced from objectMaps
-      // (already populated at construction time), not loadLookups() — but
-      // the innerHTML reset clears the whole container, so they all have
-      // to be re-appended or they'd silently disappear from the form.
-      dropdownContainer.appendChild(privResSelect.element);
-      dropdownContainer.appendChild(destListSelect.element);
-      dropdownContainer.appendChild(netObjSelect.element);
-      dropdownContainer.appendChild(svcObjSelect.element);
-      dropdownContainer.appendChild(appListSelect.element);
-      dropdownContainer.appendChild(catListSelect.element);
-
-      // Update our closure refs
       appSelect.getValue = newAppSelect.getValue;
       protoSelect.getValue = newProtoSelect.getValue;
       catSelect.getValue = newCatSelect.getValue;
@@ -1206,12 +1054,8 @@
       catSelect.reset = newCatSelect.reset;
     });
 
-    formRow.appendChild(destSection);
-    body.appendChild(formRow);
-
-    // ---- Error line + Reset/Run Test — below the row, still above results ----
+    // Footer actions
     const formFooter = el("div", { id: "psc-form-footer" });
-
     const errorLine = el("p", { id: "psc-form-error" });
     formFooter.appendChild(errorLine);
 
@@ -1221,10 +1065,10 @@
 
     body.appendChild(formFooter);
 
-    // ---- BELOW: results panel, full width ----
+    // Results container
     const resultCol = el("div", { id: "psc-result-col" });
     const placeholder = el("div", { id: "psc-result-placeholder" }, [
-      "Test results will appear here"
+      "Select an identity or destination and click 'Run Test' to see matched policy rules."
     ]);
     resultCol.appendChild(placeholder);
     body.appendChild(resultCol);
@@ -1232,20 +1076,19 @@
     panel.appendChild(body);
     container.appendChild(panel);
 
-    // ---- updateResult — called by popup.js after matchPolicy() ----
     function updateResult(result) {
       resultCol.innerHTML = "";
 
       if (!result) {
         resultCol.appendChild(el("div", { id: "psc-result-placeholder" }, [
-          "Test results will appear here"
+          "Select an identity or destination and click 'Run Test' to see matched policy rules."
         ]));
         return;
       }
 
       if (result === "NO_MATCH") {
         resultCol.appendChild(el("div", { class: "psc-no-match-card" }, [
-          el("span", {}, ["No matching rule found — default action applies."]),
+          el("span", {}, ["⚠️ No specific rule matched — default organization action applies."]),
         ]));
         return;
       }
@@ -1254,34 +1097,24 @@
       const displayName   = rule.ruleName   || rule.name   || "(unnamed)";
       const displayAction = rule.ruleAction || rule.action || "unknown";
       const displayPrio   = rule.rulePriority !== undefined ? rule.rulePriority : rule.order;
-      const displayId     = rule.ruleId      !== undefined ? rule.ruleId      : rule.id;
-      const displayIsDefault = rule.ruleIsDefault !== undefined ? rule.ruleIsDefault === true : rule.is_default === true;
 
       const actionKey  = displayAction.toLowerCase();
-      const headerCls  = actionKey === "allow"   ? "psc-result-allow"
-                       : actionKey === "block"   ? "psc-result-block"
-                       : actionKey === "isolate" ? "psc-result-isolate"
-                       : "psc-result-unknown";
+      const bannerCls  = actionKey === "allow"   ? "psc-hero-allow"
+                       : actionKey === "block"   ? "psc-hero-block"
+                       : actionKey === "isolate" ? "psc-hero-isolate"
+                       : "psc-hero-unknown";
 
-      const headerRow = el("div", { class: `psc-result-header ${headerCls}` }, [
-          el("span", {}, [displayName]),
-          actionBadge(displayAction),
+      const heroBanner = el("div", { class: `psc-hero-banner ${bannerCls}` }, [
+        el("div", { class: "psc-hero-info" }, [
+          el("div", { class: "psc-hero-rule-title" }, [displayName]),
+          el("div", { class: "psc-hero-rule-sub" }, [
+            el("span", {}, [`Priority ${displayPrio}`]),
+            rule.logging_enabled ? el("span", {}, ["• Logging On"]) : null,
+          ].filter(Boolean)),
+        ]),
+        el("div", { class: "psc-hero-action-badge" }, [displayAction]),
       ]);
-      {
-        const enabledVal = rule.ruleIsEnabled !== undefined ? rule.ruleIsEnabled : rule.enabled;
-        addTooltip(headerRow,
-          `${displayName} — Priority ${displayPrio} — ${displayAction.toUpperCase()}\n` +
-          `Enabled: ${enabledVal ? "Yes" : "No"} · Logging: ${rule.logging_enabled ? "Enabled" : "Disabled"}`
-        );
-      }
 
-      // Clean label:value field grid (source/identity/destination/app),
-      // replacing the old arrow-bullet "Matched because" text list — see
-      // matchFields in matcher.js's matchesRule(). Each row's value already
-      // carries resolved names (identity/category/app IDs) via
-      // resolveDisplayValue(), not raw IDs. Falls back to the old freeform
-      // list only if matchFields is missing for some reason (defensive —
-      // shouldn't happen for a matched:true result).
       function fieldRow(field) {
         const rowCls   = field.constrained ? "psc-result-field-row" : "psc-result-field-row psc-field-unconstrained";
         const valueCls = field.constrained ? "psc-result-field-value" : "psc-result-field-value psc-field-any";
@@ -1291,7 +1124,7 @@
         ]);
       }
 
-      const matchedSection = matchFields
+      const matchedGrid = matchFields
         ? el("div", { class: "psc-result-fields" }, [
             fieldRow(matchFields.source),
             fieldRow(matchFields.identity),
@@ -1299,45 +1132,37 @@
             fieldRow(matchFields.app),
           ])
         : el("ul", { class: "psc-result-cond-list" },
-            matchedConditions.map((c) => {
-              const li = el("li", {}, [c]);
-              const conds = rule.ruleConditions || rule.conditions || [];
-              const matchCond = conds.find(cond => c.includes(cond.attributeName));
-              if (matchCond) addTooltip(li, describeCondition(matchCond));
-              return li;
-            })
+            matchedConditions.map((c) => el("li", {}, [c]))
           );
 
-      // No unconditional "Priority: X" line — that's already visible in the
-      // dashboard's own "#" column, right there under this same panel.
-      // Only shown for default/catch-all rules, since "always evaluated
-      // last" is genuinely new context the dashboard doesn't spell out (it
-      // just places them under a separate "Default rules" heading) — same
-      // reasoning as the Rules tab card's meta line above.
-      const bodyChildren = [];
-      if (displayIsDefault) {
-        bodyChildren.push(el("div", { class: "psc-result-meta" }, [
-          "Default rule (always evaluated last)"
-        ]));
-      }
-      bodyChildren.push(
-        el("div", { class: "psc-result-cond-title" }, ["Matched because"]),
-        matchedSection
-      );
+      const summaryText = matchFields
+        ? `${matchFields.identity.constrained ? matchFields.identity.display : 'Any Identity'} ➔ ${matchFields.destination.constrained ? matchFields.destination.display : (matchFields.app.constrained ? matchFields.app.display : 'Any Traffic')}`
+        : "Matched rule conditions";
 
-      const card = el("div", { class: "psc-result-card" }, [
-        headerRow,
-        el("div", { class: "psc-result-body" }, bodyChildren),
+      const summaryBox = el("div", { class: "psc-summary-box" }, [
+        el("strong", {}, ["Match Summary: "]),
+        summaryText
       ]);
 
-      // No "Highlight on page" button anymore — popup.js now highlights the
-      // matched row (and scrolls to it) automatically right after Run Test,
-      // and minimizes the embedded panel so the highlighted row is visible.
-      // See popup.js's onRun handler.
-      resultCol.appendChild(card);
+      const detailsElem = el("details", { class: "psc-result-details" }, [
+        el("summary", {}, ["🔍 View full condition breakdown ▼"]),
+        matchedGrid
+      ]);
+
+      const heroBody = el("div", { class: "psc-hero-body" }, [
+        summaryBox,
+        detailsElem
+      ]);
+
+      const heroCard = el("div", { class: "psc-hero-card" }, [
+        heroBanner,
+        heroBody
+      ]);
+
+      resultCol.appendChild(heroCard);
     }
 
-    // ---- wire buttons ----
+    // Wiring button listeners
     function parseIpInput(val, fieldName) {
       if (!val) return { ipCidr: "" };
       val = val.trim();
@@ -1351,30 +1176,7 @@
       }
       
       const parts = ipCidr.split("/");
-      if (parts.length > 2) return { error: `${fieldName}: Invalid format (multiple '/')`};
-      
-      const ip = parts[0];
-      const octets = ip.split(".");
-      if (octets.length !== 4) return { error: `${fieldName}: Invalid IPv4 address format (expected 4 octets)`};
-      
-      for (const oct of octets) {
-          const num = parseInt(oct, 10);
-          if (isNaN(num) || num < 0 || num > 255 || String(num) !== oct) {
-              return { error: `${fieldName}: Invalid IP octet '${oct}'` };
-          }
-      }
-      
-      if (parts.length === 2) {
-          const prefix = parseInt(parts[1], 10);
-          if (isNaN(prefix) || prefix < 0 || prefix > 32 || String(prefix) !== parts[1]) {
-              return { error: `${fieldName}: Invalid CIDR prefix '${parts[1]}'` };
-          }
-      }
-      
-      if (port !== null) {
-          const p = parseInt(port, 10);
-          if (p < 0 || p > 65535) return { error: `${fieldName}: Invalid port number '${port}'` };
-      }
+      if (parts.length > 2) return { error: `${fieldName}: Invalid format`};
       
       return { ipCidr, port };
     }
@@ -1408,20 +1210,11 @@
       }
 
       const srcParsed = parseIpInput(srcVal, "Source");
-      if (srcParsed.error) {
-        errorLine.textContent = srcParsed.error;
-        return;
-      }
-      
       const destParsed = parseIpInput(destVal, "Destination");
-      if (destParsed.error) {
-        errorLine.textContent = destParsed.error;
-        return;
-      }
 
       errorLine.textContent = "";
-      runBtn.disabled      = true;
-      runBtn.textContent   = "Testing…";
+      runBtn.disabled = true;
+      runBtn.textContent = "Testing…";
       
       const testInput = {
         source:                srcParsed.ipCidr,
@@ -1449,11 +1242,6 @@
       };
 
       setTimeout(() => {
-        // onRun is now async (it awaits PopupSections.loadLookups() before
-        // matching, so matchedConditions can show resolved names instead of
-        // raw IDs) — Promise.resolve()/.finally() so the button stays
-        // disabled for the whole await instead of flipping back to "Run
-        // Test" while the lookup fetch is still in flight.
         Promise.resolve(onRun(testInput)).finally(() => {
           runBtn.disabled = false;
           runBtn.textContent = "Run Test";
@@ -1462,7 +1250,7 @@
     });
 
     resetBtn.addEventListener("click", () => {
-      sourceInput.value   = "";
+      sourceInput.value = "";
       identitySelect.reset();
       appSelect.reset();
       protoSelect.reset();
@@ -1475,13 +1263,13 @@
       catListSelect.reset();
       identityTypeSelect.reset();
       srcNetObjSelect.reset();
-      sgtInput.value      = "";
-      locInput.value      = "";
-      intNetInput.value   = "";
-      tunnelInput.value   = "";
-      postureInput.value  = "";
-      netDevInput.value   = "";
-      destInput.value     = "";
+      sgtInput.value = "";
+      locInput.value = "";
+      intNetInput.value = "";
+      tunnelInput.value = "";
+      postureInput.value = "";
+      netDevInput.value = "";
+      destInput.value = "";
       errorLine.textContent = "";
       onReset();
     });
@@ -1489,23 +1277,7 @@
     return { panel, updateResult };
   }
 
-  let lookupsPromise = null;
-  function loadLookups() {
-    if (!lookupsPromise) {
-      lookupsPromise = Promise.all([
-        fetch("../data/categories-lookup.json").then(r => r.json()).catch(() => ({})),
-        fetch("../data/apps-lookup.json").then(r => r.json()).catch(() => ({})),
-        fetch("../data/protocols-lookup.json").then(r => r.json()).catch(() => ({}))
-      ]).then(([categories, apps, protocols]) => ({ categories, apps, protocols }));
-    }
-    return lookupsPromise;
-  }
-
-  // ---------------------------------------------------------------------------
-  // buildRulesList — single list of rules with inline findings or pass state
-  // Returns { update(rules, findings, identityMap) }
-  // ---------------------------------------------------------------------------
-  function buildRulesList(container) {
+function buildRulesList(container) {
     injectStyles();
 
     const root = el("div", { id: "psc-rules-list-root", style: { display: "flex", flexDirection: "column", gap: "10px", padding: "16px" } });
