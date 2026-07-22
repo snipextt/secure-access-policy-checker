@@ -7,20 +7,20 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
     />
     <style>
       /* ==================================================================== */
-      /* Futuristic Design Tokens                                             */
+      /* Black & White Monochrome Design Tokens                               */
       /* ==================================================================== */
       :root {
         --hbr-font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         --hbr-font-mono: "JetBrains Mono", monospace;
 
-        --hbr-radius-sm: 2px;
-        --hbr-radius-md: 2px;
-        --hbr-radius-lg: 2px;
-        --hbr-radius-pill: 2px;
+        --hbr-radius-sm: 0px;
+        --hbr-radius-md: 0px;
+        --hbr-radius-lg: 0px;
+        --hbr-radius-pill: 0px;
         --hbr-border-width: 1px;
 
         --hbr-space-xs: 4px;
@@ -28,22 +28,18 @@
         --hbr-space-md: 12px;
         --hbr-space-lg: 16px;
 
-        --hbr-color-bg-page: #070a12;
-        --hbr-color-bg-card: rgba(15, 23, 42, 0.92);
-        --hbr-color-bg-subtle: rgba(30, 41, 59, 0.5);
-        --hbr-color-text-body: #cbd5e1;
-        --hbr-color-text-heading: #f8fafc;
-        --hbr-color-text-weak: #64748b;
-        --hbr-color-border: #1e293b;
+        --hbr-color-bg-page: #000000;
+        --hbr-color-bg-card: #0d0d0d;
+        --hbr-color-bg-subtle: #171717;
+        --hbr-color-text-body: #d4d4d4;
+        --hbr-color-text-heading: #ffffff;
+        --hbr-color-text-weak: #888888;
+        --hbr-color-border: #262626;
 
-        --hbr-color-accent: #06b6d4;
-        --hbr-color-accent-hover: #0891b2;
-        --hbr-color-accent-light: rgba(6, 182, 212, 0.12);
-        --hbr-color-header: #0f172a;
-
-        --glass-blur: blur(16px);
-        --glass-shadow: 0 4px 20px rgba(0, 0, 0, 0.6), 0 0 1px rgba(6, 182, 212, 0.3);
-        --glass-shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.4);
+        --hbr-color-accent: #ffffff;
+        --hbr-color-accent-hover: #e5e5e5;
+        --hbr-color-accent-light: #1a1a1a;
+        --hbr-color-header: #0d0d0d;
       }
 
       *, *::before, *::after {
@@ -55,7 +51,7 @@
       body {
         font-family: var(--hbr-font-family);
         font-weight: 400;
-        background: #070a12;
+        background: #000000;
         width: 660px;
         color: var(--hbr-color-text-body);
         font-size: 12px;
@@ -72,22 +68,22 @@
       /* Header bar                                                         */
       /* ------------------------------------------------------------------ */
       .toolbar {
-        background: #0f172a;
+        background: #0d0d0d;
         display: flex;
         align-items: center;
         padding: 0 16px;
         height: 44px;
         gap: 10px;
-        border-bottom: 1px solid #1e293b;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+        border-bottom: 1px solid #262626;
       }
       .toolbar-logo {
-        font-size: 16px;
+        font-size: 14px;
         line-height: 1;
-        color: #06b6d4;
+        color: #ffffff;
+        font-weight: bold;
       }
       .toolbar-title {
-        color: #f8fafc;
+        color: #ffffff;
         font-size: 12px;
         font-weight: 700;
         letter-spacing: 0.08em;
@@ -97,20 +93,20 @@
       }
       .toolbar-close {
         background: transparent;
-        border: 1px solid #334155;
-        color: #94a3b8;
+        border: 1px solid #404040;
+        color: #a3a3a3;
         font-size: 14px;
         font-weight: 600;
         cursor: pointer;
         padding: 3px 8px;
-        border-radius: 2px;
+        border-radius: 0px;
         line-height: 1;
         transition: all 0.15s;
       }
       .toolbar-close:hover {
-        background: #ef4444;
-        color: #fff;
-        border-color: #ef4444;
+        background: #ffffff;
+        color: #000000;
+        border-color: #ffffff;
       }
 
       /* ------------------------------------------------------------------ */
@@ -118,20 +114,20 @@
       /* ------------------------------------------------------------------ */
       #error-banner {
         display: none;
-        background: rgba(239, 68, 68, 0.1);
-        color: #fca5a5;
+        background: #1a1a1a;
+        color: #ffffff;
         padding: 10px 16px;
         font-size: 11px;
-        border-bottom: 1px solid rgba(239, 68, 68, 0.3);
+        border-bottom: 1px solid #404040;
         align-items: center;
         gap: 10px;
         font-family: var(--hbr-font-mono);
       }
       #psc-retry-btn {
-        background: #06b6d4;
-        color: #070a12;
+        background: #ffffff;
+        color: #000000;
         border: none;
-        border-radius: 2px;
+        border-radius: 0px;
         padding: 4px 12px;
         font-size: 11px;
         font-weight: 700;
@@ -140,15 +136,15 @@
         flex-shrink: 0;
         text-transform: uppercase;
       }
-      #psc-retry-btn:hover { background: #22d3ee; }
+      #psc-retry-btn:hover { background: #e5e5e5; }
 
       /* ------------------------------------------------------------------ */
       /* Tabs                                                               */
       /* ------------------------------------------------------------------ */
       .tabs {
         display: flex;
-        background: #0f172a;
-        border-bottom: 1px solid #1e293b;
+        background: #0d0d0d;
+        border-bottom: 1px solid #262626;
         padding: 0 16px;
         gap: 4px;
       }
@@ -158,7 +154,7 @@
         padding: 11px 16px;
         font-size: 11px;
         font-weight: 700;
-        color: #64748b;
+        color: #737373;
         cursor: pointer;
         border-bottom: 2px solid transparent;
         transition: all 0.2s;
@@ -167,12 +163,12 @@
         letter-spacing: 0.06em;
       }
       .tab-btn:hover {
-        color: #cbd5e1;
+        color: #d4d4d4;
       }
       .tab-btn.active {
-        color: #06b6d4;
-        border-bottom-color: #06b6d4;
-        background: rgba(6, 182, 212, 0.05);
+        color: #ffffff;
+        border-bottom-color: #ffffff;
+        background: #171717;
       }
 
       /* ------------------------------------------------------------------ */
@@ -198,10 +194,10 @@
       }
       .psc-skeleton-line,
       .psc-skeleton-block {
-        background: linear-gradient(90deg, #1e293b 25%, #334155 37%, #1e293b 63%);
+        background: linear-gradient(90deg, #171717 25%, #262626 37%, #171717 63%);
         background-size: 800px 100%;
         animation: psc-skeleton-shimmer 1.6s ease-in-out infinite;
-        border-radius: 2px;
+        border-radius: 0px;
       }
       .psc-skeleton-line { height: 10px; margin-bottom: 12px; }
       .psc-skeleton-line.psc-skeleton-title { height: 14px; width: 40%; margin-bottom: 16px; }
@@ -215,7 +211,7 @@
 
     <!-- Top toolbar -->
     <div class="toolbar">
-      <span class="toolbar-logo">⚡</span>
+      <span class="toolbar-logo">█</span>
       <span class="toolbar-title">SECURE ACCESS // POLICY ENGINE</span>
       <button id="toolbar-close" class="toolbar-close" title="Close Panel">✕</button>
     </div>
