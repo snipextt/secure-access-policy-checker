@@ -313,55 +313,59 @@
 
     if (dimension === "identity") {
       const name = lookups.identities && lookups.identities[String(id)];
-      return name || `[unknown identity ${id}]`;
+      const typeLabel = lookups.identityTypes && lookups.identityTypes[String(id)];
+      return name || typeLabel || "Identity";
     }
 
     if (dimension === "app") {
       if (an.includes("category")) {
         const entry = lookups.categories && lookups.categories[id];
-        if (entry) return typeof entry === "object" ? entry.name : entry;
-        return `[unknown category ${id}]`;
+        if (entry) return typeof entry === "object" ? (entry.name || entry.label || "Content Category") : entry;
+        return "Content Category";
       }
       if (an.includes("application")) {
         if (lookups.apps && lookups.apps[id] !== undefined) return lookups.apps[id];
         if (lookups.protocols && lookups.protocols[id] !== undefined) return lookups.protocols[id];
-        return `[unknown app ${id}]`;
+        return "Internet Application";
       }
     }
 
     if (dimension === "destination" && an.includes("private_resource")) {
-      const name = lookups.objects && lookups.objects[String(id)];
-      return name || `Resource #${id}`;
+      const name = (lookups.privateResources && lookups.privateResources[String(id)]) || (lookups.objects && lookups.objects[String(id)]);
+      return name || "Private Resource";
     }
 
     if (dimension === "destination" && an.includes("destination_list")) {
       const name = lookups.destinationLists && lookups.destinationLists[String(id)];
-      return name || `[unknown destination list ${id}]`;
+      return name || "Destination List";
     }
 
     if (dimension === "destination" && (an.includes("network_object") || an.includes("networkobject"))) {
       const name = lookups.networkObjects && lookups.networkObjects[String(id)];
-      return name || `[unknown network object ${id}]`;
+      return name || "Network Object";
     }
 
     if (dimension === "destination" && (an.includes("service_object") || an.includes("serviceobject"))) {
       const name = lookups.serviceObjectGroups && lookups.serviceObjectGroups[String(id)];
-      return name || `[unknown service object group ${id}]`;
+      return name || "Service Object Group";
     }
 
     if (dimension === "destination" && an.includes("application_list")) {
       const name = lookups.applicationLists && lookups.applicationLists[String(id)];
-      return name || `[unknown application list ${id}]`;
+      return name || "Application List";
     }
 
     if (dimension === "destination" && an.includes("category_list")) {
       const name = lookups.categoryLists && lookups.categoryLists[String(id)];
-      return name || `[unknown category list ${id}]`;
+      return name || "Category List";
     }
 
-    // source/destination (IPs/CIDRs/FQDNs) and anything else: already
-    // human-readable, no lookup applies.
-    return String(id);
+    // IPs/CIDRs/FQDNs: return as-is if string containing domain/IP characters
+    if (typeof id === "string" && (id.includes(".") || id.includes(":") || id.includes("/") || /[a-z]/i.test(id))) {
+      return id;
+    }
+
+    return "Configured Destination";
   }
 
   function matchConditionValue(cond, dimension, testValue, testPort = null, lookups = {}, testInput = {}) {

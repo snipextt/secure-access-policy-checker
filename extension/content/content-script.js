@@ -545,7 +545,7 @@ function summarizeConditions(rule, lookups) {
         // back to raw.
         const identityNames = (Array.isArray(values) ? values : [values]).map((id) => {
           const name = lookups.identities && lookups.identities[String(id)];
-          return name || `[unknown identity ${id}]`;
+          return name || "Identity";
         });
         summaryText = `Identities: ${identityNames.join(", ")}`;
         break;
@@ -556,10 +556,10 @@ function summarizeConditions(rule, lookups) {
         // is keyed by bitfieldPosition for exactly this reason (see data/categories-lookup.json).
         const catNames = Array.isArray(values) ? values.map((id) => {
           const entry = lookups.categories[id];
-          if (!entry) return `[unknown category ${id}]`;
-          return typeof entry === "object" ? entry.name : entry;
+          if (!entry) return "Content Category";
+          return typeof entry === "object" ? (entry.name || entry.label || "Content Category") : entry;
         }) : [];
-        summaryText = `App Categories: ${catNames.length ? catNames.join(", ") : values}`;
+        summaryText = `App Categories: ${catNames.length ? catNames.join(", ") : "Content Categories"}`;
         break;
       case "umbrella.destination.application_ids": {
         // CONFIRMED via live API payload: umbrella.destination.application_ids is
@@ -581,8 +581,8 @@ function summarizeConditions(rule, lookups) {
         const parts = [];
         if (appMatches.length) parts.push(`Applications: ${appMatches.join(", ")}`);
         if (protoMatches.length) parts.push(`Protocols: ${protoMatches.join(", ")}`);
-        if (unresolved.length) parts.push(`Applications: ${unresolved.map((id) => `[unknown app ${id}]`).join(", ")}`);
-        summaryText = parts.length ? parts.join(" ; ") : `Applications: ${values}`;
+        if (unresolved.length) parts.push(`Applications: ${unresolved.map(() => "Internet Application").join(", ")}`);
+        summaryText = parts.length ? parts.join(" ; ") : "Applications: Configured Apps";
         break;
       }
       case "umbrella.destination.composite_inline_ip":
@@ -603,20 +603,14 @@ function summarizeConditions(rule, lookups) {
         }
         break;
       case "umbrella.destination.destination_list_ids": {
-        // CONFIRMED via live API payload (org 8176184). No lookup for destination-list
-        // names — falls back to plain English with the ID visible (see popup-sections.js
-        // for the primary copy of this case and its full comment).
-        const ids = Array.isArray(values) ? values : [values];
-        summaryText = ids.length === 1
-          ? `Matches a specific destination list (ID ${ids[0]})`
-          : `Matches specific destination lists (IDs ${ids.join(", ")})`;
+        summaryText = "Destination List";
         break;
       }
       case "umbrella.destination.appRiskProfileId": {
         const ids = Array.isArray(values) ? values : [values];
         const names = ids.map((id) => {
           const name = lookups.appRiskProfiles && lookups.appRiskProfiles[String(id)];
-          return name || `App Risk Profile #${String(id).substring(0, 8)}…`;
+          return name || "App Risk Profile";
         });
         summaryText = ids.length === 1
           ? `App Risk Profile: ${names[0]}`
@@ -650,14 +644,11 @@ function summarizeConditions(rule, lookups) {
       }
       case "umbrella.destination.private_resource_ids":
       case "umbrella.destination.private_resource_group_ids": {
-        // Resolved via resolveObjectRefs() in service-worker.js, fetched
-        // here through loadObjectMap()/GET_OBJECT_MAP (see popup-sections.js
-        // for the primary copy of this case and its full comment).
         const isGroup = type.endsWith("_group_ids");
         const label = isGroup ? "Private Resource Groups" : "Private Resources";
         const resNames = (Array.isArray(values) ? values : [values]).map((id) => {
           const name = lookups.objects && lookups.objects[String(id)];
-          return name || `[unknown resource ${id}]`;
+          return name || "Private Resource";
         });
         summaryText = `${label}: ${resNames.join(", ")}`;
         break;

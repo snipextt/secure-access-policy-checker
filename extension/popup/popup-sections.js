@@ -1647,7 +1647,7 @@
           case "umbrella.source.identity_ids":
           case "umbrella.source.identity_ids_shared": {
             const identityNames = (Array.isArray(values) ? values : [values]).map((id) => {
-              return lookupItemName(lookups.identities, id) || `Identity #${id}`;
+              return lookupItemName(lookups.identities, id) || "Identity";
             });
             summaryText = `Identity: ${identityNames.join(", ")}`;
             break;
@@ -1655,7 +1655,7 @@
           case "umbrella.source.identity_type_ids":
           case "umbrella.source.identity_type_ids_shared": {
             const typeNames = (Array.isArray(values) ? values : [values]).map((id) => {
-              return lookupItemName(lookups.identityTypes, id) || lookupItemName(DEFAULT_IDENTITY_TYPES, id) || `Type #${id}`;
+              return lookupItemName(lookups.identityTypes, id) || lookupItemName(DEFAULT_IDENTITY_TYPES, id) || "Identity Type";
             });
             summaryText = `Identity Type: ${typeNames.join(", ")}`;
             break;
@@ -1664,7 +1664,7 @@
             const appMatches = [];
             for (const id of Array.isArray(values) ? values : [values]) {
               const name = lookupItemName(lookups.apps, id) || lookupItemName(lookups.protocols, id);
-              appMatches.push(name || `App #${id}`);
+              appMatches.push(name || "Internet Application");
             }
             summaryText = `App: ${appMatches.join(", ")}`;
             break;
@@ -1674,7 +1674,7 @@
             const catMatches = [];
             for (const id of Array.isArray(values) ? values : [values]) {
               const name = lookupItemName(lookups.categories, id);
-              catMatches.push(name || `Category #${id}`);
+              catMatches.push(name || "Content Category");
             }
             summaryText = `Category: ${catMatches.join(", ")}`;
             break;
@@ -1684,7 +1684,7 @@
             const resMatches = [];
             for (const id of Array.isArray(values) ? values : [values]) {
               const name = lookupItemName(lookups.privateResources, id) || lookupItemName(lookups.objects, id);
-              resMatches.push(name || `Private Resource #${id}`);
+              resMatches.push(name || "Private Resource");
             }
             summaryText = `Private Resource: ${resMatches.join(", ")}`;
             break;
@@ -1693,7 +1693,7 @@
             const listMatches = [];
             for (const id of Array.isArray(values) ? values : [values]) {
               const name = lookupItemName(lookups.destinationLists, id);
-              listMatches.push(name || `Destination List #${id}`);
+              listMatches.push(name || "Destination List");
             }
             summaryText = `Destination List: ${listMatches.join(", ")}`;
             break;
@@ -1703,7 +1703,7 @@
             const objMatches = [];
             for (const id of Array.isArray(values) ? values : [values]) {
               const name = lookupItemName(lookups.networkObjects, id);
-              objMatches.push(name || `Network Object #${id}`);
+              objMatches.push(name || "Network Object");
             }
             summaryText = `Network Object: ${objMatches.join(", ")}`;
             break;
@@ -1713,7 +1713,7 @@
             const grpMatches = [];
             for (const id of Array.isArray(values) ? values : [values]) {
               const name = lookupItemName(lookups.networkObjects, id);
-              grpMatches.push(name || `Network Group #${id}`);
+              grpMatches.push(name || "Network Group");
             }
             summaryText = `Network Group: ${grpMatches.join(", ")}`;
             break;
@@ -1722,7 +1722,7 @@
             const grpMatches = [];
             for (const id of Array.isArray(values) ? values : [values]) {
               const name = lookupItemName(lookups.networkObjects, id);
-              grpMatches.push(name || `Network Group #${id}`);
+              grpMatches.push(name || "Network Group");
             }
             summaryText = `Network Group: ${grpMatches.join(", ")}`;
             break;
@@ -1731,7 +1731,7 @@
             const svcMatches = [];
             for (const id of Array.isArray(values) ? values : [values]) {
               const name = lookupItemName(lookups.serviceObjectGroups, id);
-              svcMatches.push(name || `Service Group #${id}`);
+              svcMatches.push(name || "Service Group");
             }
             summaryText = `Service Group: ${svcMatches.join(", ")}`;
             break;
@@ -1740,7 +1740,7 @@
             const listMatches = [];
             for (const id of Array.isArray(values) ? values : [values]) {
               const name = lookupItemName(lookups.applicationLists, id);
-              listMatches.push(name || `App List #${id}`);
+              listMatches.push(name || "Application List");
             }
             summaryText = `App List: ${listMatches.join(", ")}`;
             break;
