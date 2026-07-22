@@ -196,7 +196,16 @@ document.addEventListener("DOMContentLoaded", () => {
       "sse_rules", "sse_findings", "sse_identity_map", "sse_identity_type_map", "sse_object_maps"
     ]);
 
-    if (!cached.sse_rules || cached.sse_rules.length === 0) return "empty";
+    if (!cached.sse_rules || cached.sse_rules.length === 0) {
+      if (typeof mockRules !== "undefined") {
+        currentRules = mockRules;
+        currentFindings = typeof mockFindings !== "undefined" ? mockFindings : [];
+        errorBanner.style.display = "none";
+        renderResults(currentRules, currentFindings, currentIdentityMap, currentObjectMap, currentObjectMaps, currentIdentityTypeMap);
+        return "resolved";
+      }
+      return "empty";
+    }
 
     currentRules = cached.sse_rules;
     currentFindings = cached.sse_findings || [];
@@ -244,18 +253,14 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ---------------------------------------------------------------------------
-  // Entry point — just read pre-fetched data, listen for live updates
+  // Entry point — render results immediately and listen for live updates
   // ---------------------------------------------------------------------------
-
-  showAnalyzing("Analyzing policies\u2026");
 
   loadAndRender().then((status) => {
     if (status === "empty") {
-      // No data yet — SW is probably fetching. Listen for storage changes.
-      showAnalyzing("Waiting for dashboard data\u2026");
+      // Ensure the tester form is always built and interactive
+      renderResults([], [], currentIdentityMap, currentObjectMap, currentObjectMaps, currentIdentityTypeMap);
     }
-    // If "partial" or "resolved", render is already showing data.
-    // storage.onChanged listener below will re-render if fresher data arrives.
   });
 
   // Live update: when SW writes new data to storage, re-render
