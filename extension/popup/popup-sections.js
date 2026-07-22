@@ -617,6 +617,28 @@
         max-width: 100%;
         min-width: 0;
       }
+      .psc-rule-meta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 4px;
+        width: 100%;
+        max-width: 100%;
+      }
+      .psc-rule-meta-chip {
+        font-size: 9px;
+        font-weight: 600;
+        color: #64748b;
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        border-radius: 2px;
+        padding: 2px 6px;
+        font-family: var(--hbr-font-mono, monospace);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
       .psc-rule-prio {
         font-family: var(--hbr-font-mono, monospace);
         font-size: 10px;
@@ -1745,6 +1767,26 @@
           el("span", { class: "psc-rule-name" }, [rName]),
           el("span", { class: `psc-rule-action-pill ${actionCls}` }, [rAction.toUpperCase()]),
         ]);
+
+        // Rich metadata row — description, ruleset, modified date, external ID
+        const rawRule = rule.raw || rule;
+        const metaFields = [];
+        if (rawRule.ruleDescription) metaFields.push({ label: "DESC", value: rawRule.ruleDescription });
+        if (rawRule.rulesetName) metaFields.push({ label: "RULESET", value: rawRule.rulesetName });
+        if (rawRule.modifiedAt) {
+          const d = new Date(rawRule.modifiedAt);
+          metaFields.push({ label: "MODIFIED", value: d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) });
+        }
+        if (rawRule.ruleExternalId) metaFields.push({ label: "EXT ID", value: String(rawRule.ruleExternalId) });
+        if (rawRule.ruleIName) metaFields.push({ label: "I-NAME", value: rawRule.ruleIName });
+
+        if (metaFields.length > 0) {
+          const metaRow = el("div", { class: "psc-rule-meta-row" });
+          metaFields.slice(0, 3).forEach(m => {
+            metaRow.appendChild(el("span", { class: "psc-rule-meta-chip" }, [`${m.label}: ${m.value}`]));
+          });
+          topBar.appendChild(metaRow);
+        }
 
         // Inline Data Chips Bar
         const inlineChips = el("div", { class: "psc-inline-chips" });
