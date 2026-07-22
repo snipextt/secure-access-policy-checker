@@ -917,12 +917,6 @@
     };
 
     const panel = el("div", { id: "psc-panel" });
-
-    panel.appendChild(el("div", { id: "psc-panel-title" }, ["SIMULATE TRAFFIC MATCH"]));
-    panel.appendChild(el("div", { id: "psc-panel-desc" }, [
-      "Default mode evaluates Source/Destination IP:Port. Toggle advanced criteria to expand Identity or App filters."
-    ]));
-
     const body = el("div", { id: "psc-panel-body" });
     const formRow = el("div", { id: "psc-form-row" });
 
@@ -953,17 +947,21 @@
       destInput,
     ]));
 
-    formRow.appendChild(ipFieldsRow);
+    // Helper: wrap a plain input in a field group component object
+    function createFieldGroup(labelStr, input) {
+      const element = el("div", { class: "psc-field-group" }, [
+        el("label", { class: "psc-field-label", htmlFor: input.id }, [labelStr]),
+        input
+      ]);
+      return {
+        element,
+        input,
+        getValue: () => input.value.trim(),
+        reset: () => { input.value = ""; }
+      };
+    }
 
-    // --- 2. TOGGLEABLE ADVANCED SOURCE CRITERIA ---
-    const srcAdvToggle = el("button", { type: "button", class: "psc-toggle-btn", id: "psc-toggle-src-adv" }, [
-      el("span", {}, ["+ ADVANCED SOURCE CRITERIA"]),
-      el("span", { class: "psc-toggle-arrow" }, ["▼"])
-    ]);
-
-    const srcAdvBox = el("div", { class: "psc-advanced-box", id: "psc-src-adv-box" });
-
-    // Identity Select
+    // Source inputs
     const identityItems = {};
     if (Array.isArray(identityOptions)) {
       identityOptions.forEach(id => {
@@ -973,111 +971,60 @@
     }
     const identitySelect = createSearchableSelect("Identity", "Search AD user, group, or device name...", "psc-identity", identityItems);
     identitySelect.input.disabled = false;
-    srcAdvBox.appendChild(identitySelect.element);
 
     const mergedIdentityTypeMap = Object.assign({}, DEFAULT_IDENTITY_TYPES, identityTypeMap || {});
     const identityTypeSelect = createSearchableSelect("Identity Type", "Search identity type by name...", "psc-identity-type", mergedIdentityTypeMap);
     identityTypeSelect.input.disabled = false;
-    srcAdvBox.appendChild(identityTypeSelect.element);
 
-    const sgtInput = el("input", { id: "psc-sgt", type: "text", placeholder: "Search Security Group Tag name...", autocomplete: "off" });
-    srcAdvBox.appendChild(el("div", { class: "psc-field-group" }, [
-      el("label", { class: "psc-field-label", htmlFor: "psc-sgt" }, ["Security Group Tag (SGT)"]),
-      sgtInput
-    ]));
-
-    const locInput = el("input", { id: "psc-location", type: "text", placeholder: "Search Location / Branch name...", autocomplete: "off" });
-    srcAdvBox.appendChild(el("div", { class: "psc-field-group" }, [
-      el("label", { class: "psc-field-label", htmlFor: "psc-location" }, ["Location / Branch"]),
-      locInput
-    ]));
-
-    const intNetInput = el("input", { id: "psc-internal-net", type: "text", placeholder: "Internal Network CIDR or name...", autocomplete: "off" });
-    srcAdvBox.appendChild(el("div", { class: "psc-field-group" }, [
-      el("label", { class: "psc-field-label", htmlFor: "psc-internal-net" }, ["Internal Network"]),
-      intNetInput
-    ]));
-
+    const sgtField = createFieldGroup("Security Group Tag (SGT)", el("input", { id: "psc-sgt", type: "text", placeholder: "Search Security Group Tag name...", autocomplete: "off" }));
+    const locField = createFieldGroup("Location / Branch", el("input", { id: "psc-location", type: "text", placeholder: "Search Location / Branch name...", autocomplete: "off" }));
+    const intNetField = createFieldGroup("Internal Network", el("input", { id: "psc-internal-net", type: "text", placeholder: "Internal Network CIDR or name...", autocomplete: "off" }));
     const srcNetObjSelect = createSearchableSelect("Source Network Object", "Search network object by name...", "psc-netobj-src", maps.networkObjects || {});
     srcNetObjSelect.input.disabled = false;
-    srcAdvBox.appendChild(srcNetObjSelect.element);
+    const tunnelField = createFieldGroup("Network Tunnel", el("input", { id: "psc-tunnel", type: "text", placeholder: "Search Network Tunnel by name...", autocomplete: "off" }));
+    const postureField = createFieldGroup("Device Posture Profile", el("input", { id: "psc-posture", type: "text", placeholder: "Search Device Posture Profile name...", autocomplete: "off" }));
+    const netDevField = createFieldGroup("Network Device", el("input", { id: "psc-network-device", type: "text", placeholder: "Search Network Device hostname or IP...", autocomplete: "off" }));
 
-    const tunnelInput = el("input", { id: "psc-tunnel", type: "text", placeholder: "Search Network Tunnel by name...", autocomplete: "off" });
-    srcAdvBox.appendChild(el("div", { class: "psc-field-group" }, [
-      el("label", { class: "psc-field-label", htmlFor: "psc-tunnel" }, ["Network Tunnel"]),
-      tunnelInput
-    ]));
-
-    const postureInput = el("input", { id: "psc-posture", type: "text", placeholder: "Search Device Posture Profile name...", autocomplete: "off" });
-    srcAdvBox.appendChild(el("div", { class: "psc-field-group" }, [
-      el("label", { class: "psc-field-label", htmlFor: "psc-posture" }, ["Device Posture Profile"]),
-      postureInput
-    ]));
-
-    const netDevInput = el("input", { id: "psc-network-device", type: "text", placeholder: "Search Network Device hostname or IP...", autocomplete: "off" });
-    srcAdvBox.appendChild(el("div", { class: "psc-field-group" }, [
-      el("label", { class: "psc-field-label", htmlFor: "psc-network-device" }, ["Network Device"]),
-      netDevInput
-    ]));
-
-    srcAdvToggle.addEventListener("click", () => {
-      srcAdvToggle.classList.toggle("active");
-      srcAdvBox.classList.toggle("open");
-    });
-
-    formRow.appendChild(srcAdvToggle);
-    formRow.appendChild(srcAdvBox);
-
-    // --- 3. TOGGLEABLE ADVANCED DESTINATION CRITERIA ---
-    const dstAdvToggle = el("button", { type: "button", class: "psc-toggle-btn", id: "psc-toggle-dst-adv" }, [
-      el("span", {}, ["+ ADVANCED DESTINATION CRITERIA"]),
-      el("span", { class: "psc-toggle-arrow" }, ["▼"])
-    ]);
-
-    const dstAdvBox = el("div", { class: "psc-advanced-box", id: "psc-dst-adv-box" });
-
+    // Destination inputs
     const appSelect = createSearchableSelect("Internet Application", "Search applications by name...", "psc-app", {});
     const protoSelect = createSearchableSelect("Application Protocol", "Search protocols by name...", "psc-proto", {});
     const catSelect = createSearchableSelect("Content Category", "Search categories by name...", "psc-cat", {});
     const privResSelect = createSearchableSelect("Private Resource", "Search private resources by name...", "psc-privres", maps.privateResources || {});
     privResSelect.input.disabled = false;
-
     const destListSelect = createSearchableSelect("Destination List", "Search destination lists by name...", "psc-destlist", maps.destinationLists || {});
     destListSelect.input.disabled = false;
-
     const netObjSelect = createSearchableSelect("Network Object", "Search network objects by name...", "psc-netobj", maps.networkObjects || {});
     netObjSelect.input.disabled = false;
-
     const svcObjSelect = createSearchableSelect("Service Object Group", "Search service groups by name...", "psc-svcobj", maps.serviceObjectGroups || {});
     svcObjSelect.input.disabled = false;
-
     const appListSelect = createSearchableSelect("Application List", "Search application lists by name...", "psc-applist", maps.applicationLists || {});
     appListSelect.input.disabled = false;
-
     const catListSelect = createSearchableSelect("Category List", "Search category lists by name...", "psc-catlist", maps.categoryLists || {});
     catListSelect.input.disabled = false;
 
-    dstAdvBox.appendChild(appSelect.element);
-    dstAdvBox.appendChild(protoSelect.element);
-    dstAdvBox.appendChild(catSelect.element);
-    dstAdvBox.appendChild(privResSelect.element);
-    dstAdvBox.appendChild(destListSelect.element);
-    dstAdvBox.appendChild(netObjSelect.element);
-    dstAdvBox.appendChild(svcObjSelect.element);
-    dstAdvBox.appendChild(appListSelect.element);
-    dstAdvBox.appendChild(catListSelect.element);
-
-    dstAdvToggle.addEventListener("click", () => {
-      dstAdvToggle.classList.toggle("active");
-      dstAdvBox.classList.toggle("open");
-    });
-
-    formRow.appendChild(dstAdvToggle);
-    formRow.appendChild(dstAdvBox);
+    // Component map for all toggleable criteria
+    const inputMap = {
+      identity: identitySelect,
+      identityType: identityTypeSelect,
+      sgt: sgtField,
+      location: locField,
+      internalNetwork: intNetField,
+      networkObject: srcNetObjSelect,
+      tunnel: tunnelField,
+      posture: postureField,
+      networkDevice: netDevField,
+      app: appSelect,
+      protocol: protoSelect,
+      category: catSelect,
+      privateResource: privResSelect,
+      destinationList: destListSelect,
+      netObject: netObjSelect,
+      serviceObject: svcObjSelect,
+      appList: appListSelect,
+      catList: catListSelect,
+    };
 
     // --- 4. SETTINGS POPOVER (top, next to source/destination) ---
-    // A toggle button that opens a popover listing all available fields.
-    // Enabled fields render vertically below the source/destination row.
     const settingsToggle = el("button", {
       type: "button",
       class: "psc-settings-toggle",
@@ -1089,7 +1036,7 @@
 
     const settingsPopover = el("div", { class: "psc-settings-popover", id: "psc-settings-popover" });
 
-    // Settings toggles for additional source/destination fields
+    // Settings toggles definition
     const settingsToggles = {
       identity: { label: "Identity", enabled: true, category: "source" },
       identityType: { label: "Identity Type", enabled: true, category: "source" },
@@ -1114,6 +1061,30 @@
     // Group settings by category
     const sourceSettings = Object.entries(settingsToggles).filter(([_, cfg]) => cfg.category === "source");
     const destSettings = Object.entries(settingsToggles).filter(([_, cfg]) => cfg.category === "destination");
+
+    // Helper: create a setting row with toggle
+    function createSettingRow(key, cfg) {
+      const toggle = el("div", {
+        class: "psc-setting-toggle" + (cfg.enabled ? " active" : ""),
+        "data-setting": key
+      });
+      toggle.addEventListener("click", () => {
+        toggle.classList.toggle("active");
+        const isActive = toggle.classList.contains("active");
+        cfg.enabled = isActive;
+        const sel = inputMap[key];
+        if (sel && sel.input) {
+          sel.input.disabled = !isActive;
+        }
+        renderEnabledFields();
+      });
+
+      const row = el("div", { class: "psc-setting-row" }, [
+        el("label", { class: "psc-setting-label" }, [cfg.label]),
+        toggle
+      ]);
+      return row;
+    }
 
     const sourceGroup = el("div", { class: "psc-settings-group" });
     sourceGroup.appendChild(el("div", { class: "psc-settings-group-title" }, ["SOURCE FIELDS"]));
@@ -1146,42 +1117,10 @@
     // Container for vertically rendered enabled fields
     const enabledFieldsContainer = el("div", { class: "psc-enabled-fields", id: "psc-enabled-fields" });
 
-    // Insert settings toggle at the top of formRow, before ipFieldsRow
-    formRow.insertBefore(settingsToggle, ipFieldsRow);
-    formRow.appendChild(settingsPopover);
-    formRow.appendChild(enabledFieldsContainer);
-
-    // Helper: create a setting row with toggle
-    function createSettingRow(key, cfg) {
-      const toggle = el("div", {
-        class: "psc-setting-toggle" + (cfg.enabled ? " active" : ""),
-        "data-setting": key
-      });
-      toggle.addEventListener("click", () => {
-        toggle.classList.toggle("active");
-        const isActive = toggle.classList.contains("active");
-        // Enable/disable the corresponding input
-        const sel = inputMap[key];
-        if (sel && sel.input) {
-          sel.input.disabled = !isActive;
-        }
-        // Re-render enabled fields vertically
-        renderEnabledFields();
-      });
-
-      const row = el("div", { class: "psc-setting-row" }, [
-        el("label", { class: "psc-setting-label" }, [cfg.label]),
-        toggle
-      ]);
-      return row;
-    }
-
-    // Render enabled fields vertically in the container
     function renderEnabledFields() {
       enabledFieldsContainer.innerHTML = "";
       Object.entries(settingsToggles).forEach(([key, cfg]) => {
-        const toggle = settingsPopover.querySelector(`[data-setting="${key}"]`);
-        if (toggle && toggle.classList.contains("active")) {
+        if (cfg.enabled) {
           const sel = inputMap[key];
           if (sel && sel.element) {
             enabledFieldsContainer.appendChild(sel.element);
@@ -1190,30 +1129,22 @@
       });
     }
 
-    // Initialize: render enabled fields on load
-    setTimeout(renderEnabledFields, 100);
+    // Top control bar (Title/Desc + Settings Popover Button)
+    const topHeaderRow = el("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", position: "relative", marginBottom: "8px" } }, [
+      el("div", {}, [
+        el("div", { id: "psc-panel-title" }, ["SIMULATE TRAFFIC MATCH"]),
+        el("div", { id: "psc-panel-desc" }, ["Default mode evaluates Source/Destination IP:Port. Toggle field settings to enable additional criteria."])
+      ]),
+      settingsToggle
+    ]);
 
-    // inputMap needs to be defined before createSettingRow uses it
-    var inputMap = {
-      identity: identitySelect,
-      identityType: identityTypeSelect,
-      sgt: sgtInput,
-      location: locInput,
-      internalNetwork: intNetInput,
-      networkObject: srcNetObjSelect,
-      tunnel: tunnelInput,
-      posture: postureInput,
-      networkDevice: netDevInput,
-      app: appSelect,
-      protocol: protoSelect,
-      category: catSelect,
-      privateResource: privResSelect,
-      destinationList: destListSelect,
-      netObject: netObjSelect,
-      serviceObject: svcObjSelect,
-      appList: appListSelect,
-      catList: catListSelect,
-    };
+    formRow.appendChild(topHeaderRow);
+    formRow.appendChild(settingsPopover);
+    formRow.appendChild(ipFieldsRow);
+    formRow.appendChild(enabledFieldsContainer);
+    body.appendChild(formRow);
+
+    renderEnabledFields();
 
     // Asynchronously populate lookups
     loadLookups().then(lookups => {
@@ -1371,13 +1302,13 @@
       const identityTypeIdVal = identityTypeSelect.getValue();
       const identityVal = identitySelect.getValue();
 
-      const sgtVal = sgtInput.value.trim();
-      const locVal = locInput.value.trim();
-      const intNetVal = intNetInput.value.trim();
+      const sgtVal = sgtField.getValue();
+      const locVal = locField.getValue();
+      const intNetVal = intNetField.getValue();
       const srcNetObjId = srcNetObjSelect.getValue();
-      const tunnelVal = tunnelInput.value.trim();
-      const postureVal = postureInput.value.trim();
-      const netDevVal = netDevInput.value.trim();
+      const tunnelVal = tunnelField.getValue();
+      const postureVal = postureField.getValue();
+      const netDevVal = netDevField.getValue();
 
       if (!srcVal && !destVal && !appId && !protoId && !catId && !identityVal && !identityTypeIdVal && !privResId && !destListId && !netObjId && !svcObjId && !appListId && !catListId && !sgtVal && !locVal && !intNetVal && !srcNetObjId && !tunnelVal && !postureVal && !netDevVal) {
         errorLine.textContent = "SELECT AT LEAST ONE CRITERION.";
@@ -1438,12 +1369,12 @@
       catListSelect.reset();
       identityTypeSelect.reset();
       srcNetObjSelect.reset();
-      sgtInput.value = "";
-      locInput.value = "";
-      intNetInput.value = "";
-      tunnelInput.value = "";
-      postureInput.value = "";
-      netDevInput.value = "";
+      sgtField.reset();
+      locField.reset();
+      intNetField.reset();
+      tunnelField.reset();
+      postureField.reset();
+      netDevField.reset();
       destInput.value = "";
       errorLine.textContent = "";
       onReset();
