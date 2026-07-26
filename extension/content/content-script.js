@@ -359,7 +359,7 @@ function ensureHoverPopoverStyle() {
       max-width: 320px;
       background: #FFFFFF;
       border: 1px solid #E1E4E8;
-      border-radius: 0.50rem;
+      border-radius: 0;
       box-shadow: 0 6px 20px rgba(0,0,0,0.18);
       font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       font-weight: 400;
@@ -908,25 +908,10 @@ function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSumma
 
   if (hasReasons) {
     appendMatchReasonSection(body, testMatchReasons);
-  } else {
-    // "What this rule matches" — below findings, same summarizeConditions()
-    // output as the Rules tab card's "WHAT WILL USUALLY MATCH" section.
-    const matchTitle = document.createElement("div");
-    matchTitle.className = "sec-hp-match-title";
-    matchTitle.textContent = "What this rule matches";
-    body.appendChild(matchTitle);
-
-    const matchWrap = document.createElement("div");
-    matchWrap.className = "sec-hp-match";
-    const summaries = matchSummary || [{ text: "Match summary unavailable.", raw: null }];
-    for (const mc of summaries) {
-      const row = document.createElement("div");
-      row.className = "sec-hp-match-item";
-      row.textContent = mc.text;
-      matchWrap.appendChild(row);
-    }
-    body.appendChild(matchWrap);
   }
+  // On hover (no testMatchReasons), show nothing beyond findings —
+  // "What this rule matches" was removed per UX feedback; only the
+  // triggered "Why your test matched this rule" section is useful.
 
   popover.appendChild(body);
 }
