@@ -975,19 +975,34 @@ function showPopoverForRule(anchorEl, ruleName, testMatchReasons, autoHideMs) {
     }
   }
 
-  loadRulesAndFindings((rules, findings) => {
-    if (rules.length === 0 && findings.length === 0) {
-      renderHoverPopoverContent(popover, ruleName, null, null, null, testMatchReasons);
-      reveal();
-      return;
-    }
+  // For triggered (simulation) popovers: show immediately with match reasons,
+  // then enrich with rules/findings data if it arrives in time.
+  if (isTriggered) {
+    renderHoverPopoverContent(popover, ruleName, null, null, null, testMatchReasons);
+    reveal();
+  }
 
+  loadRulesAndFindings((rules, findings) => {
+    // Enrich the already-visible popover with rule details if available
     const lowerName = ruleName.toLowerCase();
     const rule = rules.find(r => (r.name || "").trim().toLowerCase() === lowerName);
     const ruleFindings = findings.filter(f => f.ruleName.trim().toLowerCase() === lowerName);
 
-    if (!rule) {
-      renderHoverPopoverContent(popover, ruleName, null, ruleFindings, null, testMatchReasons);
+    if (rule || ruleFindings.length > 0) {
+      renderHoverPopoverContent(popover, ruleName, rule, ruleFindings, null, testMatchReasons);
+      positionHoverPopover(popover, anchorRect);
+    }
+
+    if (!isTriggered) {
+      // Hover-only: only show after data loads
+      if (rules.length === 0 && findings.length === 0) {
+        renderHoverPopoverContent(popover, ruleName, null, null, null, testMatchReasons);
+        reveal();
+        return;
+      }
+
+      if (!rule) {
+        renderHoverPopoverContent(popover, ruleName, null, ruleFindings, null, testMatchReasons);
       reveal();
       return;
     }
