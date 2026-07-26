@@ -336,11 +336,11 @@ var HOVER_HIDE_DELAY_MS = 150;
 // user moves away" once they actually engage with it.
 var TRIGGERED_POPOVER_AUTO_HIDE_MS = 4000;
 
-let hoverPopoverEl = null;
-let hoverHideTimer = null;
+var hoverPopoverEl = null;
+var hoverHideTimer = null;
 var attachedChips = new WeakSet();
-let currentHighlightEl = null;
-let triggeredDismissListener = null;
+var currentHighlightEl = null;
+var triggeredDismissListener = null;
 
 // Cisco Hummingbird (hbr) token VALUES duplicated here as literals — this
 // stylesheet is injected into the live dashboard's own document (a separate
@@ -481,7 +481,7 @@ function positionHoverPopover(popover, chipRect) {
 // initEmbeddedPopup().
 // ---------------------------------------------------------------------------
 
-let hoverLookupsPromise = null;
+var hoverLookupsPromise = null;
 function loadLookups() {
   if (!hoverLookupsPromise) {
     hoverLookupsPromise = Promise.all([
