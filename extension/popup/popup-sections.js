@@ -439,30 +439,31 @@
         font-family: var(--hbr-font-family);
       }
 
-      /* Hero Decision Card — matches hover popover design language */
+      /* Hero Decision Card — matches popup's black/white design language */
       .psc-hero-card {
         border-radius: 0.50rem;
         overflow: hidden;
         background: #ffffff;
-        border: 1px solid #E1E4E8;
-        box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
         font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       }
       .psc-hero-banner {
         padding: 10px 14px;
-        background: #2774D9;
-        color: #fff;
+        background: #ffffff;
+        color: #0f172a;
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 10px;
+        border-bottom: 1px solid #e2e8f0;
       }
       .psc-hero-allow,
       .psc-hero-block,
       .psc-hero-isolate,
       .psc-hero-unknown {
-        background: #2774D9;
-        border-bottom: none;
+        background: #ffffff;
+        border-bottom: 1px solid #e2e8f0;
       }
 
       .psc-hero-info {
@@ -473,12 +474,12 @@
       .psc-hero-rule-title {
         font-size: 12.5px;
         font-weight: 600;
-        color: #ffffff;
+        color: #0f172a;
         word-break: break-word;
       }
       .psc-hero-rule-sub {
         font-size: 10.5px;
-        color: rgba(255, 255, 255, 0.8);
+        color: #64748b;
         display: flex;
         align-items: center;
         gap: 6px;
@@ -500,12 +501,12 @@
 
       .psc-hero-body { padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
       .psc-summary-box {
-        background: #EAF1FC;
-        border-left: 2px solid #2774D9;
+        background: #f1f5f9;
+        border-left: 2px solid #0f172a;
         border-radius: 0.25rem;
         padding: 6px 8px;
         font-size: 11px;
-        color: #373C42;
+        color: #1e293b;
         font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       }
         font-size: 11px;

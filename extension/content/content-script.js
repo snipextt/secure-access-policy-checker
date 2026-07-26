@@ -236,18 +236,18 @@ function highlightRule(ruleName, matchedConditions) {
     style.id = "sec-highlight-style";
     style.textContent = `
       .sec-highlight td {
-        background-color: rgba(39, 116, 217, 0.08) !important;
-        border-top: 2px solid #2774D9 !important;
-        border-bottom: 2px solid #2774D9 !important;
-        box-shadow: inset 0 0 8px rgba(39, 116, 217, 0.12);
+        background-color: rgba(15, 23, 42, 0.05) !important;
+        border-top: 2px solid #0f172a !important;
+        border-bottom: 2px solid #0f172a !important;
+        box-shadow: inset 0 0 8px rgba(15, 23, 42, 0.08);
         transition: background-color 0.3s ease, box-shadow 0.3s ease;
       }
       .sec-highlight td:first-child {
-        border-left: 4px solid #2774D9 !important;
+        border-left: 4px solid #0f172a !important;
         border-radius: 4px 0 0 4px;
       }
       .sec-highlight td:last-child {
-        border-right: 4px solid #2774D9 !important;
+        border-right: 4px solid #0f172a !important;
         border-radius: 0 4px 4px 0;
       }
       .sec-highlight {
@@ -370,12 +370,13 @@ function ensureHoverPopoverStyle() {
     }
     #sec-hover-popover.sec-hover-visible { display: block; }
     #sec-hover-popover .sec-hp-header {
-      background: #2774D9; /* Cisco blue brand header — matches extension popup toolbar (--hbr-color-header in popup.html) */
-      color: #fff;
+      background: #ffffff;
+      color: #0f172a;
       font-weight: 600;
       font-size: 12.5px;
       padding: 8px 10px;
       word-break: break-word;
+      border-bottom: 1px solid #e2e8f0;
     }
     #sec-hover-popover .sec-hp-body { padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
     #sec-hover-popover .sec-hp-meta { display: flex; gap: 8px; align-items: center; }
@@ -402,9 +403,9 @@ function ensureHoverPopoverStyle() {
        matches --hbr-color-accent) from the passive "What this rule matches"
        summary, so it's clear this is test-specific reasoning, not generic
        rule info. */
-    #sec-hover-popover .sec-hp-reason-title { color: #2774D9; border-top-color: #2774D9; }
+    #sec-hover-popover .sec-hp-reason-title { color: #0f172a; border-top-color: #0f172a; }
     #sec-hover-popover .sec-hp-reason {
-      background: #EAF1FC; border-left: 2px solid #2774D9; padding: 6px 8px; border-radius: 0.25rem;
+      background: #f1f5f9; border-left: 2px solid #0f172a; padding: 6px 8px; border-radius: 0.25rem;
     }
   `;
   document.head.appendChild(style);
