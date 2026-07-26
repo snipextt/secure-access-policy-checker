@@ -482,6 +482,29 @@ function loadLookups() {
   return hoverLookupsPromise;
 }
 
+// Default fallback dictionary for identity types — mirrors popup-sections.js's
+// DEFAULT_IDENTITY_TYPES. Used when the service worker hasn't resolved the
+// org's identity types yet, so the hover popover can still show human-readable
+// labels instead of raw numeric IDs.
+const HOVER_DEFAULT_IDENTITY_TYPES = {
+  "0": "Tags", "1": "Networks", "2": "Network Devices", "3": "AD Groups",
+  "4": "Users & AD Groups", "5": "AD Computers", "6": "Internal Networks",
+  "7": "AD Users", "8": "SAML Users & Groups", "9": "Roaming Computers",
+  "10": "Device Posture Profiles", "11": "Security Group Tags (SGT)",
+  "21": "Sites", "32": "Network Devices", "34": "Posture",
+  "36": "Mobile Devices", "37": "OS Version & Patch Level",
+  "38": "Chromebooks", "40": "Network Tunnels", "43": "G Suite Users",
+  "45": "G Suite OUs", "50": "Endpoint Requirements",
+  "52": "Catalyst SD-WAN Service VPN IDs", "54": "Security Group Tags",
+  "57": "ZTNA Client",
+  "user": "Active Directory Users & Groups", "device": "Network Devices",
+  "site": "Sites & Branches", "group": "Users & AD Groups",
+  "roaming": "Roaming Computers", "internal_network": "Internal Networks",
+  "tunnel": "Network Tunnels", "saml": "SAML Users & Groups",
+  "ip_subnet": "IP Subnets / CIDR", "posture": "Device Posture Profiles",
+  "sgt": "Security Group Tags (SGT)",
+};
+
 // identities differs from categories/apps/protocols above: those are static
 // JSON shipped with the extension, this is live per-org data resolved by
 // service-worker.js's resolveIdentities() during the most recent RUN_SCAN
@@ -499,6 +522,23 @@ function loadIdentityMap() {
         return;
       }
       resolve(response.identityMap || {});
+    });
+  });
+}
+
+// Identity type map — live per-org data resolved by service-worker.js's
+// resolveIdentityTypes() and cached in chrome.storage.local as
+// sse_identity_type_map. Merged with HOVER_DEFAULT_IDENTITY_TYPES for
+// fallback labels (same pattern as popup-sections.js's DEFAULT_IDENTITY_TYPES
+// merge). Fetched per-hover like loadIdentityMap() — cheap storage read.
+function loadIdentityTypeMap() {
+  return new Promise((resolve) => {
+    api.runtime.sendMessage({ type: "GET_IDENTITY_TYPE_MAP" }, (response) => {
+      if (api.runtime.lastError || !response) {
+        resolve({});
+        return;
+      }
+      resolve(response.identityTypeMap || {});
     });
   });
 }
@@ -548,6 +588,19 @@ function summarizeConditions(rule, lookups) {
           return name || "Identity";
         });
         summaryText = `Identities: ${identityNames.join(", ")}`;
+        break;
+      }
+      case "umbrella.source.identity_type_ids":
+      case "umbrella.source.identity_type_ids_shared": {
+        // Resolve identity type IDs to human-readable labels using the
+        // live identityTypeMap from the service worker, with
+        // HOVER_DEFAULT_IDENTITY_TYPES as fallback (same pattern as
+        // popup-sections.js's DEFAULT_IDENTITY_TYPES merge).
+        const mergedTypes = Object.assign({}, HOVER_DEFAULT_IDENTITY_TYPES, lookups.identityTypes || {});
+        const typeNames = (Array.isArray(values) ? values : [values]).map((id) => {
+          return mergedTypes[String(id)] || mergedTypes[id] || "Identity Type";
+        });
+        summaryText = `Identity Type: ${typeNames.join(", ")}`;
         break;
       }
       case "umbrella.destination.application_category_ids":
@@ -919,13 +972,14 @@ function showPopoverForRule(anchorEl, ruleName, testMatchReasons, autoHideMs) {
     }
 
     // Match summary needs the lookup JSONs (categories/apps/protocols) plus
-    // the live identityMap and objectMap — fetched lazily, see loadLookups()/
-    // loadIdentityMap()/loadObjectMap() above. Still fetched even when
-    // testMatchReasons is provided, in case some future caller wants both
-    // sections; renderHoverPopoverContent() itself decides which one to
-    // actually show.
-    Promise.all([loadLookups(), loadIdentityMap(), loadObjectMap()]).then(([lookups, identityMap, objectMapResult]) => {
+    // the live identityMap, identityTypeMap, and objectMap — fetched lazily,
+    // see loadLookups()/loadIdentityMap()/loadIdentityTypeMap()/loadObjectMap()
+    // above. Still fetched even when testMatchReasons is provided, in case
+    // some future caller wants both sections; renderHoverPopoverContent() itself
+    // decides which one to actually show.
+    Promise.all([loadLookups(), loadIdentityMap(), loadIdentityTypeMap(), loadObjectMap()]).then(([lookups, identityMap, identityTypeMap, objectMapResult]) => {
       lookups.identities = identityMap;
+      lookups.identityTypes = Object.assign({}, HOVER_DEFAULT_IDENTITY_TYPES, identityTypeMap);
       lookups.objects = objectMapResult.objectMap || objectMapResult;
       // Wire typed object maps for lookups (appRiskProfiles, etc.)
       const om = objectMapResult.objectMaps || {};
