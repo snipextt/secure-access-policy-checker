@@ -235,16 +235,20 @@ function highlightRule(ruleName, matchedConditions) {
     const style = document.createElement("style");
     style.id = "sec-highlight-style";
     style.textContent = `
-      @keyframes sec-flash {
-        0%   { background-color: #fff94d; outline: 4px solid #f6ff00; outline-offset: -2px; box-shadow: 0 0 14px 3px rgba(246, 255, 0, 0.85); }
-        85%  { background-color: #fff94d; outline: 4px solid #f6ff00; outline-offset: -2px; box-shadow: 0 0 14px 3px rgba(246, 255, 0, 0.85); }
-        100% { background-color: transparent; outline: 4px solid transparent; outline-offset: -2px; box-shadow: 0 0 0 0 rgba(246, 255, 0, 0); }
+      @keyframes sec-highlight-pulse {
+        0%   { box-shadow: 0 0 0 3px rgba(39, 116, 217, 0.5); }
+        50%  { box-shadow: 0 0 0 5px rgba(39, 116, 217, 0.35); }
+        100% { box-shadow: 0 0 0 3px rgba(39, 116, 217, 0.5); }
       }
       .sec-highlight {
-        animation: sec-flash 3.5s ease-out forwards;
-        border-radius: 3px;
+        outline: 3px solid #2774D9 !important;
+        outline-offset: -3px;
+        background-color: rgba(39, 116, 217, 0.06) !important;
+        border-radius: 4px;
         position: relative;
         z-index: 1;
+        animation: sec-highlight-pulse 2s ease-in-out infinite;
+        transition: background-color 0.3s ease, box-shadow 0.3s ease;
       }
     `;
     document.head.appendChild(style);
@@ -282,8 +286,8 @@ function highlightRule(ruleName, matchedConditions) {
   target.classList.add("sec-highlight");
   target.scrollIntoView({ behavior: "smooth", block: "center" });
 
-  // Clean up after animation completes (3.5 s — matches sec-flash duration)
-  setTimeout(() => target.classList.remove("sec-highlight"), 3500);
+  // Store reference so click-outside handler can remove it
+  currentHighlightEl = target;
 
   // Also show the rich hover popover (same one used for hovering chips) on
   // this row, anchored to a source/destination chip if the row has one
@@ -295,7 +299,7 @@ function highlightRule(ruleName, matchedConditions) {
   if (Array.isArray(matchedConditions) && matchedConditions.length > 0) {
     const anchorEl = target.querySelector(CHIP_SELECTOR) || target;
     clearTimeout(hoverHideTimer);
-    showPopoverForRule(anchorEl, ruleName, matchedConditions, TRIGGERED_POPOVER_AUTO_HIDE_MS);
+    showPopoverForRule(anchorEl, ruleName, matchedConditions);
   }
 }
 
@@ -331,6 +335,8 @@ const TRIGGERED_POPOVER_AUTO_HIDE_MS = 4000;
 let hoverPopoverEl = null;
 let hoverHideTimer = null;
 const attachedChips = new WeakSet();
+let currentHighlightEl = null;
+let triggeredDismissListener = null;
 
 // Cisco Hummingbird (hbr) token VALUES duplicated here as literals — this
 // stylesheet is injected into the live dashboard's own document (a separate
@@ -947,11 +953,36 @@ function loadRulesAndFindings(callback) {
 function showPopoverForRule(anchorEl, ruleName, testMatchReasons, autoHideMs) {
   const anchorRect = anchorEl.getBoundingClientRect();
   const popover = getHoverPopoverEl();
+  const isTriggered = Array.isArray(testMatchReasons) && testMatchReasons.length > 0;
+
+  // Clean up any previous triggered-dismiss listener
+  if (triggeredDismissListener) {
+    document.removeEventListener("mousedown", triggeredDismissListener, true);
+    triggeredDismissListener = null;
+  }
 
   function reveal() {
     popover.classList.add("sec-hover-visible");
     positionHoverPopover(popover, anchorRect);
-    if (autoHideMs !== undefined) scheduleHideHoverPopover(autoHideMs);
+    if (isTriggered) {
+      // Triggered popover: stays open until user clicks outside
+      triggeredDismissListener = (e) => {
+        // Ignore clicks inside the popover or on the highlighted row
+        if (popover.contains(e.target)) return;
+        if (currentHighlightEl && currentHighlightEl.contains(e.target)) return;
+        // Dismiss
+        popover.classList.remove("sec-hover-visible");
+        if (currentHighlightEl) {
+          currentHighlightEl.classList.remove("sec-highlight");
+          currentHighlightEl = null;
+        }
+        document.removeEventListener("mousedown", triggeredDismissListener, true);
+        triggeredDismissListener = null;
+      };
+      document.addEventListener("mousedown", triggeredDismissListener, true);
+    } else if (autoHideMs !== undefined) {
+      scheduleHideHoverPopover(autoHideMs);
+    }
   }
 
   loadRulesAndFindings((rules, findings) => {
