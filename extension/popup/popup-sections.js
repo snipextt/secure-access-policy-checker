@@ -439,36 +439,30 @@
         font-family: var(--hbr-font-family);
       }
 
-      /* Hero Decision Card */
+      /* Hero Decision Card — matches hover popover design language */
       .psc-hero-card {
-        border-radius: 2px;
+        border-radius: 0.50rem;
         overflow: hidden;
         background: #ffffff;
-        border: 1px solid #cbd5e1;
-        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+        border: 1px solid #E1E4E8;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       }
       .psc-hero-banner {
-        padding: 12px 14px;
+        padding: 10px 14px;
+        background: #2774D9;
+        color: #fff;
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: 10px;
       }
-      .psc-hero-allow {
-        background: #f0fdf4;
-        border-bottom: 1px solid #bbf7d0;
-      }
-      .psc-hero-block {
-        background: #fef2f2;
-        border-bottom: 1px solid #fecaca;
-      }
-      .psc-hero-isolate {
-        background: #faf5ff;
-        border-bottom: 1px solid #e9d5ff;
-      }
+      .psc-hero-allow,
+      .psc-hero-block,
+      .psc-hero-isolate,
       .psc-hero-unknown {
-        background: #f8fafc;
-        border-bottom: 1px solid #e2e8f0;
+        background: #2774D9;
+        border-bottom: none;
       }
 
       .psc-hero-info {
@@ -477,37 +471,43 @@
         gap: 2px;
       }
       .psc-hero-rule-title {
-        font-size: 13px;
-        font-weight: 700;
-        color: #0f172a;
+        font-size: 12.5px;
+        font-weight: 600;
+        color: #ffffff;
+        word-break: break-word;
       }
       .psc-hero-rule-sub {
         font-size: 10.5px;
-        color: #475569;
+        color: rgba(255, 255, 255, 0.8);
         display: flex;
         align-items: center;
         gap: 6px;
-        font-family: var(--hbr-font-mono, monospace);
       }
 
       .psc-hero-action-badge {
-        font-size: 11px;
-        font-weight: 700;
-        padding: 4px 12px;
-        border-radius: 2px;
-        letter-spacing: 0.02em;
-        font-family: var(--hbr-font-family);
+        font-size: 10px;
+        font-weight: 600;
+        padding: 2px 7px;
+        border-radius: 9999px;
+        letter-spacing: 0.05em;
+        color: #fff;
+        flex-shrink: 0;
       }
-      .psc-hero-allow .psc-hero-action-badge { background: #166534; color: #ffffff; }
-      .psc-hero-block .psc-hero-action-badge { background: #991b1b; color: #ffffff; }
-      .psc-hero-isolate .psc-hero-action-badge { background: #6b21a8; color: #ffffff; }
+      .psc-hero-allow .psc-hero-action-badge { background: #16a34a; }
+      .psc-hero-block .psc-hero-action-badge { background: #c0392b; }
+      .psc-hero-isolate .psc-hero-action-badge { background: #7c3aed; }
+      .psc-hero-unknown .psc-hero-action-badge { background: #6b7280; }
 
-      .psc-hero-body { padding: 12px 14px; }
+      .psc-hero-body { padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
       .psc-summary-box {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 2px;
-        padding: 8px 12px;
+        background: #EAF1FC;
+        border-left: 2px solid #2774D9;
+        border-radius: 0.25rem;
+        padding: 6px 8px;
+        font-size: 11px;
+        color: #373C42;
+        font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      }
         font-size: 11px;
         color: #0f172a;
         margin-bottom: 10px;

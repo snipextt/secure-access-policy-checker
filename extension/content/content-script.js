@@ -235,20 +235,24 @@ function highlightRule(ruleName, matchedConditions) {
     const style = document.createElement("style");
     style.id = "sec-highlight-style";
     style.textContent = `
-      @keyframes sec-highlight-pulse {
-        0%   { box-shadow: 0 0 0 3px rgba(39, 116, 217, 0.5); }
-        50%  { box-shadow: 0 0 0 5px rgba(39, 116, 217, 0.35); }
-        100% { box-shadow: 0 0 0 3px rgba(39, 116, 217, 0.5); }
+      .sec-highlight td {
+        background-color: rgba(39, 116, 217, 0.08) !important;
+        border-top: 2px solid #2774D9 !important;
+        border-bottom: 2px solid #2774D9 !important;
+        box-shadow: inset 0 0 8px rgba(39, 116, 217, 0.12);
+        transition: background-color 0.3s ease, box-shadow 0.3s ease;
+      }
+      .sec-highlight td:first-child {
+        border-left: 4px solid #2774D9 !important;
+        border-radius: 4px 0 0 4px;
+      }
+      .sec-highlight td:last-child {
+        border-right: 4px solid #2774D9 !important;
+        border-radius: 0 4px 4px 0;
       }
       .sec-highlight {
-        outline: 3px solid #2774D9 !important;
-        outline-offset: -3px;
-        background-color: rgba(39, 116, 217, 0.06) !important;
-        border-radius: 4px;
         position: relative;
         z-index: 1;
-        animation: sec-highlight-pulse 2s ease-in-out infinite;
-        transition: background-color 0.3s ease, box-shadow 0.3s ease;
       }
     `;
     document.head.appendChild(style);
