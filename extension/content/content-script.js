@@ -1,4 +1,4 @@
-const api = typeof browser !== 'undefined' ? browser : chrome;
+var api = typeof browser !== 'undefined' ? browser : chrome;
 
 // ---------------------------------------------------------------------------
 // injectBadge — appends a severity badge span to a rule row element
