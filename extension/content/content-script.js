@@ -1245,6 +1245,16 @@ function setupPersistence() {
   initHoverPopover();
   initEmbeddedPopup();
 
+  // Listen for messages from the popup (toolbar or embedded panel).
+  // The popup sends HIGHLIGHT_RULE via chrome.tabs.sendMessage() after a
+  // successful "Run Simulation" — this listener routes it to highlightRule().
+  api.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg && msg.type === "HIGHLIGHT_RULE") {
+      highlightRule(msg.ruleName, msg.matchedConditions);
+      sendResponse({ ok: true });
+    }
+  });
+
   // Re-check on DOM mutations in case Cisco Angular SPA replaces body children
   if (window.MutationObserver && document.body) {
     const observer = new MutationObserver(() => {
