@@ -145,7 +145,7 @@ function getRuleName(element) {
 // annotateRules — matches findings to rule rows and injects badges
 // ---------------------------------------------------------------------------
 
-const SEVERITY_ORDER = ["critical", "high", "medium", "low"];
+var SEVERITY_ORDER = ["critical", "high", "medium", "low"];
 
 function annotateRules(findings) {
   const rows = findRuleRows();
@@ -324,8 +324,8 @@ function highlightRule(ruleName, matchedConditions) {
 // we just position our own element near the chip.
 // ---------------------------------------------------------------------------
 
-const CHIP_SELECTOR = '[data-testid="policy-destination-item"], [data-testid="policy-source-item"]';
-const HOVER_HIDE_DELAY_MS = 150;
+var CHIP_SELECTOR = '[data-testid="policy-destination-item"], [data-testid="policy-source-item"]';
+var HOVER_HIDE_DELAY_MS = 150;
 // Programmatically-triggered popovers (from "Highlight on page") aren't
 // under a real hover, so there's no natural mouseleave to close them —
 // unlike genuine chip hovers, which keep using HOVER_HIDE_DELAY_MS. A few
@@ -334,11 +334,11 @@ const HOVER_HIDE_DELAY_MS = 150;
 // popover's own existing mouseenter listener (see getHoverPopoverEl()),
 // same as normal hover behavior — so it degrades to "stay open until the
 // user moves away" once they actually engage with it.
-const TRIGGERED_POPOVER_AUTO_HIDE_MS = 4000;
+var TRIGGERED_POPOVER_AUTO_HIDE_MS = 4000;
 
 let hoverPopoverEl = null;
 let hoverHideTimer = null;
-const attachedChips = new WeakSet();
+var attachedChips = new WeakSet();
 let currentHighlightEl = null;
 let triggeredDismissListener = null;
 
@@ -496,7 +496,7 @@ function loadLookups() {
 // DEFAULT_IDENTITY_TYPES. Used when the service worker hasn't resolved the
 // org's identity types yet, so the hover popover can still show human-readable
 // labels instead of raw numeric IDs.
-const HOVER_DEFAULT_IDENTITY_TYPES = {
+var HOVER_DEFAULT_IDENTITY_TYPES = {
   "0": "Tags", "1": "Networks", "2": "Network Devices", "3": "AD Groups",
   "4": "Users & AD Groups", "5": "AD Computers", "6": "Internal Networks",
   "7": "AD Users", "8": "SAML Users & Groups", "9": "Roaming Computers",
@@ -1089,8 +1089,8 @@ function initHoverPopover() {
 // #psc-panel-body/rules list just gets a taller/shorter viewport), so it's
 // reduced here to cover less of the dashboard behind the panel. The iframe
 // still scrolls internally for anything taller than this.
-const EMBED_PANEL_WIDTH = 680;
-const EMBED_PANEL_HEIGHT = 480;
+var EMBED_PANEL_WIDTH = 680;
+var EMBED_PANEL_HEIGHT = 480;
 
 function ensureEmbeddedPopupStyle() {
   const oldStyle = document.getElementById("sec-embed-popup-style");
