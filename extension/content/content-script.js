@@ -382,30 +382,33 @@ function ensureHoverPopoverStyle() {
     #sec-hover-popover .sec-hp-meta { display: flex; gap: 8px; align-items: center; }
     /* BLOCK/ALLOW/ISOLATE/unknown action colors are semantic, not brand palette — left unchanged */
     #sec-hover-popover .sec-hp-action {
-      display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 7px;
-      border-radius: 9999px; color: #fff; letter-spacing: 0.05em;
+      display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 8px;
+      border-radius: 2px; letter-spacing: 0.02em; flex-shrink: 0;
     }
-    #sec-hover-popover .sec-hp-action-allow   { background: #16a34a; }
-    #sec-hover-popover .sec-hp-action-block   { background: #c0392b; }
-    #sec-hover-popover .sec-hp-action-isolate { background: #7c3aed; } /* distinct purple — see popup-sections.js COLOR audit, not yet seen live */
-    #sec-hover-popover .sec-hp-action-unknown { background: #6b7280; }
+    #sec-hover-popover .sec-hp-action-allow   { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    #sec-hover-popover .sec-hp-action-block   { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    #sec-hover-popover .sec-hp-action-isolate { background: #f3e8ff; color: #6b21a8; border: 1px solid #e9d5ff; }
+    #sec-hover-popover .sec-hp-action-unknown { background: #f1f5f9; color: #6b7280; border: 1px solid #e2e8f0; }
     #sec-hover-popover .sec-hp-priority { color: #596069; font-size: 11px; }
     #sec-hover-popover .sec-hp-findings { display: flex; flex-direction: column; gap: 4px; }
     #sec-hover-popover .sec-hp-finding  { font-size: 11px; line-height: 1.4; }
     #sec-hover-popover .sec-hp-empty    { color: #596069; font-style: italic; }
     #sec-hover-popover .sec-hp-match-title {
       font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
-      color: #596069; margin-top: 4px; padding-top: 6px; border-top: 1px solid #E1E4E8;
+      color: #64748b; margin-top: 4px; padding-top: 6px; border-top: 1px solid #e2e8f0;
     }
-    #sec-hover-popover .sec-hp-match { display: flex; flex-direction: column; gap: 3px; }
-    #sec-hover-popover .sec-hp-match-item { font-size: 11px; line-height: 1.4; color: #373C42; }
-    /* Triggered from "Highlight on page" — visually distinct (blue accent,
-       matches --hbr-color-accent) from the passive "What this rule matches"
-       summary, so it's clear this is test-specific reasoning, not generic
-       rule info. */
-    #sec-hover-popover .sec-hp-reason-title { color: #0f172a; border-top-color: #0f172a; }
+    #sec-hover-popover .sec-hp-match { display: flex; flex-direction: column; gap: 4px; }
+    #sec-hover-popover .sec-hp-match-item {
+      font-size: 11px; line-height: 1.4; color: #334155;
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 2px;
+      padding: 3px 6px; display: inline-flex; align-items: center; gap: 4px;
+      overflow-wrap: anywhere; word-break: break-word;
+    }
+    #sec-hover-popover .sec-hp-match-key { color: #64748b; font-weight: 600; flex-shrink: 0; }
+    #sec-hover-popover .sec-hp-match-val { color: #0f172a; font-weight: 600; overflow-wrap: anywhere; word-break: break-word; }
+    #sec-hover-popover .sec-hp-reason-title { color: #0f172a; border-top-color: #e2e8f0; }
     #sec-hover-popover .sec-hp-reason {
-      background: #f1f5f9; border-left: 2px solid #0f172a; padding: 6px 8px; border-radius: 0.25rem;
+      background: #f8fafc; border-left: 3px solid #0f172a; padding: 6px 8px; border-radius: 0;
     }
   `;
   document.head.appendChild(style);
@@ -824,13 +827,25 @@ function appendMatchReasonSection(body, reasons) {
     const row = document.createElement("div");
     row.className = "sec-hp-match-item";
     if (typeof reason === "object" && reason !== null) {
-      // Object-style condition: {condition: "destinationDomain", value: "Antarctica", action: "Block"}
-      const parts = [];
-      if (reason.condition) parts.push(reason.condition);
-      if (reason.value) parts.push(reason.value);
-      if (reason.operator) parts.push("(" + reason.operator + ")");
-      if (reason.action) parts.push("→ " + reason.action);
-      row.textContent = parts.length > 0 ? parts.join(" ") : JSON.stringify(reason);
+      // Object-style condition: render as chips like rules tab
+      if (reason.condition) {
+        const keyEl = document.createElement("span");
+        keyEl.className = "sec-hp-match-key";
+        keyEl.textContent = reason.condition + ":";
+        row.appendChild(keyEl);
+      }
+      const valParts = [];
+      if (reason.value) valParts.push(reason.value);
+      if (reason.operator) valParts.push("(" + reason.operator + ")");
+      if (reason.action) valParts.push("→ " + reason.action);
+      if (valParts.length > 0) {
+        const valEl = document.createElement("span");
+        valEl.className = "sec-hp-match-val";
+        valEl.textContent = " " + valParts.join(" ");
+        row.appendChild(valEl);
+      } else {
+        row.appendChild(document.createTextNode(JSON.stringify(reason)));
+      }
     } else {
       row.textContent = String(reason);
     }
