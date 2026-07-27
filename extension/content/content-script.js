@@ -414,6 +414,18 @@ function ensureHoverPopoverStyle() {
     #sec-hover-popover .sec-hp-reason {
       background: #f8fafc; border-left: 3px solid #0f172a; padding: 6px 8px; border-radius: 0;
     }
+    /* Condition chips + security profile chips (matches rules tab psc-chip) */
+    #sec-hover-popover .sec-hp-chips {
+      display: flex; flex-wrap: wrap; gap: 4px;
+    }
+    #sec-hover-popover .sec-hp-chip {
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 2px;
+      padding: 2px 6px; font-size: 10.5px; color: #334155;
+      display: inline-flex; align-items: center; gap: 4px;
+      overflow-wrap: anywhere; word-break: break-word;
+    }
+    #sec-hover-popover .sec-hp-chip-key { color: #64748b; font-weight: 600; flex-shrink: 0; }
+    #sec-hover-popover .sec-hp-chip-val { color: #0f172a; font-weight: 600; overflow-wrap: anywhere; word-break: break-word; }
   `;
   document.head.appendChild(style);
 }
@@ -893,6 +905,7 @@ function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSumma
     return;
   }
 
+  // --- Top line: action pill + priority (matches rules tab psc-rule-top-line) ---
   const meta = document.createElement("div");
   meta.className = "sec-hp-meta";
 
@@ -902,12 +915,6 @@ function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSumma
   actionBadge.textContent = action.toUpperCase();
   meta.appendChild(actionBadge);
 
-  // No unconditional "Priority X" — this popover is anchored directly on
-  // top of the dashboard's own "#" row-order column, so it was just
-  // repeating a number already visible right next to it. Only shown for
-  // default/catch-all rules, since "always evaluated last" is genuinely new
-  // context the dashboard doesn't spell out (same reasoning as the popup's
-  // Rules tab and Test Policy result cards — see popup-sections.js).
   if (rule.is_default) {
     const priority = document.createElement("span");
     priority.className = "sec-hp-priority";
@@ -917,8 +924,7 @@ function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSumma
 
   body.appendChild(meta);
 
-  // Reuses the same severity badge classes (sec-badge / sec-badge-<severity>)
-  // already defined in content/styles.css for the inline rule-row badges.
+  // --- Findings / Audit Feedback section ---
   const findingsWrap = document.createElement("div");
   findingsWrap.className = "sec-hp-findings";
 
@@ -931,25 +937,71 @@ function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSumma
     for (const f of findings) {
       const row = document.createElement("div");
       row.className = "sec-hp-finding";
-
       const badge = document.createElement("span");
       badge.className = `sec-badge sec-badge-${f.severity}`;
       badge.textContent = f.severity.toUpperCase();
-
       row.appendChild(badge);
       row.appendChild(document.createTextNode(` ${f.message}`));
       findingsWrap.appendChild(row);
     }
   }
-
   body.appendChild(findingsWrap);
 
+  // --- Inline condition chips (matches rules tab psc-inline-chips) ---
+  if (Array.isArray(matchSummary) && matchSummary.length > 0) {
+    const chipsWrap = document.createElement("div");
+    chipsWrap.className = "sec-hp-chips";
+    for (const cs of matchSummary.slice(0, 6)) {
+      const chip = document.createElement("span");
+      chip.className = "sec-hp-chip";
+      const colonIdx = cs.text.indexOf(":");
+      if (colonIdx > -1) {
+        const key = document.createElement("span");
+        key.className = "sec-hp-chip-key";
+        key.textContent = cs.text.slice(0, colonIdx);
+        const val = document.createElement("span");
+        val.className = "sec-hp-chip-val";
+        val.textContent = cs.text.slice(colonIdx + 1);
+        chip.appendChild(key);
+        chip.appendChild(val);
+      } else {
+        chip.textContent = cs.text;
+      }
+      chipsWrap.appendChild(chip);
+    }
+    body.appendChild(chipsWrap);
+  }
+
+  // --- Security profile chips (IPS, AMP, TLS, DLP) ---
+  if (rule.security_profiles) {
+    const sp = rule.security_profiles;
+    const spWrap = document.createElement("div");
+    spWrap.className = "sec-hp-chips";
+    var spItems = [
+      { label: "IPS", on: sp.ips_enabled },
+      { label: "AMP", on: sp.amp_malware_enabled },
+      { label: "TLS", on: sp.tls_decryption_enabled },
+      { label: "DLP", on: sp.dlp_enabled }
+    ];
+    for (var i = 0; i < spItems.length; i++) {
+      var s = spItems[i];
+      if (s.on === undefined) continue;
+      var chip = document.createElement("span");
+      chip.className = "sec-hp-chip";
+      chip.style.background = s.on ? "#f0fdf4" : "#f8fafc";
+      chip.style.borderColor = s.on ? "#bbf7d0" : "#cbd5e1";
+      chip.style.color = s.on ? "#166534" : "#64748b";
+      chip.style.fontWeight = s.on ? "700" : "500";
+      chip.textContent = s.label + ": " + (s.on ? "ON" : "OFF");
+      spWrap.appendChild(chip);
+    }
+    if (spWrap.children.length > 0) body.appendChild(spWrap);
+  }
+
+  // --- Why your test matched this rule ---
   if (hasReasons) {
     appendMatchReasonSection(body, testMatchReasons);
   }
-  // On hover (no testMatchReasons), show nothing beyond findings —
-  // "What this rule matches" was removed per UX feedback; only the
-  // triggered "Why your test matched this rule" section is useful.
 
   popover.appendChild(body);
 }
