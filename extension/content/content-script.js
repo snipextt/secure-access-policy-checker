@@ -1003,8 +1003,9 @@ function showPopoverForRule(anchorEl, ruleName, testMatchReasons, autoHideMs) {
 
       if (!rule) {
         renderHoverPopoverContent(popover, ruleName, null, ruleFindings, null, testMatchReasons);
-      reveal();
-      return;
+        reveal();
+        return;
+      }
     }
 
     // Match summary needs the lookup JSONs (categories/apps/protocols) plus
