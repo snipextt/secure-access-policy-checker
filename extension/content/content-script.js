@@ -236,19 +236,19 @@ function highlightRule(ruleName, matchedConditions) {
     style.id = "sec-highlight-style";
     style.textContent = `
       .sec-highlight td {
-        background-color: rgba(15, 23, 42, 0.05) !important;
-        border-top: 2px solid #0f172a !important;
-        border-bottom: 2px solid #0f172a !important;
-        box-shadow: inset 0 0 8px rgba(15, 23, 42, 0.08);
+        background-color: rgba(148, 163, 184, 0.12) !important;
+        border-top: 2px solid #94a3b8 !important;
+        border-bottom: 2px solid #94a3b8 !important;
+        box-shadow: inset 0 0 8px rgba(148, 163, 184, 0.15);
         transition: background-color 0.3s ease, box-shadow 0.3s ease;
       }
       .sec-highlight td:first-child {
-        border-left: 4px solid #0f172a !important;
-        border-radius: 4px 0 0 4px;
+        border-left: 4px solid #94a3b8 !important;
+        border-radius: 0;
       }
       .sec-highlight td:last-child {
-        border-right: 4px solid #0f172a !important;
-        border-radius: 0 4px 4px 0;
+        border-right: 4px solid #94a3b8 !important;
+        border-radius: 0;
       }
       .sec-highlight {
         position: relative;
