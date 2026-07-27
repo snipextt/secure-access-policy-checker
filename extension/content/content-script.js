@@ -823,7 +823,17 @@ function appendMatchReasonSection(body, reasons) {
   for (const reason of reasons) {
     const row = document.createElement("div");
     row.className = "sec-hp-match-item";
-    row.textContent = reason;
+    if (typeof reason === "object" && reason !== null) {
+      // Object-style condition: {condition: "destinationDomain", value: "Antarctica", action: "Block"}
+      const parts = [];
+      if (reason.condition) parts.push(reason.condition);
+      if (reason.value) parts.push(reason.value);
+      if (reason.operator) parts.push("(" + reason.operator + ")");
+      if (reason.action) parts.push("→ " + reason.action);
+      row.textContent = parts.length > 0 ? parts.join(" ") : JSON.stringify(reason);
+    } else {
+      row.textContent = String(reason);
+    }
     wrap.appendChild(row);
   }
   body.appendChild(wrap);
