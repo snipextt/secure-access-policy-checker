@@ -358,8 +358,9 @@ function ensureHoverPopoverStyle() {
       z-index: 2147483647;
       max-width: 320px;
       background: #FFFFFF;
-      border: 1px solid #E1E4E8;
-      border-radius: 0;
+      border: 1px solid #e2e8f0;
+      border-left: 3px solid #64748b;
+      border-radius: 2px;
       box-shadow: 0 6px 20px rgba(0,0,0,0.18);
       font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       font-weight: 400;
@@ -367,7 +368,11 @@ function ensureHoverPopoverStyle() {
       color: #373C42;
       display: none;
       overflow: hidden;
+      transition: border-left-color 0.2s ease;
     }
+    #sec-hover-popover[data-action="allow"]  { border-left-color: #166534; }
+    #sec-hover-popover[data-action="block"]  { border-left-color: #991b1b; }
+    #sec-hover-popover[data-action="isolate"]{ border-left-color: #6b21a8; }
     #sec-hover-popover.sec-hover-visible { display: block; }
     #sec-hover-popover .sec-hp-header {
       background: #ffffff;
@@ -380,7 +385,6 @@ function ensureHoverPopoverStyle() {
     }
     #sec-hover-popover .sec-hp-body { padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
     #sec-hover-popover .sec-hp-meta { display: flex; gap: 8px; align-items: center; }
-    /* BLOCK/ALLOW/ISOLATE/unknown action colors are semantic, not brand palette — left unchanged */
     #sec-hover-popover .sec-hp-action {
       display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 8px;
       border-radius: 2px; letter-spacing: 0.02em; flex-shrink: 0;
@@ -392,7 +396,7 @@ function ensureHoverPopoverStyle() {
     #sec-hover-popover .sec-hp-priority { color: #596069; font-size: 11px; }
     #sec-hover-popover .sec-hp-findings { display: flex; flex-direction: column; gap: 4px; }
     #sec-hover-popover .sec-hp-finding  { font-size: 11px; line-height: 1.4; }
-    #sec-hover-popover .sec-hp-empty    { color: #596069; font-style: italic; }
+    #sec-hover-popover .sec-hp-empty    { color: #596069; font-style: italic; font-size: 11px; }
     #sec-hover-popover .sec-hp-match-title {
       font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
       color: #64748b; margin-top: 4px; padding-top: 6px; border-top: 1px solid #e2e8f0;
@@ -856,6 +860,15 @@ function appendMatchReasonSection(body, reasons) {
 
 function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSummary, testMatchReasons) {
   popover.innerHTML = "";
+
+  // Set data-action for left border accent color (matches rules tab cards)
+  if (rule && rule.action) {
+    popover.setAttribute("data-action", (rule.action || "").toLowerCase());
+  } else if (testMatchReasons && testMatchReasons.length > 0 && testMatchReasons[0].action) {
+    popover.setAttribute("data-action", testMatchReasons[0].action.toLowerCase());
+  } else {
+    popover.removeAttribute("data-action");
+  }
 
   const header = document.createElement("div");
   header.className = "sec-hp-header";
