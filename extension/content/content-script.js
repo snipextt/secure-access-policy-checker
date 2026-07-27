@@ -412,7 +412,7 @@ function ensureHoverPopoverStyle() {
     #sec-hover-popover .sec-hp-match-val { color: #0f172a; font-weight: 600; overflow-wrap: anywhere; word-break: break-word; }
     #sec-hover-popover .sec-hp-reason-title { color: #0f172a; border-top-color: #e2e8f0; }
     #sec-hover-popover .sec-hp-reason {
-      background: #f8fafc; border-left: 3px solid #0f172a; padding: 6px 8px; border-radius: 0;
+      background: #f8fafc; border-left: none; padding: 6px 8px; border-radius: 0;
     }
     /* Condition chips + security profile chips (matches rules tab psc-chip) */
     #sec-hover-popover .sec-hp-chips {
