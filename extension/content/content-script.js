@@ -1,19 +1,6 @@
 var api = typeof browser !== 'undefined' ? browser : chrome;
 
 // ---------------------------------------------------------------------------
-// injectBadge — appends a severity badge span to a rule row element
-// ---------------------------------------------------------------------------
-
-function injectBadge(element, finding) {
-  const span = document.createElement("span");
-  span.className = `sec-badge sec-badge-${finding.severity}`;
-  span.textContent = finding.severity.toUpperCase();
-  span.title = finding.message;
-  element.appendChild(span);
-  element.dataset.secChecked = "true";
-}
-
-// ---------------------------------------------------------------------------
 // findRuleRows — matches the real Cisco Secure Access dashboard DOM.
 //
 // The dashboard is built on the Cisco Design System (CDS), which emits
@@ -139,72 +126,6 @@ function getRuleName(element) {
     element.textContent.trim().split("\n")[0];
 
   return (name || "unknown").trim();
-}
-
-// ---------------------------------------------------------------------------
-// annotateRules — matches findings to rule rows and injects badges
-// ---------------------------------------------------------------------------
-
-var SEVERITY_ORDER = ["critical", "high", "medium", "low"];
-
-function annotateRules(findings) {
-  const rows = findRuleRows();
-  let annotated = 0;
-
-  for (const element of rows) {
-    // Skip rows already annotated in this pass
-    if (element.dataset.secChecked === "true") continue;
-
-    const rowName = getRuleName(element).toLowerCase();
-
-    const matches = findings.filter(
-      f => f.ruleName.trim().toLowerCase() === rowName
-    );
-
-    if (matches.length === 0) continue;
-
-    // Pick the highest-severity finding only
-    const topMatch = matches.sort(
-      (a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity)
-    )[0];
-
-    injectBadge(element, topMatch);
-    annotated++;
-  }
-
-  console.log(`[SecPolicyChecker] Annotated ${annotated} of ${rows.length} rule rows with findings`);
-}
-
-// ---------------------------------------------------------------------------
-// initAnnotations — fetches latest findings and kicks off annotation +
-// MutationObserver for SPA navigation / dynamic renders
-// ---------------------------------------------------------------------------
-
-function initAnnotations() {
-  api.runtime.sendMessage({ type: "GET_FINDINGS" }, (response) => {
-    if (!response || !response.findings || response.findings.length === 0) {
-      console.log(
-        "[SecPolicyChecker] No findings available yet — run scan from the extension popup first"
-      );
-      return;
-    }
-
-    const findings = response.findings;
-    annotateRules(findings);
-
-    // MutationObserver with 500 ms debounce so we re-annotate after
-    // dynamic rule rows render without firing on every tiny DOM change.
-    let debounceTimer = null;
-
-    const observer = new MutationObserver(() => {
-      clearTimeout(debounceTimer);                       // reset on each mutation
-      debounceTimer = setTimeout(() => {                 // fire after 500 ms quiet
-        annotateRules(findings);
-      }, 500);
-    });
-
-    observer.observe(document.body, { childList: true, subtree: true });
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -937,11 +858,7 @@ function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSumma
     for (const f of findings) {
       const row = document.createElement("div");
       row.className = "sec-hp-finding";
-      const badge = document.createElement("span");
-      badge.className = `sec-badge sec-badge-${f.severity}`;
-      badge.textContent = f.severity.toUpperCase();
-      row.appendChild(badge);
-      row.appendChild(document.createTextNode(` ${f.message}`));
+      row.appendChild(document.createTextNode(f.message));
       findingsWrap.appendChild(row);
     }
   }
@@ -1147,8 +1064,7 @@ function initHoverPopover() {
   attachChipListeners();
 
   // SPA re-renders (sort/filter/pagination) create new chip elements, so
-  // re-scan on DOM mutation rather than relying on a one-time query — same
-  // debounce pattern as annotateRules()'s observer below.
+  // re-scan on DOM mutation rather than relying on a one-time query.
   let debounceTimer = null;
   const observer = new MutationObserver(() => {
     clearTimeout(debounceTimer);
@@ -1368,7 +1284,6 @@ function initEmbeddedPopup() {
 // ---------------------------------------------------------------------------
 
 function setupPersistence() {
-  initAnnotations();
   initHoverPopover();
   initEmbeddedPopup();
 

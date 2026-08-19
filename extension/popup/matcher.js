@@ -708,27 +708,11 @@
       }
       
       if (testIds.length === 0) {
-        // String array INTERSECT matching (geolocations, resource types, etc.)
-        if (Array.isArray(attributeValue) && attributeValue.some((e) => typeof e === "string")) {
-          const matchedStr = attributeValue.find((entry) => {
-            if (typeof entry === "string") {
-              const ev = entry.toLowerCase().trim();
-              const tvL = tv.toLowerCase().trim();
-              return ev === tvL || tvL.includes(ev) || ev.includes(tvL) || tvL === "";
-            }
-            return false;
-          });
-          if (matchedStr !== undefined) {
-            return {
-              matched: true,
-              note: `${dimension}: '${matchedStr}' matched ${attributeName}`,
-              display: matchedStr,
-            };
-          }
-        }
+        // No recognised attribute type — cannot evaluate this INTERSECT
+        // condition without a matching tester input field.
         return {
           matched: false,
-          note: `${dimension}: test input contained no valid numeric IDs for INTERSECT (${attributeName})`,
+          note: `${dimension}: INTERSECT condition for '${attributeName}' has no corresponding tester input — cannot evaluate`,
         };
       }
 
