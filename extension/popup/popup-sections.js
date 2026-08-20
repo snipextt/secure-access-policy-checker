@@ -1859,8 +1859,8 @@
               const typeId = typeMap[String(id)];
               const type = typeId !== undefined
                 ? (lookupItemName(lookups.identityTypes, typeId) || lookupItemName(DEFAULT_IDENTITY_TYPES, typeId) || `Type ${typeId}`)
-                : "Type unavailable";
-              return `${name} (${type})`;
+                : null;
+              return type ? `${name} (${type})` : name;
             });
             summaryText = `Source Identity: ${identityNames.join(", ")}`;
             break;

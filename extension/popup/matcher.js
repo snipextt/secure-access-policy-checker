@@ -915,14 +915,21 @@
         : scopeText === "private access" || scopeText === "private_network"
           ? "private_network"
           : null;
-    // A selected private catalog item is inherently Private Access. Other
-    // catalog selections are scope-agnostic: require Destination Scope rather
-    // than guessing Internet from a name, list, category, or country.
+    // A selected private catalog item is inherently Private Access. Cisco's
+    // Internet application, category, list, geo, and risk-profile catalogs are
+    // inherently Internet traffic, so a user should not have to repeat that
+    // fact in Destination Scope. Destination and network lists stay ambiguous.
     const hasPrivateResource = [testInput.privateResourceId, testInput.privateResourceGroupId, testInput.privateResourceType]
       .some(value => value !== null && value !== undefined && value !== "");
+    const hasInternetCatalog = [
+      testInput.applicationId, testInput.protocolId, testInput.enterpriseApplicationId,
+      testInput.applicationListId, testInput.applicationCategoryId, testInput.contentCategoryId,
+      testInput.categoryListId, testInput.geolocation, testInput.appRiskProfileId,
+    ].some(value => value !== null && value !== undefined && value !== "");
     const destinationValue = String(testInput.destination || "").trim();
     const inferredScope = explicitScope ||
       (hasPrivateResource ? "private_network" : null) ||
+      (hasInternetCatalog ? "public_internet" : null) ||
       (destinationValue && Number.isNaN(ipv4ToInt(destinationValue.split("/")[0])) && /[a-z]/i.test(destinationValue)
         ? "public_internet"
         : null);

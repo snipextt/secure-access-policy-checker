@@ -37,13 +37,38 @@ const internetDefault = { ...rule(27803, "For all Internet access", "public_inte
 mustMatch([internetDefault], { destination: "cisco.com" }, lookups, 27803, "domain infers Internet");
 mustMatch([internetDefault], { destination: "cisco.com", destinationScope: "Internet" }, lookups, 27803, "Internet label normalizes");
 
-// HAR identity-type condition: selected identity resolves through catalog type map.
+// Internet app scope inference must work through the public policy selection API.
+const internetAppRule = rule(6500000, "Internet app policy", "public_internet", [
+  sourceAll, condition("umbrella.destination.application_ids", "INTERSECT", [6500000]),
+], 4);
+mustMatch([internetAppRule], { sourceUserId: 42, applicationId: 6500000 }, lookups, 6500000,
+  "Internet Application infers Internet scope");
+
+const privateAppRule = rule(6500001, "Private app policy", "private_network", [
+  sourceAll, condition("umbrella.destination.application_ids", "INTERSECT", [6500000]),
+], 5);
+const wrongScope = Matcher.matchPolicy([privateAppRule], { applicationId: 6500000 }, lookups);
+assert(wrongScope.noMatch && /test resolved to public_internet/.test(wrongScope.rejected[0].reason),
+  "Internet Application must not match a Private Access rule");
+
 const adUsers = rule(732519, "AD user policy", "public_internet", [
   condition("umbrella.source.identity_type_ids", "INTERSECT", [7]), destinationAll,
 ], 3);
 mustMatch([adUsers], { sourceUserId: 42, destination: "example.com" }, lookups, 732519, "identity catalog type matches rule type");
 
-// A near-miss literal IP must not match a /32 through the FQDN fallback.
+// The display layer must retain a known identity name even while a catalog
+// refresh has not yet supplied its type link.
+const namedIdentityRule = rule(6500002, "Named identity policy", "public_internet", [
+  condition("umbrella.source.identity_ids", "INTERSECT", [42]), destinationAll,
+], 6);
+const namedIdentityResult = Matcher.matchPolicy(
+  [namedIdentityRule],
+  { sourceUserId: 42, destination: "example.com" },
+  { identities: { "42": "Carol Freeman" }, sourceIdentityTypeIds: {} }
+);
+assert(!namedIdentityResult.noMatch,
+  "known identity remains matchable while its type link is being refreshed");
+
 const exactIp = rule(831480, "Exact IP", "public_internet", [
   sourceAll,
   condition("umbrella.destination.composite_inline_ip", "IN", [{ ip: ["8.8.8.8"], port: ["1-65535"], protocol: "ICMP" }]),

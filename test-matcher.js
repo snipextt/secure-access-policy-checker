@@ -188,9 +188,36 @@ console.log("\n=== Group 1B: Public/private destination scope ===");
     "Source catalog: different user ID does not match");
 }
 
-// ---------------------------------------------------------------------------
-// TEST GROUP 2: CIDR/IP matching
-// ---------------------------------------------------------------------------
+// Internet-side catalog selections must resolve Public Internet scope even when
+// the optional Destination Scope selector is left blank.
+{
+  const internetAppRule = makeRule(105, "Internet app rule", "allow", [
+    sourceAll(), destAppIds([50123]),
+  ], { trafficScope: "public_internet" });
+  const appCategoryRule = makeRule(106, "Internet category rule", "allow", [
+    sourceAll(), destApplicationCategoryIds([501]),
+  ], { trafficScope: "public_internet" });
+  const contentCategoryRule = makeRule(107, "Internet content rule", "allow", [
+    sourceAll(), destContentCategoryIds([42]),
+  ], { trafficScope: "public_internet" });
+  const privateAppRule = makeRule(108, "Private app rule", "allow", [
+    sourceAll(), destAppIds([50123]),
+  ], { trafficScope: "private_network" });
+
+  assertMatch(internetAppRule, { applicationId: "50123" }, true,
+    "Internet Application infers public Internet scope");
+  assertMatch(internetAppRule, { protocolId: "50123" }, true,
+    "Application Protocol infers public Internet scope");
+  assertMatch(internetAppRule, { enterpriseApplicationId: "50123" }, true,
+    "Enterprise Application infers public Internet scope");
+  assertMatch(appCategoryRule, { applicationCategoryId: "501" }, true,
+    "Application Category infers public Internet scope");
+  assertMatch(contentCategoryRule, { contentCategoryId: "42" }, true,
+    "Content Category infers public Internet scope");
+  assertMatch(privateAppRule, { applicationId: "50123" }, false,
+    "Internet Application does not match Private Access rule");
+}
+
 console.log("\n=== Group 2: CIDR/IP matching ===");
 
 {

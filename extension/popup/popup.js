@@ -61,6 +61,7 @@ document.addEventListener("DOMContentLoaded", () => {
     serviceObjectGroups: {},
     applicationLists: {},
     categoryLists: {},
+    destinationScopes: { public_internet: "Internet", private_network: "Private Access" },
     appRiskProfiles: {},
   };
   let currentIdentityTypeMap = {};

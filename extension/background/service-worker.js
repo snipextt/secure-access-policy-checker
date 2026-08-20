@@ -258,12 +258,27 @@ async function fetchAllData(explicitOrgId) {
 
     // 4. Resolve identities (needs mgmt_authz_token)
     try {
-      const identityMap = await resolveIdentities(rules, orgId, tabId);
+      const identityResult = await resolveIdentities(rules, orgId, tabId);
+      const identityMap = identityResult.names;
       if (Object.keys(identityMap).length > 0) {
         await api.storage.local.set({ sse_identity_map: identityMap });
         logEvent("auto-fetch", "Identities resolved", { count: Object.keys(identityMap).length });
       } else {
         logEvent("auto-fetch", "Empty identity map — keeping previous data if any");
+      }
+      // Catalog data stays authoritative, while targeted identity search fills
+      // missing identity→type links when a paginated catalog did not load.
+      if (Object.keys(identityResult.typeIds).length > 0) {
+        const storedMaps = await api.storage.local.get("sse_object_maps");
+        const objectMaps = (storedMaps && storedMaps.sse_object_maps) || {};
+        const catalogTypeIds = objectMaps.sourceIdentityTypeIds || {};
+        await api.storage.local.set({
+          sse_object_maps: {
+            ...objectMaps,
+            sourceIdentityTypeIds: { ...identityResult.typeIds, ...catalogTypeIds },
+          },
+        });
+        logEvent("auto-fetch", "Identity type links supplemented", { count: Object.keys(identityResult.typeIds).length });
       }
     } catch (err) {
       logEvent("auto-fetch", "Identity resolution failed", { error: err.message });
@@ -1110,14 +1125,14 @@ const IDENTITY_ENDPOINTS = [
     tokenKey: "mgmt_authz_token",
     buildUrl: (orgId, ids) =>
       `https://management.api.umbrella.com/identity/v2/organizations/${orgId}/all_tag_identities/security_group_tag?id=${ids.join(",")}`,
-    parse: (json) => (Array.isArray(json && json.data) ? json.data : []).map((e) => ({ id: e.id, name: e.label })),
+    parse: (json) => (Array.isArray(json && json.data) ? json.data : []).map((e) => ({ id: e.id, name: e.label, typeId: e.typeId })),
   },
   {
     name: "catalyst_sdwan",
     tokenKey: "mgmt_authz_token",
     buildUrl: (orgId, ids) =>
       `https://management.api.umbrella.com/identity/v2/organizations/${orgId}/all_tag_identities/catalyst_sdwan?id=${ids.join(",")}`,
-    parse: (json) => (Array.isArray(json && json.data) ? json.data : []).map((e) => ({ id: e.id, name: e.label })),
+    parse: (json) => (Array.isArray(json && json.data) ? json.data : []).map((e) => ({ id: e.id, name: e.label, typeId: e.typeId })),
   },
   {
     name: "internalnetworks",
@@ -1147,21 +1162,21 @@ const IDENTITY_ENDPOINTS = [
     tokenKey: "mgmt_authz_token",
     buildUrl: (orgId, ids) =>
       `https://management.api.umbrella.com/identity/v2/organizations/${orgId}/all_tag_identities/active_directory?id=${ids.join(",")}`,
-    parse: (json) => (Array.isArray(json && json.data) ? json.data : []).map((e) => ({ id: e.id, name: e.label })),
+    parse: (json) => (Array.isArray(json && json.data) ? json.data : []).map((e) => ({ id: e.id, name: e.label, typeId: e.typeId })),
   },
   {
     name: "saml",
     tokenKey: "mgmt_authz_token",
     buildUrl: (orgId, ids) =>
       `https://management.api.umbrella.com/identity/v2/organizations/${orgId}/all_tag_identities/saml?id=${ids.join(",")}`,
-    parse: (json) => (Array.isArray(json && json.data) ? json.data : []).map((e) => ({ id: e.id, name: e.label })),
+    parse: (json) => (Array.isArray(json && json.data) ? json.data : []).map((e) => ({ id: e.id, name: e.label, typeId: e.typeId })),
   },
   {
     name: "azure_ad",
     tokenKey: "mgmt_authz_token",
     buildUrl: (orgId, ids) =>
       `https://management.api.umbrella.com/identity/v2/organizations/${orgId}/all_tag_identities/azure_ad?id=${ids.join(",")}`,
-    parse: (json) => (Array.isArray(json && json.data) ? json.data : []).map((e) => ({ id: e.id, name: e.label })),
+    parse: (json) => (Array.isArray(json && json.data) ? json.data : []).map((e) => ({ id: e.id, name: e.label, typeId: e.typeId })),
   },
   {
     name: "identity_search",
@@ -1179,7 +1194,9 @@ const IDENTITY_ENDPOINTS = [
         const id = e.originId !== undefined ? e.originId : (e.id !== undefined ? e.id : null);
         // Name fields: label is primary, name/friendlyName are fallbacks
         const name = e.label || e.name || e.friendlyName || e.displayName || null;
-        if (id !== null && id !== undefined && name) return { id: String(id), name };
+        if (id !== null && id !== undefined && name) {
+          return { id: String(id), name, typeId: e.typeId };
+        }
         return null;
       };
       if (Array.isArray(json)) {
@@ -1196,7 +1213,7 @@ const IDENTITY_ENDPOINTS = [
         for (const [key, val] of Object.entries(json)) {
           if (val && typeof val === "object") {
             const name = val.label || val.name || val.friendlyName || val.displayName;
-            if (name) entries.push({ id: key, name });
+            if (name) entries.push({ id: key, name, typeId: val.typeId });
           } else if (typeof val === "string") {
             entries.push({ id: key, name: val });
           }
@@ -1226,17 +1243,15 @@ function collectIdentityIds(rules) {
   return Array.from(ids);
 }
 
-// Resolves identity IDs into an { [id]: name } map. Best-effort per
-// endpoint: if a given endpoint's token isn't available yet (e.g. the user
-// hasn't been on the dashboard long enough for that specific short-lived
-// token to be captured), that endpoint is skipped rather than failing the
-// whole scan — unresolved IDs fall back to "[unknown identity <id>]" in the
-// UI, same pattern already used for destination_list_ids/appRiskProfileId.
+// Resolves identity IDs and a supplementary identityId → typeId bridge. Search
+// responses carry typeId, so this remains accurate when a paginated source
+// catalog is unavailable or incomplete.
 async function resolveIdentities(rules, orgId, tabId) {
   const ids = collectIdentityIds(rules);
-  if (ids.length === 0) return {};
+  if (ids.length === 0) return { names: {}, typeIds: {} };
 
-  const map = {};
+  const names = {};
+  const typeIds = {};
   await Promise.all(
     IDENTITY_ENDPOINTS.map(async (endpoint) => {
       try {
@@ -1271,8 +1286,14 @@ async function resolveIdentities(rules, orgId, tabId) {
           return;
         }
         const entries = endpoint.parse(json, ids);
+        // Each endpoint may resolve different identity families. Preserve a type
+        // link already supplied by a family-specific result instead of replacing
+        // it with an empty/missing value from a broader fallback.
         for (const e of entries) {
-          if (e && e.id !== undefined && e.name) map[String(e.id)] = e.name;
+          if (e && e.id !== undefined && e.name) names[String(e.id)] = e.name;
+          if (e && e.id !== undefined && e.typeId !== undefined && e.typeId !== null && typeIds[String(e.id)] === undefined) {
+            typeIds[String(e.id)] = e.typeId;
+          }
         }
         logEvent("identity-resolve", "Endpoint resolved", { endpoint: endpoint.name, matched: entries.length });
       } catch (err) {
@@ -1281,7 +1302,7 @@ async function resolveIdentities(rules, orgId, tabId) {
     })
   );
 
-  return map;
+  return { names, typeIds };
 }
 
 // Resolves identity types (typeId → type name) using the /search?id= endpoint.

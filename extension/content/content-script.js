@@ -608,8 +608,8 @@ function summarizeConditions(rule, lookups) {
         const identityNames = (Array.isArray(values) ? values : [values]).map((id) => {
           const name = lookups.identities && lookups.identities[String(id)];
           const typeId = lookups.sourceIdentityTypeIds && lookups.sourceIdentityTypeIds[String(id)];
-          const type = typeId !== undefined ? (mergedTypes[String(typeId)] || `Type ${typeId}`) : "Type unavailable";
-          return `${name || "Identity"} (${type})`;
+          const type = typeId !== undefined ? (mergedTypes[String(typeId)] || `Type ${typeId}`) : null;
+          return type ? `${name || "Identity"} (${type})` : (name || "Identity");
         });
         summaryText = `Source Identities: ${identityNames.join(", ")}`;
         break;
