@@ -262,6 +262,8 @@ var hoverPopoverEl = null;
 var hoverHideTimer = null;
 var hoverPointer = null;
 var attachedChips = new WeakSet();
+var policyHoverDelegationAttached = false;
+var activePolicyCell = null;
 var currentHighlightEl = null;
 var triggeredDismissListener = null;
 
@@ -1144,17 +1146,49 @@ function handlePolicyColumnMouseLeave() {
   scheduleHideHoverPopover();
 }
 
+function columnIndexForTarget(target) {
+  const cell = target.closest("td, [role='cell']");
+  const row = cell && cell.closest("tr, [role='row']");
+  const table = row && row.closest("table, [role='table'], [role='grid']");
+  if (!cell || !row || !table) return null;
+  const cells = Array.from(row.querySelectorAll(":scope > td, :scope > [role='cell']"));
+  const index = cells.indexOf(cell);
+  if (index < 0) return null;
+  const headerNodes = Array.from(table.querySelectorAll("thead th, thead [role='columnheader'], [role='columnheader']"));
+  const header = headerNodes[index];
+  const headerText = (header && (header.innerText || header.textContent) || "").trim().toLowerCase();
+  if (/^(source|sources|destination|destinations)$/.test(headerText)) return { cell, row };
+  // Cisco's current policy layout is Priority, Rule Name, Source, Destination.
+  return index === 2 || index === 3 ? { cell, row } : null;
+}
+
+function handleDelegatedPolicyHover(event) {
+  const match = columnIndexForTarget(event.target);
+  if (!match || activePolicyCell === match.cell) return;
+  activePolicyCell = match.cell;
+  clearTimeout(hoverHideTimer);
+  hoverPointer = { x: event.clientX, y: event.clientY };
+  const ruleName = getRuleName(match.row);
+  if (ruleName && ruleName !== "unknown") showPopoverForRule(match.cell, ruleName, null, undefined);
+}
+
+function handleDelegatedPolicyLeave(event) {
+  const match = columnIndexForTarget(event.target);
+  if (!match) return;
+  const related = event.relatedTarget;
+  if (related && match.cell.contains(related)) return;
+  if (activePolicyCell === match.cell) activePolicyCell = null;
+  scheduleHideHoverPopover();
+}
+
 function attachChipListeners() {
-  // Deliberately limit the detail popover to Cisco's source/destination
-  // condition chips. Hovering rule names, action, priority, and empty cells
-  // remains passive, while each policy-condition column opens the full detail.
-  const chips = policyConditionCells();
-  for (const chip of chips) {
-    if (attachedChips.has(chip)) continue;
-    attachedChips.add(chip);
-    chip.addEventListener("mouseenter", handlePolicyColumnMouseEnter);
-    chip.addEventListener("mouseleave", handlePolicyColumnMouseLeave);
-  }
+  // Delegate from the document rather than binding transient inner chips.
+  // Cisco frequently remounts virtualized policy-cell DOM without a mutation
+  // shape that preserves the old target nodes.
+  if (policyHoverDelegationAttached) return;
+  policyHoverDelegationAttached = true;
+  document.addEventListener("mouseover", handleDelegatedPolicyHover, true);
+  document.addEventListener("mouseout", handleDelegatedPolicyLeave, true);
 }
 
 function initHoverPopover() {
