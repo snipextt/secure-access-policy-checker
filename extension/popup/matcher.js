@@ -874,8 +874,14 @@
         : scopeText === "private access" || scopeText === "private_network"
           ? "private_network"
           : null;
+    // A selected Private Resource or Resource Group is inherently Private
+    // Access. Infer that scope so exact resource tests do not require users to
+    // also select the redundant Destination Scope field.
+    const hasPrivateResource = [testInput.privateResourceId, testInput.privateResourceGroupId, testInput.privateResourceType]
+      .some(value => value !== null && value !== undefined && value !== "");
     const destinationValue = String(testInput.destination || "").trim();
     const inferredScope = explicitScope ||
+      (hasPrivateResource ? "private_network" : null) ||
       (destinationValue && Number.isNaN(ipv4ToInt(destinationValue.split("/")[0])) && /[a-z]/i.test(destinationValue)
         ? "public_internet"
         : null);
