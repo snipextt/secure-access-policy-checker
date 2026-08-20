@@ -1113,13 +1113,17 @@ function policyConditionCells() {
   for (const row of rows) {
     const table = row.closest("table");
     if (!table) continue;
-    const headers = Array.from(table.querySelectorAll("thead th"));
-    const indices = headers
+    const headerNodes = Array.from(table.querySelectorAll("thead th, thead [role='columnheader']"));
+    const indices = headerNodes
       .map((header, index) => ({ index, text: (header.innerText || header.textContent || "").trim().toLowerCase() }))
       .filter(({ text }) => /^(source|sources|destination|destinations)$/.test(text))
       .map(({ index }) => index);
     const rowCells = row.querySelectorAll(":scope > td");
-    for (const index of indices) {
+    // Current Cisco policy tables render Priority, Rule Name, Source and
+    // Destination in cells 0–3. If a dashboard build hides its semantic
+    // header markup, retain this observed column-position fallback.
+    const candidateIndices = indices.length ? indices : [2, 3];
+    for (const index of candidateIndices) {
       if (rowCells[index]) cells.add(rowCells[index]);
     }
   }
