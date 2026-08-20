@@ -117,8 +117,11 @@ function destCompositeIP(entries) {
 function destAppIds(ids) {
   return cond("umbrella.destination.application_ids", "INTERSECT", ids);
 }
-function destCategoryIds(ids) {
+function destApplicationCategoryIds(ids) {
   return cond("umbrella.destination.application_category_ids", "INTERSECT", ids);
+}
+function destContentCategoryIds(ids) {
+  return cond("umbrella.destination.category_ids", "INTERSECT", ids);
 }
 function destDestListIds(ids) {
   return cond("umbrella.destination.destination_list_ids", "INTERSECT", ids);
@@ -373,22 +376,61 @@ console.log("\n=== Group 6: Application & category matching ===");
 }
 
 {
-  // Rule with category IDs (e.g., Gambling, Social Media)
-  const rule = makeRule(11, "Category block", "block", [
+  // All three Cisco catalogs share umbrella.destination.application_ids.
+  // Keep their values separate in the form, then match any selected overlap.
+  const rule = makeRule(10, "Mixed application condition", "block", [
     sourceAll(),
     destAll(),
-    destCategoryIds([42, 55]),
+    destAppIds([50123, 60123, 70123]),
+  ]);
+
+  assertMatch(rule, {
+    source: "10.0.0.1", destination: "any.com", protocolId: 60123,
+  }, true, "Protocol: matching selected protocol → match");
+  assertMatch(rule, {
+    source: "10.0.0.1", destination: "any.com", enterpriseApplicationId: 70123,
+  }, true, "Enterprise application: matching selected app → match");
+  assertMatch(rule, {
+    source: "10.0.0.1", destination: "any.com", applicationId: 50123, protocolId: 60123,
+  }, true, "Application + protocol: either selected value can match → match");
+}
+
+{
+  // HAR category_ids uses Content Categories; application_category_ids uses
+  // its separate Application Categories catalog.
+  const rule = makeRule(11, "Content category block", "block", [
+    sourceAll(),
+    destAll(),
+    destContentCategoryIds([42, 55]),
   ]);
 
   assertMatch(rule, {
     source: "10.0.0.1", destination: "any.com",
-    applicationCategoryId: 42,
-  }, true, "Category: matching category → match");
+    contentCategoryId: 42,
+  }, true, "Content category: matching category → match");
 
   assertMatch(rule, {
     source: "10.0.0.1", destination: "any.com",
-    applicationCategoryId: 100,
-  }, false, "Category: non-matching category → no match");
+    contentCategoryId: 100,
+  }, false, "Content category: non-matching category → no match");
+}
+
+{
+  const rule = makeRule(12, "Application category block", "block", [
+    sourceAll(),
+    destAll(),
+    destApplicationCategoryIds([501]),
+  ]);
+
+  assertMatch(rule, {
+    source: "10.0.0.1", destination: "any.com",
+    applicationCategoryId: 501,
+  }, true, "Application category: matching category → match");
+
+  assertMatch(rule, {
+    source: "10.0.0.1", destination: "any.com",
+    applicationCategoryId: 42,
+  }, false, "Application category: non-matching category → no match");
 }
 
 // ---------------------------------------------------------------------------
@@ -426,7 +468,7 @@ console.log("\n=== Group 7: Multiple conditions (AND) ===");
     destAll(),
     sourceIdentityIds([111]),
     destAppIds([222]),
-    destCategoryIds([333]),
+    destApplicationCategoryIds([333]),
   ]);
 
   assertMatch(rule, {
@@ -649,6 +691,7 @@ assert(Matcher.conditionDimension("umbrella.destination.composite_inline_ip") ==
 assert(Matcher.conditionDimension("umbrella.source.identity_ids") === "source", "dim: source identity IDs → source");
 assert(Matcher.conditionDimension("umbrella.source.identity_type_ids") === "source", "dim: source identity types → source");
 assert(Matcher.conditionDimension("umbrella.destination.application_ids") === "destination", "dim: destination applications → destination");
+// HAR category_ids uses the Content Categories selector.
 assert(Matcher.conditionDimension("umbrella.destination.category_ids") === "destination", "dim: content categories → destination");
 assert(Matcher.conditionDimension("umbrella.destination.application_category_ids") === "destination", "dim: application categories → destination");
 assert(Matcher.conditionDimension("umbrella.destination.destination_list_ids") === "destination", "dim: dest_list → destination");
@@ -698,22 +741,18 @@ console.log("\n=== Group 17: Realistic scenarios ===");
 }
 
 {
-  // Rule 6: "Geoblocking" — Block, dest: any, geo: Antarctica
-  // NOTE: geolocation conditions are classified as "destination" dimension
-  // but the tester has no geo input field, so a rule with ONLY geo conditions
-  // on the destination side won't match through the tester. This is expected
-  // behavior — geolocation matching requires dashboard-side logic.
+  // Rule 6: "Geoblocking" — Block, destination country: Antarctica.
   const geoBlock = makeRule(6, "Geoblocking", "block", [
     sourceAll(),
     destGeoLocations(["AQ"]),
   ], { priority: 6 });
 
-  // With only sourceAll + geo condition, destination field "any.com" doesn't
-  // match the geo INTERSECT condition (no geo tester input exists).
-  // The rule has dest conditions that can't be satisfied through the tester.
   assertMatch(geoBlock, {
-    source: "10.0.0.1", destination: "any.com",
-  }, false, "Geoblocking: geo condition can't be matched via tester (expected)");
+    source: "10.0.0.1", destination: "any.com", geolocation: "AQ",
+  }, true, "Geoblocking: selected Antarctica → match");
+  assertMatch(geoBlock, {
+    source: "10.0.0.1", destination: "any.com", geolocation: "FO",
+  }, false, "Geoblocking: unlisted country → no match");
 }
 
 {
@@ -721,11 +760,11 @@ console.log("\n=== Group 17: Realistic scenarios ===");
   const aupBlock = makeRule(10, "Pseudoco AUP Internet Block", "block", [
     sourceAll(),
     destAll(),
-    destCategoryIds([100, 200]),
+    destContentCategoryIds([100, 200]),
   ], { priority: 10 });
 
   assertMatch(aupBlock, {
-    source: "10.0.0.1", destination: "any.com", applicationCategoryId: 100,
+    source: "10.0.0.1", destination: "any.com", contentCategoryId: 100,
   }, true, "AUP block: gambling category → match");
 
   assertMatch(aupBlock, {

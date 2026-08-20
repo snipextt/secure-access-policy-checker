@@ -1587,10 +1587,13 @@ const OBJECT_ENDPOINTS = [
     buildUrl: (orgId) =>
       `https://api.umbrella.com/v1/organizations/${orgId}/postureprofiles`,
     parse: (json) => {
-      const items = Array.isArray(json) ? json : (json?.items || json?.data || []);
+      // HAR response: { resources: [{ resourceInstanceId,
+      // resourceInstanceName, postureProfile, ... }] }. Keep the alternate
+      // wrappers only as compatibility fallbacks.
+      const items = Array.isArray(json) ? json : (json?.resources || json?.items || json?.data || []);
       return items.map((e) => ({
-        id: e.postureProfileId || e.id,
-        name: e.postureProfileName || e.name,
+        id: e.resourceInstanceId || e.postureProfileId || e.id,
+        name: e.resourceInstanceName || e.postureProfileName || e.name,
       }));
     },
   },

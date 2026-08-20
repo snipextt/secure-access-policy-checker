@@ -138,6 +138,10 @@ document.addEventListener("DOMContentLoaded", () => {
         lookups.applicationLists = (currentObjectMaps && currentObjectMaps.applicationLists) || {};
         lookups.categoryLists    = (currentObjectMaps && currentObjectMaps.categoryLists) || {};
         lookups.appRiskProfiles  = (currentObjectMaps && currentObjectMaps.appRiskProfiles) || {};
+        lookups.postureProfiles  = (currentObjectMaps && currentObjectMaps.postureProfiles) || {};
+        lookups.geolocations      = (currentObjectMaps && currentObjectMaps.geolocations) || {};
+        lookups.applicationCategories = (currentObjectMaps && currentObjectMaps.applicationCategories) || {};
+        lookups.enterpriseApplications = (currentObjectMaps && currentObjectMaps.enterpriseApplications) || {};
         const result = window.Matcher.matchPolicy(currentRules, testInput, lookups);
         if (testerHandle) {
           if (result && result.noMatch) {

@@ -356,6 +356,34 @@
       }
     }
 
+    if (dimension === "source" && an === "umbrella.source.identity_ids") {
+      return (lookups.identities && lookups.identities[String(id)]) || `Identity ${id}`;
+    }
+
+    if (dimension === "destination" && an.includes("application_ids")) {
+      return (lookups.apps && lookups.apps[String(id)]) ||
+        (lookups.protocols && lookups.protocols[String(id)]) ||
+        (lookups.enterpriseApplications && lookups.enterpriseApplications[String(id)]) ||
+        `Application ${id}`;
+    }
+
+    if (dimension === "destination" && an.includes("application_category")) {
+      return (lookups.applicationCategories && lookups.applicationCategories[String(id)]) || `Application Category ${id}`;
+    }
+
+    if (dimension === "destination" && an.endsWith(".category_ids")) {
+      const entry = lookups.categories && lookups.categories[String(id)];
+      return typeof entry === "object" ? (entry.name || entry.label || `Content Category ${id}`) : (entry || `Content Category ${id}`);
+    }
+
+    if (dimension === "destination" && an.includes("geolocations")) {
+      return (lookups.geolocations && lookups.geolocations[String(id)]) || String(id);
+    }
+
+    if (dimension === "destination" && an.includes("appriskprofile")) {
+      return (lookups.appRiskProfiles && lookups.appRiskProfiles[String(id)]) || `App Risk Profile ${id}`;
+    }
+
     if (dimension === "destination" && an.includes("private_resource")) {
       const name = (lookups.privateResources && lookups.privateResources[String(id)]) || (lookups.objects && lookups.objects[String(id)]);
       return name || "Private Resource";
@@ -419,6 +447,7 @@
           testInput.sourceNetworkDeviceId
         ] :
         an.includes("private_resource_group") ? [testInput.privateResourceGroupId] :
+        an.includes("private_resource_types") ? [testInput.privateResourceType] :
         an.includes("private_resource") ? [testInput.privateResourceId] :
         an.includes("destination_list") ? [testInput.destinationListId] :
         an.includes("networkobject") ? [testInput.networkObjectId] :
@@ -426,10 +455,11 @@
         an.includes("application_list") ? [testInput.applicationListId] :
         an.includes("category_list") ? [testInput.categoryListId] :
         an.includes("application_category") ? [testInput.applicationCategoryId] :
-        an.includes("category_ids") ? [testInput.contentCategoryId] :
-        an.includes("application_ids") ? [testInput.applicationId] :
+        an.endsWith(".category_ids") ? [testInput.contentCategoryId] :
+        an.includes("application_ids") ? [
+          testInput.applicationId, testInput.protocolId, testInput.enterpriseApplicationId
+        ] :
         an.includes("appriskprofile") ? [testInput.appRiskProfileId] :
-        an.includes("private_resource_types") ? [testInput.privateResourceType] :
         an.includes("geolocations") ? [testInput.geolocation] : null;
     }
     if (!selected) return null;
@@ -685,7 +715,7 @@
         const ev = String(entry).toLowerCase().trim();
         const tvL = tv.toLowerCase().trim();
         if (dimension === "source" || dimension === "destination") {
-          return cidrMatch(tv, String(entry)) || fqdnMatch(String(entry), tv) || ev === tvL || tvL === "";
+          return cidrMatch(tv, String(entry)) || fqdnMatch(String(entry), tv) || ev === tvL;
         }
         return ev === tvL;
       });
@@ -885,9 +915,9 @@
         : scopeText === "private access" || scopeText === "private_network"
           ? "private_network"
           : null;
-    // A selected Private Resource or Resource Group is inherently Private
-    // Access. Infer that scope so exact resource tests do not require users to
-    // also select the redundant Destination Scope field.
+    // A selected private catalog item is inherently Private Access. Other
+    // catalog selections are scope-agnostic: require Destination Scope rather
+    // than guessing Internet from a name, list, category, or country.
     const hasPrivateResource = [testInput.privateResourceId, testInput.privateResourceGroupId, testInput.privateResourceType]
       .some(value => value !== null && value !== undefined && value !== "");
     const destinationValue = String(testInput.destination || "").trim();
@@ -925,6 +955,8 @@
       networkObjectId = null,
       serviceObjectGroupId = null,
       applicationId = null,
+      protocolId = null,
+      enterpriseApplicationId = null,
       applicationListId = null,
       applicationCategoryId = null,
       contentCategoryId = null,
@@ -946,7 +978,7 @@
     const hasDestination = destination.trim() !== "" || [
       destinationScope, privateResourceId, privateResourceGroupId,
       destinationListId, networkObjectId, serviceObjectGroupId, applicationId,
-      applicationListId, applicationCategoryId, contentCategoryId, categoryListId, geolocation,
+      protocolId, enterpriseApplicationId, applicationListId, applicationCategoryId, contentCategoryId, categoryListId, geolocation,
       appRiskProfileId, privateResourceType,
     ].some(v => v !== null && v !== "");
 

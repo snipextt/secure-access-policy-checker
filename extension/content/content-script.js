@@ -542,6 +542,7 @@ function summarizeConditions(rule, lookups) {
   const applicationLists = objectMaps.applicationLists || {};
   const categoryLists = objectMaps.categoryLists || {};
   const geolocations = objectMaps.geolocations || {};
+  const postureProfiles = objectMaps.postureProfiles || {};
   const privateResources = objectMaps.privateResources || lookups.objects || {};
   const privateResourceGroups = objectMaps.privateResourceGroups || {};
   const countryName = (code) => {
@@ -630,23 +631,20 @@ function summarizeConditions(rule, lookups) {
         summaryText = parts.length ? parts.join(" ; ") : "Applications: Configured Apps";
         break;
       }
-      case "umbrella.destination.composite_inline_ip":
-        if (Array.isArray(values)) {
-          const destParts = [];
-          values.forEach((v) => {
-            if (typeof v === "object" && v !== null) {
-              const parts = [];
-              if (v.ip) parts.push(`IP: ${Array.isArray(v.ip) ? v.ip.join(", ") : v.ip}`);
-              if (v.protocol) parts.push(`Proto: ${v.protocol}`);
-              if (v.port) parts.push(`Port: ${Array.isArray(v.port) ? v.port.join(", ") : v.port}`);
-              destParts.push(`Destination: ${parts.join(" | ")}`);
-            } else {
-              destParts.push(`Destination IP: ${v}`);
-            }
-          });
-          summaryText = destParts.join(" ; ");
-        }
+      case "umbrella.destination.composite_inline_ip": {
+        const items = Array.isArray(values) ? values : [values];
+        const parts = items.map((item) => {
+          if (item && typeof item === "object" && !Array.isArray(item)) {
+            const ip = Array.isArray(item.ip) ? item.ip.join(", ") : (item.ip || "*");
+            const port = Array.isArray(item.port) ? item.port.join(", ") : (item.port || "*");
+            const proto = item.protocol || "ANY";
+            return `IP: ${ip}, Port: ${port}, Protocol: ${proto}`;
+          }
+          return String(item);
+        });
+        summaryText = `IP/Port/Protocol: ${parts.join(" + ")}`;
         break;
+      }
       case "umbrella.destination.destination_list_ids": {
         const names = (Array.isArray(values) ? values : [values]).map((id) =>
           objectName(destinationLists, id, `Unresolved Destination List (${id})`));
@@ -680,20 +678,6 @@ function summarizeConditions(rule, lookups) {
         summaryText = ids.length === 1
           ? `App Risk Profile: ${names[0]}`
           : `App Risk Profiles: ${names.join(", ")}`;
-        break;
-      }
-      case "umbrella.destination.composite_inline_ip": {
-        const items = Array.isArray(values) ? values : [values];
-        const parts = items.map((item) => {
-          if (item && typeof item === "object" && !Array.isArray(item)) {
-            const ip = Array.isArray(item.ip) ? item.ip.join(", ") : (item.ip || "*");
-            const port = Array.isArray(item.port) ? item.port.join(", ") : (item.port || "*");
-            const proto = item.protocol || "ANY";
-            return `IP: ${ip}, Port: ${port}, Protocol: ${proto}`;
-          }
-          return String(item);
-        });
-        summaryText = `IP/Port/Protocol: ${parts.join(" + ")}`;
         break;
       }
       case "umbrella.destination.private_resource_types": {
@@ -770,7 +754,11 @@ function summarizeConditions(rule, lookups) {
       }
       case "umbrella.destination.application_category_ids": {
         const ids = Array.isArray(values) ? values : [values];
-        summaryText = `Application Categories: ${ids.join(", ")}`;
+        const names = ids.map((id) => {
+          const entry = lookups.categories && lookups.categories[id];
+          return typeof entry === "object" ? (entry.name || entry.label || `Unresolved Application Category (${id})`) : (entry || `Unresolved Application Category (${id})`);
+        });
+        summaryText = `Application Categories: ${names.join(", ")}`;
         break;
       }
       case "umbrella.destination.saasTenantIds": {
@@ -785,15 +773,19 @@ function summarizeConditions(rule, lookups) {
         break;
       }
       case "umbrella.posture.ipsProfileId": {
-        summaryText = `IPS Profile: ${values}`;
+        const ids = Array.isArray(values) ? values : [values];
+        const names = ids.map((id) => objectName(postureProfiles, id, `Unresolved IPS Profile (${id})`));
+        summaryText = `IPS Profile: ${names.join(", ")}`;
         break;
       }
       case "umbrella.posture.profileIdClientbased":
       case "umbrella.posture.profileIdClientless":
       case "umbrella.posture.vpnProfileId":
       case "umbrella.posture.webProfileId": {
+        const ids = Array.isArray(values) ? values : [values];
         const label = type.replace("umbrella.posture.", "").replace(/([A-Z])/g, " $1");
-        summaryText = `Posture (${label}): ${values}`;
+        const names = ids.map((id) => objectName(postureProfiles, id, `Unresolved Posture Profile (${id})`));
+        summaryText = `Posture (${label}): ${names.join(", ")}`;
         break;
       }
       default: {
@@ -951,7 +943,7 @@ function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSumma
   body.appendChild(findingsWrap);
 
   const sourceConditions = (matchSummary || []).filter(item => /^umbrella\.source\./.test(item.raw && item.raw.attributeName || ""));
-  const destinationConditions = (matchSummary || []).filter(item => /^umbrella\.destination\./.test(item.raw && item.raw.attributeName || ""));
+  const postureConditions = (matchSummary || []).filter(item => /^umbrella\.posture\./.test(item.raw && item.raw.attributeName || ""));
   const conditionDisplayLines = (condition) => {
     const attribute = (condition.raw && condition.raw.attributeName || "").toLowerCase();
     const text = condition.text || "";
@@ -976,8 +968,11 @@ function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSumma
       attribute.includes("networkobjectgroup") ? "Network Object Group" :
       attribute.includes("networkobject") ? "Network Object" :
       attribute.includes("serviceobjectgroup") ? "Service Object Group" :
-      attribute.includes("serviceobject") ? "Service Object" :
+      attribute.includes("appriskprofileid") ? "App Risk Profile" :
+      attribute.includes("security_group_tag") ? "SGT" :
+      attribute.includes("saastenant") ? "SaaS Tenant" :
       attribute.includes("geolocations") ? "Country" :
+      attribute.includes("posture.") ? "Posture Profile" :
       "";
     // A condition can contain several selected catalog entries. Render each
     // as an individual fact, not a dense comma-separated field-value label.
@@ -1012,6 +1007,7 @@ function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSumma
   };
   renderConditionGroup("Source", sourceConditions);
   renderConditionGroup("Destination", destinationConditions);
+  renderConditionGroup("Posture / Security Profile", postureConditions);
 
   // --- Security profile chips (IPS, AMP, TLS, DLP) ---
   if (rule.security_profiles) {
@@ -1166,6 +1162,8 @@ function showPopoverForRule(anchorEl, ruleName, testMatchReasons, autoHideMs) {
       lookups.objectMaps = om;
       // Wire typed object maps for lookups (appRiskProfiles, etc.)
       lookups.appRiskProfiles = om.appRiskProfiles || {};
+      lookups.postureProfiles = om.postureProfiles || {};
+      lookups.geolocations = om.geolocations || {};
       const matchSummary = summarizeConditions(rule, lookups);
       renderHoverPopoverContent(popover, ruleName, rule, ruleFindings, matchSummary, testMatchReasons);
       reveal();

@@ -1643,7 +1643,9 @@
         destinationListId:         destListId,
         networkObjectId:           netObjId,
         serviceObjectGroupId:      svcObjId,
-        applicationId:             appId || protocolId || enterpriseAppId,
+        applicationId:             appId,
+        protocolId,
+        enterpriseApplicationId:   enterpriseAppId,
         applicationListId:         appListId,
         applicationCategoryId:     appCatId,
         contentCategoryId:         contentCatId,
@@ -1688,6 +1690,8 @@
       netObjSelect.reset();
       svcObjSelect.reset();
       appSelect.reset();
+      protocolSelect.reset();
+      enterpriseAppSelect.reset();
       appListSelect.reset();
       appCatSelect.reset();
       contentCatSelect.reset();
@@ -1867,12 +1871,15 @@
           }
           case "umbrella.destination.application_category_ids":
           case "umbrella.destination.category_ids": {
+            const isApplicationCategory = type === "umbrella.destination.application_category_ids";
+            const categoryMap = isApplicationCategory ? lookups.applicationCategories : lookups.categories;
+            const fallback = isApplicationCategory ? "Application Category" : "Content Category";
             const catMatches = [];
             for (const id of Array.isArray(values) ? values : [values]) {
-              const name = lookupItemName(lookups.categories, id);
-              catMatches.push(name || "Content Category");
+              const name = lookupItemName(categoryMap, id);
+              catMatches.push(name || fallback);
             }
-            summaryText = `Category: ${catMatches.join(", ")}`;
+            summaryText = `${fallback}: ${catMatches.join(", ")}`;
             break;
           }
           case "umbrella.destination.private_resource_ids":
@@ -2069,6 +2076,7 @@
       lookups.serviceObjectGroups = (objectMaps && objectMaps.serviceObjectGroups) || {};
       lookups.applicationLists = (objectMaps && objectMaps.applicationLists) || {};
       lookups.categoryLists    = (objectMaps && objectMaps.categoryLists) || {};
+      lookups.applicationCategories = (objectMaps && objectMaps.applicationCategories) || {};
 
       // Render Policy Audit & Overlap Summary Banner at top of Rules tab
       const allFindings = findings || [];
