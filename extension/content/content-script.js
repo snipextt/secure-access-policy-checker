@@ -261,9 +261,8 @@ var TRIGGERED_POPOVER_AUTO_HIDE_MS = 4000;
 var hoverPopoverEl = null;
 var hoverHideTimer = null;
 var hoverPointer = null;
-var attachedChips = new WeakSet();
 var policyHoverDelegationAttached = false;
-var activePolicyCell = null;
+var activePolicyRow = null;
 var currentHighlightEl = null;
 var triggeredDismissListener = null;
 
@@ -1146,38 +1145,65 @@ function handlePolicyColumnMouseLeave() {
   scheduleHideHoverPopover();
 }
 
-function columnIndexForTarget(target) {
-  const cell = target.closest("td, [role='cell']");
-  const row = cell && cell.closest("tr, [role='row']");
-  const table = row && row.closest("table, [role='table'], [role='grid']");
+function columnIndexForTarget(target, event) {
+  const path = event && typeof event.composedPath === "function" ? event.composedPath() : [];
+  const pathCell = path.find(node => node && node.nodeType === 1 && (node.matches("td, [role='cell']") || node.getAttribute && node.getAttribute("role") === "gridcell"));
+  const cell = pathCell || target.closest("td, [role='cell'], [role='gridcell']");
+  const row = (cell && cell.closest("tr, [role='row']")) || path.find(node => node && node.nodeType === 1 && node.matches && node.matches("tr, [role='row']"));
+  const table = (row && row.closest("table, [role='table'], [role='grid']")) || path.find(node => node && node.nodeType === 1 && node.matches && node.matches("table, [role='table'], [role='grid']"));
   if (!cell || !row || !table) return null;
-  const cells = Array.from(row.querySelectorAll(":scope > td, :scope > [role='cell']"));
+  const cells = Array.from(row.children).filter(node => node.matches && node.matches("td, [role='cell'], [role='gridcell']"));
   const index = cells.indexOf(cell);
   if (index < 0) return null;
   const headerNodes = Array.from(table.querySelectorAll("thead th, thead [role='columnheader'], [role='columnheader']"));
   const header = headerNodes[index];
   const headerText = (header && (header.innerText || header.textContent) || "").trim().toLowerCase();
-  if (/^(source|sources|destination|destinations)$/.test(headerText)) return { cell, row };
-  // Cisco's current policy layout is Priority, Rule Name, Source, Destination.
-  return index === 2 || index === 3 ? { cell, row } : null;
+  if (/\b(source|sources|destination|destinations)\b/.test(headerText)) return { cell, row };
+  // Current Cisco policy tables use leading selection/name/type columns,
+  // followed by Source and Destination. This fallback covers table variants
+  // that expose visual headers through non-semantic shadow components.
+  return index === 3 || index === 4 ? { cell, row } : null;
+}
+
+function policyColumnAtPoint(x, y) {
+  // Use the actual visible Source/Destination header geometry rather than any
+  // Cisco-internal row class, test ID, or cell position. This survives their
+  // virtualized table and shadow-style component revisions.
+  let headers = Array.from(document.querySelectorAll("thead th, [role='columnheader']"));
+  if (headers.length === 0) {
+    headers = Array.from(document.querySelectorAll("div, span"))
+      .filter(element => element.children.length === 0);
+  }
+  return headers.some(header => {
+    const text = (header.textContent || "").trim();
+    if (!/^(source|sources|destination|destinations)$/i.test(text)) return false;
+    const rect = header.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0 && x >= rect.left && x <= rect.right;
+  });
+}
+
+function ruleRowAtPoint(y) {
+  return [...findRuleRows(), ...findDefaultRuleRows()].find(row => {
+    const rect = row.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0 && y >= rect.top && y <= rect.bottom;
+  }) || null;
 }
 
 function handleDelegatedPolicyHover(event) {
-  const match = columnIndexForTarget(event.target);
-  if (!match || activePolicyCell === match.cell) return;
-  activePolicyCell = match.cell;
+  if (!policyColumnAtPoint(event.clientX, event.clientY)) return;
+  const row = ruleRowAtPoint(event.clientY);
+  if (!row || activePolicyRow === row) return;
+  activePolicyRow = row;
   clearTimeout(hoverHideTimer);
   hoverPointer = { x: event.clientX, y: event.clientY };
-  const ruleName = getRuleName(match.row);
-  if (ruleName && ruleName !== "unknown") showPopoverForRule(match.cell, ruleName, null, undefined);
+  const ruleName = getRuleName(row);
+  if (ruleName && ruleName !== "unknown") showPopoverForRule(row, ruleName, null, undefined);
 }
 
 function handleDelegatedPolicyLeave(event) {
-  const match = columnIndexForTarget(event.target);
-  if (!match) return;
-  const related = event.relatedTarget;
-  if (related && match.cell.contains(related)) return;
-  if (activePolicyCell === match.cell) activePolicyCell = null;
+  const row = ruleRowAtPoint(event.clientY);
+  if (row && policyColumnAtPoint(event.clientX, event.clientY)) return;
+  activePolicyRow = null;
   scheduleHideHoverPopover();
 }
 
@@ -1187,8 +1213,10 @@ function attachChipListeners() {
   // shape that preserves the old target nodes.
   if (policyHoverDelegationAttached) return;
   policyHoverDelegationAttached = true;
-  document.addEventListener("mouseover", handleDelegatedPolicyHover, true);
-  document.addEventListener("mouseout", handleDelegatedPolicyLeave, true);
+  document.addEventListener("pointermove", (event) => {
+    handleDelegatedPolicyHover(event);
+  }, true);
+  document.addEventListener("pointerout", handleDelegatedPolicyLeave, true);
 }
 
 function initHoverPopover() {
