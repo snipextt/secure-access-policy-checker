@@ -123,6 +123,10 @@ document.addEventListener("DOMContentLoaded", () => {
       /* onRun */ async (testInput) => {
         const lookups = await window.PopupSections.loadLookups();
         Object.assign(lookups, currentObjectMaps || {});
+        // Source identity IDs are resolved separately from their source type.
+        // Retain the catalog-derived type map so result text can identify,
+        // for example, "Carol Freeman (AD Users)".
+        lookups.sourceIdentityTypeIds = (currentObjectMaps && currentObjectMaps.sourceIdentityTypeIds) || {};
         lookups.identities = currentIdentityMap;
         lookups.objects = currentObjectMap;
         lookups.privateResources = (currentObjectMaps && currentObjectMaps.privateResources) || currentObjectMap || {};
@@ -134,12 +138,17 @@ document.addEventListener("DOMContentLoaded", () => {
         lookups.appRiskProfiles  = (currentObjectMaps && currentObjectMaps.appRiskProfiles) || {};
         const result = window.Matcher.matchPolicy(currentRules, testInput, lookups);
         if (testerHandle) {
-          testerHandle.updateResult(result === null ? {
-            noMatch: true,
-            diagnostic: buildNoMatchDiagnostic(currentRules, testInput, currentRuleFetchStatus),
-          } : result);
+          if (result && result.noMatch) {
+            testerHandle.updateResult({
+              noMatch: true,
+              diagnostic: buildNoMatchDiagnostic(currentRules, testInput, currentRuleFetchStatus),
+              rejected: result.rejected,
+            });
+          } else {
+            testerHandle.updateResult(result);
+          }
         }
-        if (result) {
+        if (result && !result.noMatch) {
           const displayName = result.rule.ruleName || result.rule.name || "(unnamed)";
           highlightOnPage(displayName, result.matchedConditions);
           minimizeEmbeddedPanel();

@@ -159,6 +159,7 @@ const REFRESH_INTERVAL_MIN = 20;
 
 let _fetchInProgress = false;
 let _fetchQueued = false;
+let _queuedOrgId = undefined;
 let _lastFetchAt = 0;
 const MIN_FETCH_INTERVAL_MS = 3000; // 3s throttle — prevents rapid-fire fetches
 
@@ -177,6 +178,7 @@ function _scheduleFetch() {
 
 async function fetchAllData(explicitOrgId) {
   if (_fetchInProgress) {
+    _queuedOrgId = explicitOrgId || _queuedOrgId;
     _fetchQueued = true;
     return;
   }
@@ -304,7 +306,9 @@ async function fetchAllData(explicitOrgId) {
     _fetchInProgress = false;
     if (_fetchQueued) {
       _fetchQueued = false;
-      fetchAllData().catch(err => {
+      const queuedOrgId = _queuedOrgId;
+      _queuedOrgId = undefined;
+      fetchAllData(queuedOrgId).catch(err => {
         logEvent("auto-fetch", "Queued fetchAllData failed", { error: err.message });
       });
     }
@@ -552,18 +556,46 @@ async function fetchRules(token, orgId) {
       defaultRuleFetch.error = `HTTP ${defaultsResponse.status}: ${body.slice(0, 200)}`;
     } else {
       const defaultsData = await defaultsResponse.json();
-      const defaults = Array.isArray(defaultsData) ? defaultsData : (defaultsData.results || defaultsData.rules || []);
+      const defaults = Array.isArray(defaultsData)
+        ? defaultsData
+        : (defaultsData.results || defaultsData.rules || defaultsData.data || defaultsData.items || []);
       for (const raw of defaults) {
         const duplicate = allRules.some(rule => String(rule.id) === String(raw.ruleId || raw.id));
         if (!duplicate) allRules.push({
           id: raw.ruleId !== undefined ? raw.ruleId : raw.id,
           name: raw.ruleName || raw.name || "Unnamed Rule",
-          order: raw.rulePriority || 0,
+          order: typeof raw.rulePriority === "number" ? raw.rulePriority : parseInt(raw.rulePriority || raw.order || "0"),
           action: (raw.ruleAction || raw.action || "allow").toLowerCase(),
           enabled: raw.ruleIsEnabled !== false,
           is_default: true,
+          sources: raw.sources || raw.source || ["any"],
+          destinations: raw.destinations || raw.destination || ["any"],
+          applications: raw.applications || raw.application || [],
+          ports: raw.ports || raw.port || ["any"],
+          protocol: raw.protocol || "any",
           trafficScope: raw.ruleAccess || null,
           conditions: raw.ruleConditions || raw.conditions || [],
+          logging_enabled: (() => {
+            const logLevel = (raw.ruleSettings || []).find(setting => setting.settingName === "umbrella.logLevel")?.settingValue;
+            return logLevel === undefined ? true : logLevel !== "NONE";
+          })(),
+          security_profiles: (() => {
+            const settings = raw.ruleSettings || [];
+            const value = (name, alternatives = []) => {
+              for (const key of [name, ...alternatives]) {
+                const found = settings.find(setting => setting.settingName === key)?.settingValue;
+                if (found !== undefined) return found;
+              }
+              return undefined;
+            };
+            const enabled = setting => setting !== undefined && setting !== null && setting !== "" && setting !== false && setting !== "DISABLED" && setting !== "NONE";
+            return {
+              ips_enabled: enabled(value("umbrella.posture.ipsProfileId", ["umbrella.security.ips", "ips_enabled"])),
+              amp_malware_enabled: enabled(value("umbrella.posture.profileIdClientbased", ["umbrella.posture.profileIdClientless", "umbrella.security.amp", "amp_malware_enabled"])),
+              tls_decryption_enabled: enabled(value("umbrella.posture.webProfileId", ["umbrella.security.tls", "tls_decryption_enabled"])),
+              dlp_enabled: enabled(value("sse.tenantControlProfileId", ["umbrella.security.dlp", "dlp_enabled"])),
+            };
+          })(),
           raw,
         });
         defaultRuleFetch.loaded++;
@@ -739,14 +771,17 @@ function checkPermissive(rules) {
   const findings = [];
   for (const rule of rules) {
     if (!rule.enabled) continue;
+    // Cisco's default access rule is an intentional scoped fallback, not a
+    // customer-configured any-to-any policy finding.
+    if (rule.is_default) continue;
     if (rule.action !== "allow") continue;
-    const srcAny = JSON.stringify(rule.sources) === JSON.stringify(["any"]);
-    const dstAny = JSON.stringify(rule.destinations) === JSON.stringify(["any"]);
-    const appAny =
-      rule.applications.length === 0 ||
-      JSON.stringify(rule.applications) === JSON.stringify(["any"]);
-    const condEmpty = rule.conditions.length === 0;
-    if (srcAny && dstAny && appAny && condEmpty) {
+    const buckets = _bucketConditionsByDimension(rule);
+    const conds = rule.conditions || rule.ruleConditions || [];
+    const sourceUnconstrained = conds.length === 0 || _dimensionUnconstrained(buckets.source);
+    const destinationUnconstrained = conds.length === 0 || _dimensionUnconstrained(buckets.destination);
+    const identityUnconstrained = conds.length === 0 || _dimensionUnconstrained(buckets.identity);
+    const appUnconstrained = conds.length === 0 || _dimensionUnconstrained(buckets.app);
+    if (sourceUnconstrained && destinationUnconstrained && identityUnconstrained && appUnconstrained) {
       findings.push({
         checkId: "overly-permissive",
         severity: "critical",

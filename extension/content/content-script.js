@@ -246,6 +246,7 @@ function highlightRule(ruleName, matchedConditions) {
 // ---------------------------------------------------------------------------
 
 var CHIP_SELECTOR = '[data-testid="policy-destination-item"], [data-testid="policy-source-item"]';
+var HOVER_ROW_SELECTOR = 'table[rowkey="ruleId"] tr.cds-table__row, table.policy-default-rule-table tr.cds-table__row, [data-rule-id], .rule-row';
 var HOVER_HIDE_DELAY_MS = 150;
 // Programmatically-triggered popovers (from "Highlight on page") aren't
 // under a real hover, so there's no natural mouseleave to close them —
@@ -534,11 +535,14 @@ function summarizeConditions(rule, lookups) {
         // file's comment for the full explanation of what identityMap
         // (lookups.identities here) covers and why some IDs may still fall
         // back to raw.
+        const mergedTypes = Object.assign({}, HOVER_DEFAULT_IDENTITY_TYPES, lookups.identityTypes || {});
         const identityNames = (Array.isArray(values) ? values : [values]).map((id) => {
           const name = lookups.identities && lookups.identities[String(id)];
-          return name || "Identity";
+          const typeId = lookups.sourceIdentityTypeIds && lookups.sourceIdentityTypeIds[String(id)];
+          const type = typeId !== undefined ? (mergedTypes[String(typeId)] || `Type ${typeId}`) : "Type unavailable";
+          return `${name || "Identity"} (${type})`;
         });
-        summaryText = `Identities: ${identityNames.join(", ")}`;
+        summaryText = `Source Identities: ${identityNames.join(", ")}`;
         break;
       }
       case "umbrella.source.identity_type_ids":
@@ -836,6 +840,20 @@ function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSumma
   actionBadge.textContent = action.toUpperCase();
   meta.appendChild(actionBadge);
 
+  const priorityValue = rule.rulePriority !== undefined ? rule.rulePriority : rule.order;
+  if (priorityValue !== undefined && priorityValue !== null) {
+    const priority = document.createElement("span");
+    priority.className = "sec-hp-priority";
+    priority.textContent = `Priority #${priorityValue}`;
+    meta.appendChild(priority);
+  }
+  if (rule.trafficScope || rule.ruleAccess || (rule.raw && rule.raw.ruleAccess)) {
+    const scope = rule.trafficScope || rule.ruleAccess || rule.raw.ruleAccess;
+    const scopeEl = document.createElement("span");
+    scopeEl.className = "sec-hp-priority";
+    scopeEl.textContent = scope === "private_network" ? "Private Access" : "Internet";
+    meta.appendChild(scopeEl);
+  }
   if (rule.is_default) {
     const priority = document.createElement("span");
     priority.className = "sec-hp-priority";
@@ -1024,9 +1042,10 @@ function showPopoverForRule(anchorEl, ruleName, testMatchReasons, autoHideMs) {
     Promise.all([loadLookups(), loadIdentityMap(), loadIdentityTypeMap(), loadObjectMap()]).then(([lookups, identityMap, identityTypeMap, objectMapResult]) => {
       lookups.identities = identityMap;
       lookups.identityTypes = Object.assign({}, HOVER_DEFAULT_IDENTITY_TYPES, identityTypeMap);
+      const om = objectMapResult.objectMaps || {};
+      lookups.sourceIdentityTypeIds = om.sourceIdentityTypeIds || {};
       lookups.objects = objectMapResult.objectMap || objectMapResult;
       // Wire typed object maps for lookups (appRiskProfiles, etc.)
-      const om = objectMapResult.objectMaps || {};
       lookups.appRiskProfiles = om.appRiskProfiles || {};
       const matchSummary = summarizeConditions(rule, lookups);
       renderHoverPopoverContent(popover, ruleName, rule, ruleFindings, matchSummary, testMatchReasons);
@@ -1035,28 +1054,26 @@ function showPopoverForRule(anchorEl, ruleName, testMatchReasons, autoHideMs) {
   });
 }
 
-function handleChipMouseEnter(event) {
-  const chip = event.currentTarget;
+function handleRuleRowMouseEnter(event) {
+  const row = event.currentTarget;
   clearTimeout(hoverHideTimer);
-
-  const row = chip.closest("tr");
-  if (!row) return;
-
   const ruleName = getRuleName(row);
-  showPopoverForRule(chip, ruleName, null, undefined);
+  if (ruleName && ruleName !== "unknown") showPopoverForRule(row, ruleName, null, undefined);
 }
 
-function handleChipMouseLeave() {
+function handleRuleRowMouseLeave() {
   scheduleHideHoverPopover();
 }
 
 function attachChipListeners() {
-  const chips = document.querySelectorAll(CHIP_SELECTOR);
-  for (const chip of chips) {
-    if (attachedChips.has(chip)) continue;
-    attachedChips.add(chip);
-    chip.addEventListener("mouseenter", handleChipMouseEnter);
-    chip.addEventListener("mouseleave", handleChipMouseLeave);
+  // Attach to complete rule rows. Dashboard chips remain inside their row, so
+  // this also covers source/destination cells without limiting hover to them.
+  const rows = document.querySelectorAll(HOVER_ROW_SELECTOR);
+  for (const row of rows) {
+    if (attachedChips.has(row)) continue;
+    attachedChips.add(row);
+    row.addEventListener("mouseenter", handleRuleRowMouseEnter);
+    row.addEventListener("mouseleave", handleRuleRowMouseLeave);
   }
 }
 

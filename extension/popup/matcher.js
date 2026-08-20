@@ -116,11 +116,15 @@
     const p = pattern.toLowerCase().trim();
     const v = value.toLowerCase().trim();
     if (p === "*") return true;
+    // Never apply FQDN substring semantics to IPv4 literals. A rule for
+    // 8.8.8.8 must not match 8.8.8.80 merely because the strings overlap.
+    const ipv4Literal = /^\d{1,3}(?:\.\d{1,3}){3}$/;
+    if (ipv4Literal.test(p) || ipv4Literal.test(v)) return v === p;
     if (p.startsWith("*.")) {
       const suffix = p.slice(2);
       return v === suffix || v.endsWith("." + suffix);
     }
-    return v === p || v.includes(p) || p.includes(v);
+    return v === p || v.includes(p);
   }
 
   // ===========================================================================
@@ -886,7 +890,7 @@
         ? "public_internet"
         : null);
     if (ruleScope && (!inferredScope || ruleScope !== inferredScope)) {
-      return { matched: false, matchedConditions: [], matchFields: null };
+      return { matched: false, matchedConditions: [`Scope: rule requires ${ruleScope}; test resolved to ${inferredScope || "none"}`], matchFields: null };
     }
 
     const { 
@@ -978,7 +982,11 @@
         const displays = [];
         for (const cond of srcConds) {
           const result = matchConditionValue(cond, "source", source, sourcePort, lookups, testInput);
-          if (!result.matched) return NO_MATCH;
+          if (!result.matched) return {
+            matched: false,
+            matchedConditions: [...matchedConditions, result.note || `Source condition ${cond.attributeName} did not match`],
+            matchFields: null,
+          };
           matchedConditions.push(result.note);
           if (result.display) displays.push(result.display);
         }
@@ -987,7 +995,11 @@
         }
       }
     } else {
-      if (hasSpecificConditions(byDim.source)) return NO_MATCH;
+      if (hasSpecificConditions(byDim.source)) return {
+        matched: false,
+        matchedConditions: ["Source is blank, but this rule requires a specific source identity or address"],
+        matchFields: null,
+      };
       matchedConditions.push("source: not constrained (field blank, rule has no specific conditions)");
     }
 
@@ -1002,7 +1014,11 @@
         const displays = [];
         for (const cond of dstConds) {
           const result = matchConditionValue(cond, "destination", destination, destinationPort, lookups, testInput);
-          if (!result.matched) return NO_MATCH;
+          if (!result.matched) return {
+            matched: false,
+            matchedConditions: [...matchedConditions, result.note || `Destination condition ${cond.attributeName} did not match`],
+            matchFields: null,
+          };
           matchedConditions.push(result.note);
           if (result.display) displays.push(result.display);
         }
@@ -1011,17 +1027,29 @@
         }
       }
     } else {
-      if (hasSpecificConditions(byDim.destination)) return NO_MATCH;
+      if (hasSpecificConditions(byDim.destination)) return {
+        matched: false,
+        matchedConditions: ["Destination is blank, but this rule requires a specific destination, catalog object, or category"],
+        matchFields: null,
+      };
       matchedConditions.push("destination: not constrained (field blank, rule has no specific conditions)");
     }
 
     // This tester deliberately supports only the HAR-observed source and
     // destination condition set. Any other specific condition is unevaluable
     // and must fail closed rather than being ignored.
-    if (hasSpecificConditions(byDim.identity) || hasSpecificConditions(byDim.app)) return NO_MATCH;
+    if (hasSpecificConditions(byDim.identity) || hasSpecificConditions(byDim.app)) return {
+      matched: false,
+      matchedConditions: ["This rule has a specific unsupported identity/app condition and was not matched"],
+      matchFields: null,
+    };
 
     if (byDim.unknown && byDim.unknown.length > 0) {
-      if (hasSpecificConditions(byDim.unknown)) return NO_MATCH;
+      if (hasSpecificConditions(byDim.unknown)) return {
+        matched: false,
+        matchedConditions: ["This rule has a specific unsupported condition and was not matched"],
+        matchFields: null,
+      };
     }
 
     return { matched: true, matchedConditions, matchFields };
@@ -1061,14 +1089,21 @@
       return pa - pb;
     });
 
+    const rejected = [];
     for (const rule of sorted) {
       const result = matchesRule(rule, testInput, lookups);
       if (result.matched) {
         return { rule, matchedConditions: result.matchedConditions, matchFields: result.matchFields };
       }
+      rejected.push({
+        ruleId: rule.ruleId !== undefined ? rule.ruleId : rule.id,
+        ruleName: rule.ruleName || rule.name || "Unnamed Rule",
+        scope: rule.trafficScope || rule.ruleAccess || (rule.raw && rule.raw.ruleAccess) || null,
+        reason: (result.matchedConditions || []).join("; ") || "Rule conditions did not match",
+      });
     }
 
-    return null;
+    return { noMatch: true, rejected };
   }
 
   // ---------------------------------------------------------------------------
@@ -1107,7 +1142,7 @@
     for (const rule of rules) {
       if (Array.isArray(rule.ruleConditions || rule.conditions)) {
         for (const cond of (rule.ruleConditions || rule.conditions)) {
-          if (conditionDimension(cond.attributeName) === "identity") {
+          if (/^umbrella\.source\.identity(?:_|\.|$)/i.test(cond.attributeName || "")) {
             if (typeof cond.attributeValue === "string" && cond.attributeValue) {
               seen.add(cond.attributeValue);
             }

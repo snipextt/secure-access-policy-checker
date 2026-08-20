@@ -1391,6 +1391,10 @@
         const defaultSummary = defaults.length
           ? defaults.map(rule => `${rule.name || "Unnamed"} [${rule.scope || "no scope"}]`).join("; ")
           : "No default rules are loaded.";
+        const rejected = Array.isArray(result.rejected) ? result.rejected : [];
+        const rejectionSummary = rejected.length
+          ? rejected.slice(0, 8).map(rule => `${rule.ruleName}: ${rule.reason}`).join("\n")
+          : "No candidate-rule trace was recorded.";
         resultCol.appendChild(el("div", { class: "psc-no-match-card" }, [
           el("span", {}, ["⚠️ No rule matched the current runtime data." ]),
           el("div", { style: { marginTop: "6px", fontSize: "11px", color: "#cbd5e1", lineHeight: "1.45" } }, [
@@ -1398,6 +1402,9 @@
           ]),
           el("div", { style: { marginTop: "4px", fontSize: "11px", color: "#94a3b8", lineHeight: "1.45" } }, [
             `Loaded defaults: ${defaultSummary}`
+          ]),
+          el("div", { style: { marginTop: "6px", fontSize: "11px", color: "#cbd5e1", lineHeight: "1.45", whiteSpace: "pre-wrap" } }, [
+            `Rejected-rule trace (first ${Math.min(rejected.length, 8)}):\n${rejectionSummary}`
           ]),
           diagnostic.defaultRuleFetch && diagnostic.defaultRuleFetch.error
             ? el("div", { style: { marginTop: "4px", fontSize: "11px", color: "#fca5a5", lineHeight: "1.45" } }, [
@@ -1762,10 +1769,16 @@
             break;
           case "umbrella.source.identity_ids":
           case "umbrella.source.identity_ids_shared": {
+            const typeMap = lookups.sourceIdentityTypeIds || {};
             const identityNames = (Array.isArray(values) ? values : [values]).map((id) => {
-              return lookupItemName(lookups.identities, id) || "Identity";
+              const name = lookupItemName(lookups.identities, id) || "Identity";
+              const typeId = typeMap[String(id)];
+              const type = typeId !== undefined
+                ? (lookupItemName(lookups.identityTypes, typeId) || lookupItemName(DEFAULT_IDENTITY_TYPES, typeId) || `Type ${typeId}`)
+                : "Type unavailable";
+              return `${name} (${type})`;
             });
-            summaryText = `Identity: ${identityNames.join(", ")}`;
+            summaryText = `Source Identity: ${identityNames.join(", ")}`;
             break;
           }
           case "umbrella.source.identity_type_ids":
@@ -1981,6 +1994,7 @@
       const lookups = await loadLookups();
       lookups.identities = identityMap || {};
       lookups.identityTypes = Object.assign({}, DEFAULT_IDENTITY_TYPES, identityTypeMap || {});
+      lookups.sourceIdentityTypeIds = (objectMaps && objectMaps.sourceIdentityTypeIds) || {};
       lookups.objects = objectMap || {};
       lookups.privateResources = (objectMaps && objectMaps.privateResources) || objectMap || {};
       lookups.destinationLists = (objectMaps && objectMaps.destinationLists) || {};
