@@ -260,6 +260,7 @@ var TRIGGERED_POPOVER_AUTO_HIDE_MS = 4000;
 
 var hoverPopoverEl = null;
 var hoverHideTimer = null;
+var hoverPointer = null;
 var attachedChips = new WeakSet();
 var currentHighlightEl = null;
 var triggeredDismissListener = null;
@@ -278,56 +279,61 @@ function ensureHoverPopoverStyle() {
     #sec-hover-popover {
       position: fixed;
       z-index: 2147483647;
-      max-width: 320px;
+      width: min(440px, calc(100vw - 32px));
+      max-height: min(520px, calc(100vh - 32px));
       background: #FFFFFF;
-      border: 1px solid #e2e8f0;
-      border-left: 3px solid #64748b;
-      border-radius: 2px;
-      box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+      border: 1px solid #d8e0ea;
+      border-left: 4px solid #64748b;
+      border-radius: 8px;
+      box-shadow: 0 18px 42px rgba(15,23,42,0.20);
       font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       font-weight: 400;
-      font-size: 12px;
-      color: #373C42;
+      font-size: 13px;
+      color: #1e293b;
       display: none;
-      overflow: hidden;
-      transition: border-left-color 0.2s ease;
+      overflow: auto;
+      transition: opacity 0.12s ease, transform 0.12s ease;
     }
     #sec-hover-popover[data-action="allow"]  { border-left-color: #166534; }
     #sec-hover-popover[data-action="block"]  { border-left-color: #991b1b; }
     #sec-hover-popover[data-action="isolate"]{ border-left-color: #6b21a8; }
     #sec-hover-popover.sec-hover-visible { display: block; }
     #sec-hover-popover .sec-hp-header {
-      background: #ffffff;
+      background: linear-gradient(135deg, #f8fafc, #eef6ff);
       color: #0f172a;
-      font-weight: 600;
-      font-size: 12.5px;
-      padding: 8px 10px;
+      font-weight: 700;
+      font-size: 14px;
+      padding: 12px 14px;
       word-break: break-word;
-      border-bottom: 1px solid #e2e8f0;
+      border-bottom: 1px solid #dbe5f0;
     }
-    #sec-hover-popover .sec-hp-body { padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
-    #sec-hover-popover .sec-hp-meta { display: flex; gap: 8px; align-items: center; }
+    #sec-hover-popover .sec-hp-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+    #sec-hover-popover .sec-hp-meta { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
     #sec-hover-popover .sec-hp-action {
-      display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 8px;
-      border-radius: 2px; letter-spacing: 0.02em; flex-shrink: 0;
+      display: inline-block; font-size: 10px; font-weight: 800; padding: 4px 9px;
+      border-radius: 999px; letter-spacing: 0.04em; flex-shrink: 0;
     }
     #sec-hover-popover .sec-hp-action-allow   { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
     #sec-hover-popover .sec-hp-action-block   { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
     #sec-hover-popover .sec-hp-action-isolate { background: #f3e8ff; color: #6b21a8; border: 1px solid #e9d5ff; }
     #sec-hover-popover .sec-hp-action-unknown { background: #f1f5f9; color: #6b7280; border: 1px solid #e2e8f0; }
-    #sec-hover-popover .sec-hp-priority { color: #596069; font-size: 11px; }
-    #sec-hover-popover .sec-hp-findings { display: flex; flex-direction: column; gap: 4px; }
-    #sec-hover-popover .sec-hp-finding  { font-size: 11px; line-height: 1.4; }
-    #sec-hover-popover .sec-hp-empty    { color: #596069; font-style: italic; font-size: 11px; }
-    #sec-hover-popover .sec-hp-match-title {
-      font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
-      color: #64748b; margin-top: 4px; padding-top: 6px; border-top: 1px solid #e2e8f0;
+    #sec-hover-popover .sec-hp-priority { color: #475569; background: #f1f5f9; border-radius: 999px; padding: 3px 8px; font-size: 11px; font-weight: 600; }
+    #sec-hover-popover .sec-hp-findings { display: flex; flex-direction: column; gap: 5px; }
+    #sec-hover-popover .sec-hp-finding  { font-size: 12px; line-height: 1.45; }
+    #sec-hover-popover .sec-hp-empty    { color: #64748b; font-style: italic; font-size: 12px; }
+    #sec-hover-popover .sec-hp-section {
+      font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em;
+      color: #64748b; padding-top: 2px;
     }
-    #sec-hover-popover .sec-hp-match { display: flex; flex-direction: column; gap: 4px; }
+    #sec-hover-popover .sec-hp-match-title {
+      font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em;
+      color: #64748b; margin-top: 4px; padding-top: 9px; border-top: 1px solid #e2e8f0;
+    }
+    #sec-hover-popover .sec-hp-match { display: flex; flex-direction: column; gap: 5px; }
     #sec-hover-popover .sec-hp-match-item {
-      font-size: 11px; line-height: 1.4; color: #334155;
-      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 2px;
-      padding: 3px 6px; display: inline-flex; align-items: center; gap: 4px;
+      font-size: 12px; line-height: 1.45; color: #334155;
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 5px;
+      padding: 6px 8px; display: inline-flex; align-items: center; gap: 5px;
       overflow-wrap: anywhere; word-break: break-word;
     }
     #sec-hover-popover .sec-hp-match-key { color: #64748b; font-weight: 600; flex-shrink: 0; }
@@ -375,26 +381,27 @@ function scheduleHideHoverPopover(delayMs) {
   }, delayMs !== undefined ? delayMs : HOVER_HIDE_DELAY_MS);
 }
 
-// Positioned below/right of the chip (not directly above it) specifically so
-// we don't overlap Cisco's own floating-ui tooltip, which renders adjacent
-// to/above the chip on hover.
-function positionHoverPopover(popover, chipRect) {
-  const margin = 8;
-  let top = chipRect.bottom + margin;
-  let left = chipRect.left;
+// Cursor-proximate placement for normal hovers; supports a DOMRect-like
+// anchor for programmatic highlight popovers.
+function positionHoverPopover(popover, anchor) {
+  const margin = 12;
+  const point = anchor && typeof anchor.x === "number"
+    ? { x: anchor.x, y: anchor.y }
+    : { x: anchor.left, y: anchor.bottom };
+  let top = point.y + 16;
+  let left = point.x + 16;
 
   const { width, height } = popover.getBoundingClientRect();
 
   if (left + width > window.innerWidth - margin) {
-    left = Math.max(margin, window.innerWidth - width - margin);
+    left = Math.max(margin, point.x - width - 16);
   }
   if (top + height > window.innerHeight - margin) {
-    // Not enough room below — flip above the chip instead.
-    top = chipRect.top - height - margin;
+    top = Math.max(margin, point.y - height - 16);
   }
 
-  popover.style.top  = `${Math.max(margin, top)}px`;
-  popover.style.left = `${Math.max(margin, left)}px`;
+  popover.style.top  = `${top}px`;
+  popover.style.left = `${left}px`;
 }
 
 // ---------------------------------------------------------------------------
@@ -882,11 +889,17 @@ function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSumma
   }
   body.appendChild(findingsWrap);
 
-  // --- Inline condition chips (matches rules tab psc-inline-chips) ---
-  if (Array.isArray(matchSummary) && matchSummary.length > 0) {
+  const sourceConditions = (matchSummary || []).filter(item => /^umbrella\.source\./.test(item.raw && item.raw.attributeName || ""));
+  const destinationConditions = (matchSummary || []).filter(item => /^umbrella\.destination\./.test(item.raw && item.raw.attributeName || ""));
+  const renderConditionGroup = (title, items) => {
+    if (!items.length) return;
+    const section = document.createElement("div");
+    section.className = "sec-hp-section";
+    section.textContent = title;
+    body.appendChild(section);
     const chipsWrap = document.createElement("div");
     chipsWrap.className = "sec-hp-chips";
-    for (const cs of matchSummary.slice(0, 6)) {
+    for (const cs of items) {
       const chip = document.createElement("span");
       chip.className = "sec-hp-chip";
       const colonIdx = cs.text.indexOf(":");
@@ -897,15 +910,16 @@ function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSumma
         const val = document.createElement("span");
         val.className = "sec-hp-chip-val";
         val.textContent = cs.text.slice(colonIdx + 1);
-        chip.appendChild(key);
-        chip.appendChild(val);
+        chip.append(key, val);
       } else {
         chip.textContent = cs.text;
       }
       chipsWrap.appendChild(chip);
     }
     body.appendChild(chipsWrap);
-  }
+  };
+  renderConditionGroup("Source", sourceConditions);
+  renderConditionGroup("Destination", destinationConditions);
 
   // --- Security profile chips (IPS, AMP, TLS, DLP) ---
   if (rule.security_profiles) {
@@ -978,7 +992,13 @@ function showPopoverForRule(anchorEl, ruleName, testMatchReasons, autoHideMs) {
 
   function reveal() {
     popover.classList.add("sec-hover-visible");
-    positionHoverPopover(popover, anchorRect);
+    // Keep the native cursor beside the card rather than anchoring to the
+    // complete table-row rectangle, which can be far from where the user is
+    // reading. Triggered popovers still use their highlight row rectangle.
+    const anchor = isTriggered
+      ? { x: anchorRect.left, y: anchorRect.bottom }
+      : (hoverPointer || { x: anchorRect.left, y: anchorRect.bottom });
+    positionHoverPopover(popover, anchor);
     if (isTriggered) {
       // Triggered popover: stays open until user clicks outside
       triggeredDismissListener = (e) => {
@@ -1015,7 +1035,13 @@ function showPopoverForRule(anchorEl, ruleName, testMatchReasons, autoHideMs) {
 
     if (rule || ruleFindings.length > 0) {
       renderHoverPopoverContent(popover, ruleName, rule, ruleFindings, null, testMatchReasons);
-      positionHoverPopover(popover, anchorRect);
+      // Keep the native cursor beside the card rather than anchoring to the
+      // complete table-row rectangle, which can be far from where the user is
+      // reading. Triggered popovers still use their highlight row rectangle.
+      const anchor = isTriggered
+        ? { x: anchorRect.left, y: anchorRect.bottom }
+        : (hoverPointer || { x: anchorRect.left, y: anchorRect.bottom });
+      positionHoverPopover(popover, anchor);
     }
 
     if (!isTriggered) {
@@ -1057,6 +1083,7 @@ function showPopoverForRule(anchorEl, ruleName, testMatchReasons, autoHideMs) {
 function handleRuleRowMouseEnter(event) {
   const row = event.currentTarget;
   clearTimeout(hoverHideTimer);
+  hoverPointer = { x: event.clientX, y: event.clientY };
   const ruleName = getRuleName(row);
   if (ruleName && ruleName !== "unknown") showPopoverForRule(row, ruleName, null, undefined);
 }
