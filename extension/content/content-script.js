@@ -521,6 +521,17 @@ function loadObjectMap() {
 }
 
 function summarizeConditions(rule, lookups) {
+  const objectMaps = lookups.objectMaps || {};
+  const objectName = (map, id, fallback) => {
+    const raw = map && map[String(id)];
+    if (typeof raw === "string" && raw) return raw;
+    if (raw && typeof raw === "object") return raw.name || raw.label || raw.displayName || fallback;
+    return fallback;
+  };
+  const networkObjects = objectMaps.networkObjects || {};
+  const networkObjectGroups = objectMaps.networkObjectGroups || {};
+  const serviceObjects = objectMaps.serviceObjects || {};
+  const serviceObjectGroups = objectMaps.serviceObjectGroups || {};
   const conds = rule.ruleConditions || rule.conditions || [];
   if (!Array.isArray(conds) || conds.length === 0) {
     return [{ text: "Applies to all traffic (no specific conditions)", raw: null }];
@@ -903,17 +914,6 @@ function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSumma
   }
   body.appendChild(findingsWrap);
 
-  const objectName = (map, id, fallback) => {
-    const raw = map && map[String(id)];
-    if (typeof raw === "string" && raw) return raw;
-    if (raw && typeof raw === "object") return raw.name || raw.label || raw.displayName || fallback;
-    return fallback;
-  };
-  const objectMaps = lookups.objectMaps || {};
-  const networkObjects = objectMaps.networkObjects || {};
-  const networkObjectGroups = objectMaps.networkObjectGroups || {};
-  const serviceObjects = objectMaps.serviceObjects || {};
-  const serviceObjectGroups = objectMaps.serviceObjectGroups || {};
   const sourceConditions = (matchSummary || []).filter(item => /^umbrella\.source\./.test(item.raw && item.raw.attributeName || ""));
   const destinationConditions = (matchSummary || []).filter(item => /^umbrella\.destination\./.test(item.raw && item.raw.attributeName || ""));
   const renderConditionGroup = (title, items) => {
