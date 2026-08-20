@@ -1829,11 +1829,18 @@ async function resolveFullCatalogs(orgId, tabId) {
           .filter(entry => entry && entry.groupName !== "Application Protocol" && entry.id !== undefined && entry.name)
           .map(entry => [String(entry.id), entry.name]));
       }
+      // Prefer the item's actual API typeId when Cisco supplies one. The
+      // catalog endpoint groups entries for browsing, but its individual
+      // typeId is what `umbrella.source.identity_type_ids` evaluates. Some
+      // roaming entries, for example, are returned as AnyConnect/Posture
+      // identities even though they appear in the Roaming Computers catalog.
+      // Endpoint families without an entry-level type use the HAR-backed
+      // sourcePolicyTypeId fallback.
       if (catalog.key.startsWith("source")) {
         maps.sourceIdentityTypeIds = maps.sourceIdentityTypeIds || {};
         for (const entry of entries) {
           if (entry && entry.id !== undefined) {
-            const policyTypeId = catalog.sourcePolicyTypeId ?? entry.typeId;
+            const policyTypeId = entry.typeId ?? catalog.sourcePolicyTypeId;
             if (policyTypeId !== undefined) maps.sourceIdentityTypeIds[String(entry.id)] = policyTypeId;
           }
         }

@@ -410,7 +410,14 @@
       ].map(id => id && typeMap[String(id)]).filter(Boolean);
     } else {
       selected =
-        an === "umbrella.source.identity_ids" ? [testInput.sourceUserId, testInput.sourceRoamingId, testInput.sourceGroupId, testInput.sourceEndpointDeviceId, testInput.sourceNetworkId, testInput.sourceSiteId, testInput.sourceSecurityGroupTagId, testInput.sourceCatalystSdwanId, testInput.sourceMobileDeviceId, testInput.sourceChromebookId, testInput.sourceZtnaClientId, testInput.sourceNetworkDeviceId] :
+        an === "umbrella.source.identity_ids" ? [
+          testInput.sourceUserId, testInput.sourceRoamingId, testInput.sourceGroupId,
+          testInput.sourceEndpointDeviceId, testInput.sourceNetworkId, testInput.sourceSiteId,
+          testInput.sourceSecurityGroupTagId, testInput.sourceCatalystSdwanId,
+          testInput.sourceTunnelGroupId, testInput.sourceMobileDeviceId,
+          testInput.sourceChromebookId, testInput.sourceZtnaClientId,
+          testInput.sourceNetworkDeviceId
+        ] :
         an.includes("private_resource_group") ? [testInput.privateResourceGroupId] :
         an.includes("private_resource") ? [testInput.privateResourceId] :
         an.includes("destination_list") ? [testInput.destinationListId] :

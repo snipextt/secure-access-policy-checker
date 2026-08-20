@@ -255,6 +255,18 @@
         width: 100%;
       }
 
+      .psc-tester-guide {
+        margin: 0;
+        padding: 9px 10px;
+        border-left: 3px solid #64748b;
+        background: #ffffff;
+        color: #475569;
+        font-size: 10.5px;
+        line-height: 1.45;
+        font-family: var(--hbr-font-family);
+      }
+      .psc-tester-guide strong { color: #0f172a; }
+
       /* Default Primary IP+Port Cards */
       .psc-hud-card {
         border: 1px solid #e2e8f0;
@@ -1116,13 +1128,17 @@
     });
     const srcIpField = createFieldGroup("Source IP / CIDR / Port", sourceInput);
 
-    const usersSelect = createSearchableSelect("Users", "Search user by name...", "psc-src-users", maps.sourceUsers);
+    // These are named catalog items, not a second set of vague "identity
+    // type" filters. Selecting a named AD User also satisfies a policy whose
+    // source is "Any AD User"; the matcher uses the catalog's type map to do
+    // that safely.
+    const usersSelect = createSearchableSelect("AD Users", "Search AD user by name...", "psc-src-users", maps.sourceUsers);
     usersSelect.input.disabled = false;
-    const roamingSelect = createSearchableSelect("Roaming Devices", "Search roaming device by name...", "psc-src-roaming", maps.sourceRoaming);
+    const roamingSelect = createSearchableSelect("Roaming Computers", "Search roaming computer by name...", "psc-src-roaming", maps.sourceRoaming);
     roamingSelect.input.disabled = false;
-    const groupsSelect = createSearchableSelect("Groups", "Search group by name...", "psc-src-groups", maps.sourceGroups);
+    const groupsSelect = createSearchableSelect("AD Groups", "Search AD group by name...", "psc-src-groups", maps.sourceGroups);
     groupsSelect.input.disabled = false;
-    const endpointDevicesSelect = createSearchableSelect("Endpoint Devices", "Search endpoint device by name...", "psc-src-endpoints", maps.sourceEndpointDevices);
+    const endpointDevicesSelect = createSearchableSelect("AD Computers", "Search AD computer by name...", "psc-src-endpoints", maps.sourceEndpointDevices);
     endpointDevicesSelect.input.disabled = false;
     const networksSelect = createSearchableSelect("Networks", "Search network by name...", "psc-src-networks", maps.sourceNetworks);
     networksSelect.input.disabled = false;
@@ -1132,7 +1148,7 @@
     sgtSelect.input.disabled = false;
     const catalystSdwanSelect = createSearchableSelect("Catalyst SD-WAN Service VPN IDs", "Search service VPN ID...", "psc-src-catalyst-sdwan", maps.sourceCatalystSdwan);
     catalystSdwanSelect.input.disabled = false;
-    const tunnelGroupsSelect = createSearchableSelect("Network Tunnel Groups", "Search tunnel group by name...", "psc-src-tunnel-groups", maps.sourceTunnelGroups);
+    const tunnelGroupsSelect = createSearchableSelect("Network Tunnel Groups (Machine Tunnel)", "Search tunnel group by name...", "psc-src-tunnel-groups", maps.sourceTunnelGroups);
     tunnelGroupsSelect.input.disabled = false;
     const networkObjectsSelect = createSearchableSelect("Network Objects", "Catalog unavailable — no HAR-observed source condition", "psc-src-network-objects", {}, "unavailable");
     networkObjectsSelect.input.disabled = true;
@@ -1166,17 +1182,19 @@
     };
 
     const sourceSettingsToggles = {
-      users: { label: "Users", enabled: savedEnabled("source", "users", true) },
-      roaming: { label: "Roaming Devices", enabled: savedEnabled("source", "roaming", false) },
-      groups: { label: "Groups", enabled: savedEnabled("source", "groups", false) },
-      endpointDevices: { label: "Endpoint Devices", enabled: savedEnabled("source", "endpointDevices", false) },
+      users: { label: "AD Users", enabled: savedEnabled("source", "users", true) },
+      roaming: { label: "Roaming Computers", enabled: savedEnabled("source", "roaming", false) },
+      groups: { label: "AD Groups", enabled: savedEnabled("source", "groups", false) },
+      endpointDevices: { label: "AD Computers", enabled: savedEnabled("source", "endpointDevices", false) },
       networks: { label: "Networks", enabled: savedEnabled("source", "networks", false) },
       sites: { label: "Sites", enabled: savedEnabled("source", "sites", false) },
       sgt: { label: "Security Group Tags", enabled: savedEnabled("source", "sgt", false) },
       catalystSdwan: { label: "Catalyst SD-WAN Service VPN IDs", enabled: savedEnabled("source", "catalystSdwan", false) },
-      tunnelGroups: { label: "Network Tunnel Groups", enabled: savedEnabled("source", "tunnelGroups", false) },
-      networkObjects: { label: "Network Objects", enabled: savedEnabled("source", "networkObjects", false) },
-      networkObjectGroups: { label: "Network Object Groups", enabled: savedEnabled("source", "networkObjectGroups", false) },
+      tunnelGroups: { label: "Network Tunnel Groups (Machine Tunnel)", enabled: savedEnabled("source", "tunnelGroups", false) },
+      // These are intentionally visible as unavailable rather than silently
+      // removed: the supplied capture has no source-object condition to match.
+      networkObjects: { label: "Network Objects — unavailable for source tests", enabled: savedEnabled("source", "networkObjects", false) },
+      networkObjectGroups: { label: "Network Object Groups — unavailable for source tests", enabled: savedEnabled("source", "networkObjectGroups", false) },
       networkDevices: { label: "Network Devices", enabled: savedEnabled("source", "networkDevices", false) },
       mobileDevices: { label: "Mobile Devices", enabled: savedEnabled("source", "mobileDevices", false) },
       chromebooks: { label: "Chromebooks", enabled: savedEnabled("source", "chromebooks", false) },
@@ -1234,6 +1252,10 @@
 
     srcBox.appendChild(srcHeader);
     srcBox.appendChild(srcSettingsPopover);
+    srcBox.appendChild(el("p", { class: "psc-tester-guide" }, [
+      el("strong", {}, ["Choose a named source. "]),
+      "A named AD user, group, roaming computer, tunnel group, or other catalog item can satisfy a policy such as “Any AD User” or “Any Network Tunnel.” Type-only policy labels without a named catalog item — such as Posture, OS, or Endpoint Requirements — remain visible on the policy but cannot be independently simulated."
+    ]));
     srcBox.appendChild(srcIpField.element);
     srcBox.appendChild(srcEnabledContainer);
 
@@ -1276,7 +1298,7 @@
     catListSelect.input.disabled = false;
     const geolocationSelect = createSearchableSelect("Geolocations", "Search country by name or code...", "psc-geolocation", maps.geolocations || {});
     geolocationSelect.input.disabled = false;
-    const privateResourceTypeSelect = createSearchableSelect("Private Resource Type", "Search resource type...", "psc-privres-type", { apps: "Applications", networks: "Networks" });
+    const privateResourceTypeSelect = createSearchableSelect("Private Resource Kind", "Applications or networks...", "psc-privres-type", { apps: "Applications", networks: "Networks" });
     privateResourceTypeSelect.input.disabled = false;
     const appRiskProfileSelect = createSearchableSelect("App Risk Profile", "Search app risk profile...", "psc-app-risk", maps.appRiskProfiles || {});
     appRiskProfileSelect.input.disabled = false;
@@ -1315,7 +1337,7 @@
       contentCategory: { label: "Content Categories", enabled: savedEnabled("destination", "contentCategory", false) },
       catList: { label: "Category Lists", enabled: savedEnabled("destination", "catList", false) },
       geolocation: { label: "Geolocations", enabled: savedEnabled("destination", "geolocation", false) },
-      privateResourceType: { label: "Private Resource Type", enabled: savedEnabled("destination", "privateResourceType", false) },
+      privateResourceType: { label: "Private Resource Kind (rule classifier)", enabled: savedEnabled("destination", "privateResourceType", false) },
       appRiskProfile: { label: "App Risk Profile", enabled: savedEnabled("destination", "appRiskProfile", false) },
     };
 
@@ -1370,6 +1392,10 @@
 
     dstBox.appendChild(dstHeader);
     dstBox.appendChild(dstSettingsPopover);
+    dstBox.appendChild(el("p", { class: "psc-tester-guide" }, [
+      el("strong", {}, ["Pick the destination being reached. "]),
+      "Private Resources are the configured intranet apps, networks, or websites. Destination Scope distinguishes Internet from Private Access. Resource Type is only a rule classifier; use a named private resource or group whenever one is configured."
+    ]));
     dstBox.appendChild(dstIpField.element);
     dstBox.appendChild(dstEnabledContainer);
 

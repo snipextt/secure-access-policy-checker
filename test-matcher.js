@@ -306,17 +306,17 @@ console.log("\n=== Group 4: Identity matching ===");
     sourceIdentityIds([12345, 67890]),
   ]);
 
-  // Matching identity
-  assertMatch(rule, { source: "10.0.0.1", destination: "any.com", identity: "12345" }, true,
-    "Identity: matching ID → match");
+  // Matching selected source item
+  assertMatch(rule, { source: "10.0.0.1", destination: "any.com", sourceUserId: "12345" }, true,
+    "Source identity: matching selected user → match");
 
-  // Non-matching identity
-  assertMatch(rule, { source: "10.0.0.1", destination: "any.com", identity: "99999" }, false,
-    "Identity: non-matching ID → no match");
+  // Non-matching selected source item
+  assertMatch(rule, { source: "10.0.0.1", destination: "any.com", sourceUserId: "99999" }, false,
+    "Source identity: non-matching selected user → no match");
 
-  // No identity specified (blank field, rule has specific identity condition)
-  assertMatch(rule, { source: "10.0.0.1", destination: "any.com", identity: "" }, false,
-    "Identity: blank field, rule has identity → no match");
+  // A catalog-backed identity condition cannot be satisfied by a free-text IP.
+  assertMatch(rule, { source: "10.0.0.1", destination: "any.com" }, false,
+    "Source identity: no selected catalog item → no match");
 }
 
 {
@@ -336,15 +336,16 @@ console.log("\n=== Group 5: Identity TYPE matching ===");
   const rule = makeRule(9, "Identity type test", "allow", [
     sourceAll(),
     destAll(),
-    sourceIdentityTypeIds([3, 4]),
+    sourceIdentityTypeIds([3, 7]),
   ]);
+  const lookups = { sourceIdentityTypeIds: { "ad-group-1": 3, "ad-user-1": 7, "other-user": 9 } };
 
-  assertMatch(rule, { source: "10.0.0.1", destination: "any.com", identityTypeId: 3 }, true,
-    "Identity type: AD Groups (3) → match");
-  assertMatch(rule, { source: "10.0.0.1", destination: "any.com", identityTypeId: 4 }, true,
-    "Identity type: Users & AD Groups (4) → match");
-  assertMatch(rule, { source: "10.0.0.1", destination: "any.com", identityTypeId: 7 }, false,
-    "Identity type: AD Users (7) → no match");
+  assertMatch(rule, { source: "10.0.0.1", destination: "any.com", sourceGroupId: "ad-group-1" }, true,
+    "Any AD Group: matching selected group → match", lookups);
+  assertMatch(rule, { source: "10.0.0.1", destination: "any.com", sourceUserId: "ad-user-1" }, true,
+    "Any AD User: matching selected user → match", lookups);
+  assertMatch(rule, { source: "10.0.0.1", destination: "any.com", sourceUserId: "other-user" }, false,
+    "Any AD User: selected roaming computer → no match", lookups);
 }
 
 // ---------------------------------------------------------------------------
@@ -381,12 +382,12 @@ console.log("\n=== Group 6: Application & category matching ===");
 
   assertMatch(rule, {
     source: "10.0.0.1", destination: "any.com",
-    categoryId: 42,
+    applicationCategoryId: 42,
   }, true, "Category: matching category → match");
 
   assertMatch(rule, {
     source: "10.0.0.1", destination: "any.com",
-    categoryId: 100,
+    applicationCategoryId: 100,
   }, false, "Category: non-matching category → no match");
 }
 
@@ -403,20 +404,19 @@ console.log("\n=== Group 7: Multiple conditions (AND) ===");
     sourceIdentityIds([12345]),
   ]);
 
-  // Both match
   assertMatch(rule, {
-    source: "10.0.0.1", destination: "10.1.2.3", identity: "12345",
-  }, true, "AND: both identity + dest match → match");
+    source: "10.0.0.1", destination: "10.1.2.3", sourceUserId: "12345",
+  }, true, "AND: both source selection + dest match → match");
 
-  // Only identity matches
+  // Only source selection matches
   assertMatch(rule, {
-    source: "10.0.0.1", destination: "8.8.8.8", identity: "12345",
-  }, false, "AND: only identity matches → no match (dest fails)");
+    source: "10.0.0.1", destination: "8.8.8.8", sourceUserId: "12345",
+  }, false, "AND: only source selection matches → no match (dest fails)");
 
   // Only dest matches
   assertMatch(rule, {
-    source: "10.0.0.1", destination: "10.1.2.3", identity: "99999",
-  }, false, "AND: only dest matches → no match (identity fails)");
+    source: "10.0.0.1", destination: "10.1.2.3", sourceUserId: "99999",
+  }, false, "AND: only dest matches → no match (source selection fails)");
 }
 
 {
@@ -431,12 +431,12 @@ console.log("\n=== Group 7: Multiple conditions (AND) ===");
 
   assertMatch(rule, {
     source: "10.0.0.1", destination: "any.com",
-    identity: "111", applicationId: 222, categoryId: 333,
+    sourceUserId: "111", applicationId: 222, applicationCategoryId: 333,
   }, true, "Triple AND: all three match → match");
 
   assertMatch(rule, {
     source: "10.0.0.1", destination: "any.com",
-    identity: "111", applicationId: 222, categoryId: 999,
+    sourceUserId: "111", applicationId: 222, applicationCategoryId: 999,
   }, false, "Triple AND: category fails → no match");
 }
 
@@ -559,7 +559,7 @@ console.log("\n=== Group 11: Geolocation matching ===");
 
   assertMatch(rule, {
     source: "10.0.0.1", destination: "any.com",
-    destination: "AQ",
+    geolocation: "AQ",
   }, true, "Geo: Antarctica → match");
 
   // Note: geolocation matching depends on how the test input is structured
@@ -646,11 +646,11 @@ console.log("\n=== Group 16: Condition dimension classification ===");
 assert(Matcher.conditionDimension("umbrella.source.all") === "source", "dim: source.all → source");
 assert(Matcher.conditionDimension("umbrella.destination.all") === "destination", "dim: dest.all → destination");
 assert(Matcher.conditionDimension("umbrella.destination.composite_inline_ip") === "destination", "dim: composite_ip → destination");
-assert(Matcher.conditionDimension("umbrella.source.identity_ids") === "identity", "dim: identity_ids → identity");
-assert(Matcher.conditionDimension("umbrella.source.identity_type_ids") === "identity", "dim: identity_type_ids → identity");
-assert(Matcher.conditionDimension("umbrella.destination.application_ids") === "app", "dim: application_ids → app");
-assert(Matcher.conditionDimension("umbrella.destination.category_ids") === "app", "dim: category_ids → app");
-assert(Matcher.conditionDimension("umbrella.destination.application_category_ids") === "app", "dim: app_category_ids → app");
+assert(Matcher.conditionDimension("umbrella.source.identity_ids") === "source", "dim: source identity IDs → source");
+assert(Matcher.conditionDimension("umbrella.source.identity_type_ids") === "source", "dim: source identity types → source");
+assert(Matcher.conditionDimension("umbrella.destination.application_ids") === "destination", "dim: destination applications → destination");
+assert(Matcher.conditionDimension("umbrella.destination.category_ids") === "destination", "dim: content categories → destination");
+assert(Matcher.conditionDimension("umbrella.destination.application_category_ids") === "destination", "dim: application categories → destination");
 assert(Matcher.conditionDimension("umbrella.destination.destination_list_ids") === "destination", "dim: dest_list → destination");
 assert(Matcher.conditionDimension("umbrella.destination.private_resource_ids") === "destination", "dim: private_resource → destination");
 assert(Matcher.conditionDimension("umbrella.destination.geolocations") === "destination", "dim: geolocations → destination");
@@ -669,12 +669,12 @@ console.log("\n=== Group 17: Realistic scenarios ===");
   ], { priority: 1 });
 
   assertMatch(carolRule, {
-    source: "10.0.0.1", destination: "google.com", identity: "11111",
-  }, true, "Carol rule: Carol's traffic → match");
+    source: "10.0.0.1", destination: "google.com", sourceUserId: "11111",
+  }, true, "Carol rule: selected Carol → match");
 
   assertMatch(carolRule, {
-    source: "10.0.0.1", destination: "google.com", identity: "22222",
-  }, false, "Carol rule: someone else's traffic → no match");
+    source: "10.0.0.1", destination: "google.com", sourceUserId: "22222",
+  }, false, "Carol rule: another selected user → no match");
 }
 
 {
@@ -725,11 +725,11 @@ console.log("\n=== Group 17: Realistic scenarios ===");
   ], { priority: 10 });
 
   assertMatch(aupBlock, {
-    source: "10.0.0.1", destination: "any.com", categoryId: 100,
+    source: "10.0.0.1", destination: "any.com", applicationCategoryId: 100,
   }, true, "AUP block: gambling category → match");
 
   assertMatch(aupBlock, {
-    source: "10.0.0.1", destination: "any.com", categoryId: 300,
+    source: "10.0.0.1", destination: "any.com", applicationCategoryId: 300,
   }, false, "AUP block: non-blocked category → no match");
 }
 

@@ -929,8 +929,12 @@ function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSumma
     const value = (colon >= 0 ? text.slice(colon + 1) : text).trim();
     if (attribute === "umbrella.source.all") return ["Any source"];
     if (attribute === "umbrella.destination.all") return ["Any destination"];
+    // Type-only source conditions are policy scope, not a selectable person
+    // or device. Keep that distinction explicit in the hover card.
+    if (attribute.includes("identity_type")) {
+      return value.split(", ").map(part => `Any ${part.trim()}`).filter(Boolean);
+    }
     const typeLabel =
-      attribute.includes("identity_type") ? "Identity Type" :
       attribute.includes("private_resource_group") ? "Private Resource Group" :
       attribute.includes("private_resource") ? "Private Resource" :
       attribute.includes("destination_list") ? "Destination List" :
