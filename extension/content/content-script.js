@@ -922,6 +922,42 @@ function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSumma
 
   const sourceConditions = (matchSummary || []).filter(item => /^umbrella\.source\./.test(item.raw && item.raw.attributeName || ""));
   const destinationConditions = (matchSummary || []).filter(item => /^umbrella\.destination\./.test(item.raw && item.raw.attributeName || ""));
+  const conditionDisplayLines = (condition) => {
+    const attribute = (condition.raw && condition.raw.attributeName || "").toLowerCase();
+    const text = condition.text || "";
+    const colon = text.indexOf(":");
+    const value = (colon >= 0 ? text.slice(colon + 1) : text).trim();
+    if (attribute === "umbrella.source.all") return ["Any source"];
+    if (attribute === "umbrella.destination.all") return ["Any destination"];
+    const typeLabel =
+      attribute.includes("identity_type") ? "Identity Type" :
+      attribute.includes("private_resource_group") ? "Private Resource Group" :
+      attribute.includes("private_resource") ? "Private Resource" :
+      attribute.includes("destination_list") ? "Destination List" :
+      attribute.includes("application_list") ? "Application List" :
+      attribute.includes("category_list") ? "Category List" :
+      attribute.includes("application_category") ? "Application Category" :
+      attribute.includes("category_ids") ? "Content Category" :
+      attribute.includes("application_ids") ? "Application" :
+      attribute.includes("networkobjectgroup") ? "Network Object Group" :
+      attribute.includes("networkobject") ? "Network Object" :
+      attribute.includes("serviceobjectgroup") ? "Service Object Group" :
+      attribute.includes("serviceobject") ? "Service Object" :
+      attribute.includes("geolocations") ? "Country" :
+      "";
+    // A condition can contain several selected catalog entries. Render each
+    // as an individual fact, not a dense comma-separated field-value label.
+    const values = value.split(" ; ").flatMap(part =>
+      Array.isArray(condition.raw && condition.raw.attributeValue) && condition.raw.attributeValue.length > 1
+        ? part.split(", ")
+        : [part]
+    ).map(part => part.trim()).filter(Boolean);
+    return values.map(part => {
+      if (!typeLabel || /\([^)]*\)$/.test(part)) return part;
+      return `${part} (${typeLabel})`;
+    });
+  };
+
   const renderConditionGroup = (title, items) => {
     if (!items.length) return;
     const section = document.createElement("div");
@@ -931,21 +967,12 @@ function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSumma
     const chipsWrap = document.createElement("div");
     chipsWrap.className = "sec-hp-chips sec-hp-condition-list";
     for (const cs of items) {
-      const chip = document.createElement("span");
-      chip.className = "sec-hp-chip";
-      const colonIdx = cs.text.indexOf(":");
-      if (colonIdx > -1) {
-        const key = document.createElement("span");
-        key.className = "sec-hp-chip-key";
-        key.textContent = cs.text.slice(0, colonIdx);
-        const val = document.createElement("span");
-        val.className = "sec-hp-chip-val";
-        val.textContent = cs.text.slice(colonIdx + 1);
-        chip.append(key, val);
-      } else {
-        chip.textContent = cs.text;
+      for (const line of conditionDisplayLines(cs)) {
+        const chip = document.createElement("span");
+        chip.className = "sec-hp-chip";
+        chip.textContent = line;
+        chipsWrap.appendChild(chip);
       }
-      chipsWrap.appendChild(chip);
     }
     body.appendChild(chipsWrap);
   };
