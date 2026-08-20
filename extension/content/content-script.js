@@ -286,7 +286,7 @@ function ensureHoverPopoverStyle() {
       background: #FFFFFF;
       border: 1px solid #d8e0ea;
       border-left: 4px solid #64748b;
-      border-radius: 8px;
+      border-radius: 0;
       box-shadow: 0 18px 42px rgba(15,23,42,0.20);
       font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       font-weight: 400;
@@ -313,13 +313,13 @@ function ensureHoverPopoverStyle() {
     #sec-hover-popover .sec-hp-meta { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
     #sec-hover-popover .sec-hp-action {
       display: inline-block; font-size: 10px; font-weight: 800; padding: 4px 9px;
-      border-radius: 999px; letter-spacing: 0.04em; flex-shrink: 0;
+      border-radius: 0; letter-spacing: 0.04em; flex-shrink: 0;
     }
     #sec-hover-popover .sec-hp-action-allow   { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
     #sec-hover-popover .sec-hp-action-block   { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
     #sec-hover-popover .sec-hp-action-isolate { background: #f3e8ff; color: #6b21a8; border: 1px solid #e9d5ff; }
     #sec-hover-popover .sec-hp-action-unknown { background: #f1f5f9; color: #6b7280; border: 1px solid #e2e8f0; }
-    #sec-hover-popover .sec-hp-priority { color: #475569; background: #f1f5f9; border-radius: 999px; padding: 3px 8px; font-size: 11px; font-weight: 600; }
+    #sec-hover-popover .sec-hp-priority { color: #475569; background: #f1f5f9; border-radius: 0; padding: 3px 8px; font-size: 11px; font-weight: 600; }
     #sec-hover-popover .sec-hp-findings { display: flex; flex-direction: column; gap: 5px; }
     #sec-hover-popover .sec-hp-finding  { font-size: 12px; line-height: 1.45; }
     #sec-hover-popover .sec-hp-empty    { color: #64748b; font-style: italic; font-size: 12px; }
@@ -334,7 +334,7 @@ function ensureHoverPopoverStyle() {
     #sec-hover-popover .sec-hp-match { display: flex; flex-direction: column; gap: 5px; }
     #sec-hover-popover .sec-hp-match-item {
       font-size: 12px; line-height: 1.45; color: #334155;
-      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 5px;
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0;
       padding: 6px 8px; display: inline-flex; align-items: center; gap: 5px;
       overflow-wrap: anywhere; word-break: break-word;
     }
@@ -348,8 +348,14 @@ function ensureHoverPopoverStyle() {
     #sec-hover-popover .sec-hp-chips {
       display: flex; flex-wrap: wrap; gap: 4px;
     }
+    #sec-hover-popover .sec-hp-chips.sec-hp-condition-list {
+      flex-direction: column; align-items: stretch; gap: 6px;
+    }
+    #sec-hover-popover .sec-hp-chips.sec-hp-condition-list .sec-hp-chip {
+      display: flex; width: 100%; box-sizing: border-box; padding: 7px 9px;
+    }
     #sec-hover-popover .sec-hp-chip {
-      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 2px;
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0;
       padding: 2px 6px; font-size: 10.5px; color: #334155;
       display: inline-flex; align-items: center; gap: 4px;
       overflow-wrap: anywhere; word-break: break-word;
@@ -923,7 +929,7 @@ function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSumma
     section.textContent = title;
     body.appendChild(section);
     const chipsWrap = document.createElement("div");
-    chipsWrap.className = "sec-hp-chips";
+    chipsWrap.className = "sec-hp-chips sec-hp-condition-list";
     for (const cs of items) {
       const chip = document.createElement("span");
       chip.className = "sec-hp-chip";
