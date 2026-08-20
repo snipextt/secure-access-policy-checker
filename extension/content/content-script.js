@@ -538,6 +538,17 @@ function summarizeConditions(rule, lookups) {
   const networkObjectGroups = objectMaps.networkObjectGroups || {};
   const serviceObjects = objectMaps.serviceObjects || {};
   const serviceObjectGroups = objectMaps.serviceObjectGroups || {};
+  const destinationLists = objectMaps.destinationLists || {};
+  const applicationLists = objectMaps.applicationLists || {};
+  const categoryLists = objectMaps.categoryLists || {};
+  const geolocations = objectMaps.geolocations || {};
+  const privateResources = objectMaps.privateResources || lookups.objects || {};
+  const privateResourceGroups = objectMaps.privateResourceGroups || {};
+  const countryName = (code) => {
+    if (typeof code !== "string" || !/^[A-Za-z]{2}$/.test(code)) return String(code);
+    try { return new Intl.DisplayNames(["en"], { type: "region" }).of(code.toUpperCase()) || code; }
+    catch (_) { return code; }
+  };
   const conds = rule.ruleConditions || rule.conditions || [];
   if (!Array.isArray(conds) || conds.length === 0) {
     return [{ text: "Applies to all traffic (no specific conditions)", raw: null }];
@@ -637,7 +648,27 @@ function summarizeConditions(rule, lookups) {
         }
         break;
       case "umbrella.destination.destination_list_ids": {
-        summaryText = "Destination List";
+        const names = (Array.isArray(values) ? values : [values]).map((id) =>
+          objectName(destinationLists, id, `Unresolved Destination List (${id})`));
+        summaryText = `Destination List: ${names.join(", ")}`;
+        break;
+      }
+      case "umbrella.destination.application_list_ids": {
+        const names = (Array.isArray(values) ? values : [values]).map((id) =>
+          objectName(applicationLists, id, `Unresolved Application List (${id})`));
+        summaryText = `Application List: ${names.join(", ")}`;
+        break;
+      }
+      case "umbrella.destination.category_list_ids": {
+        const names = (Array.isArray(values) ? values : [values]).map((id) =>
+          objectName(categoryLists, id, `Unresolved Category List (${id})`));
+        summaryText = `Category List: ${names.join(", ")}`;
+        break;
+      }
+      case "umbrella.destination.geolocations": {
+        const names = (Array.isArray(values) ? values : [values]).map((code) =>
+          objectName(geolocations, code, countryName(code)));
+        summaryText = `Countries: ${names.join(", ")}`;
         break;
       }
       case "umbrella.destination.appRiskProfileId": {
@@ -680,10 +711,9 @@ function summarizeConditions(rule, lookups) {
       case "umbrella.destination.private_resource_group_ids": {
         const isGroup = type.endsWith("_group_ids");
         const label = isGroup ? "Private Resource Groups" : "Private Resources";
-        const resNames = (Array.isArray(values) ? values : [values]).map((id) => {
-          const name = lookups.objects && lookups.objects[String(id)];
-          return name || "Private Resource";
-        });
+        const map = isGroup ? privateResourceGroups : privateResources;
+        const resNames = (Array.isArray(values) ? values : [values]).map((id) =>
+          objectName(map, id, `Unresolved ${isGroup ? "Private Resource Group" : "Private Resource"} (${id})`));
         summaryText = `${label}: ${resNames.join(", ")}`;
         break;
       }

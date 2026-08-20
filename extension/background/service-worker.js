@@ -1454,15 +1454,16 @@ const OBJECT_ENDPOINTS = [
   {
     name: "destination_lists",
     tokenKey: "opendns_token",
-    // CONFIRMED via CDP: dashboard uses ?ids=[...] with specific IDs
-    buildUrl: (orgId, ids) => {
-      if (ids && ids.length > 0) {
-        return `https://api.opendns.com/v3/organizations/${orgId}/destinationlists?ids=[${ids.join(",")}]&optionalFields={meta:'meta'}&getAll=true`;
-      }
-      return `https://api.opendns.com/v3/organizations/${orgId}/destinationlists?limit=1000&getAll=true`;
-    },
+    // HAR-confirmed catalog request: this org has 13 destination lists, so
+    // fetch the complete small catalog. This avoids a failed/partial targeted
+    // response leaving a policy hover with only an opaque numeric list ID.
+    buildUrl: (orgId) =>
+      `https://api.opendns.com/v3/organizations/${orgId}/destinationlists?sort=%7B%22name%22%3A%22asc%22%2C%22createdAt%22%3A%22desc%22%7D&outputFormat=jsonHttpStatusOverride&page=1&limit=100&filters=%7B%22bundleTypeId%22%3A%5B2%5D%7D`,
     parse: (json) => {
-      const items = Array.isArray(json) ? json : (json?.items || json?.data || []);
+      // HAR-confirmed list response is { status, meta, data: [...] }. The
+      // dashboard's targeted form can use other wrappers, so retain those as
+      // fallbacks instead of treating a successful catalog response as empty.
+      const items = Array.isArray(json) ? json : (json?.data || json?.items || []);
       return items.map((e) => ({ id: e.id, name: e.name }));
     },
   },
