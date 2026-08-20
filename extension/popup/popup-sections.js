@@ -953,7 +953,7 @@
         const item = currentItemsObj[k];
         const label = getItemLabel(item, k);
         return k.toLowerCase().includes(q) || label.toLowerCase().includes(q);
-      }).slice(0, 50);
+      }).slice(0, 500);
 
       if (matches.length === 0) {
         const emptyText = catalogStatus === "loading"
