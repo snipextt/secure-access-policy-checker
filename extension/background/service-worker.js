@@ -611,17 +611,22 @@ function compareRulePriority(a, b) {
 
 function _conditionDimension(attributeName) {
   const an = (attributeName || "").toLowerCase();
-  if (an === "umbrella.source.all") return "source";
-  if (an === "umbrella.destination.all") return "destination";
-  if (an === "umbrella.destination.composite_inline_ip") return "destination";
-  if (an === "umbrella.source.composite_inline_ip") return "source";
+  if (an === "umbrella.source.all" || an === "umbrella.source.composite_inline_ip" || an.includes("umbrella.source.identity")) return "source";
+  if (an === "umbrella.destination.all" || an === "umbrella.destination.composite_inline_ip") return "destination";
+
+  // HAR-confirmed destination attributes. They must be classified before the
+  // generic app/category fallback, otherwise scope checks can compare unrelated
+  // destinations as though they were equivalent.
+  if (
+    an.includes("private_resource") || an.includes("destination_list") ||
+    an.includes("networkobject") || an.includes("serviceobjectgroup") ||
+    an.includes("geolocation") || an.includes("application_ids") ||
+    an.includes("application_list") || an.includes("category_ids") ||
+    an.includes("category_list") || an.includes("appriskprofile")
+  ) return "destination";
+
   if (an.includes("identity")) return "identity";
   if (an.includes("application") || an.includes("app") || an.includes("protocol") || an.includes("category")) return "app";
-  // CONFIRMED via live API payload (org 8176184): umbrella.destination.destination_list_ids
-  // is a real destination-scoped condition (a user-defined "destination list").
-  // "geo" is an unconfirmed generalization for geo-blocking-style conditions
-  // (e.g. Geoblocking2), included defensively since they're also destination-scoped.
-  if (an.includes("destination_list") || an.includes("geo")) return "destination";
   return "unknown";
 }
 
@@ -1688,22 +1693,33 @@ async function resolveObjectRefs(orgId, tabId, rules) {
 // until their endpoint has been observed; we never guess endpoint paths.
 // ---------------------------------------------------------------------------
 const FULL_CATALOGS = [
-  { key: "sourceUsers", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/directory_user", dataKey: "data", idKey: "id", labelKey: "label", paged: true },
-  { key: "sourceRoaming", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/roaming", dataKey: "data", idKey: "id", labelKey: "label", paged: true },
-  { key: "sourceGroups", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/directory_group", dataKey: "data", idKey: "id", labelKey: "label", paged: true },
-  { key: "sourceEndpointDevices", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/directory_computer", dataKey: "data", idKey: "id", labelKey: "label", paged: true },
-  { key: "sourceNetworks", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/network", dataKey: "data", idKey: "id", labelKey: "label", paged: true },
-  { key: "sourceSites", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/site", dataKey: "data", idKey: "id", labelKey: "label", paged: true },
-  { key: "sourceSecurityGroupTags", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/security_group_tag", dataKey: "data", idKey: "id", labelKey: "label", paged: true },
-  { key: "sourceTunnels", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/catalyst_sdwan", dataKey: "data", idKey: "id", labelKey: "label", paged: true },
+  { key: "sourceUsers", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/directory_user", dataKey: "data", idKey: "id", labelKey: "label", paged: true, sourcePolicyTypeId: 7 },
+  { key: "sourceRoaming", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/roaming", dataKey: "data", idKey: "id", labelKey: "label", paged: true, sourcePolicyTypeId: 9 },
+  { key: "sourceGroups", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/directory_group", dataKey: "data", idKey: "id", labelKey: "label", paged: true, sourcePolicyTypeId: 3 },
+  { key: "sourceEndpointDevices", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/directory_computer", dataKey: "data", idKey: "id", labelKey: "label", paged: true, sourcePolicyTypeId: 5 },
+  { key: "sourceNetworks", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/network", dataKey: "data", idKey: "id", labelKey: "label", paged: true, sourcePolicyTypeId: 1 },
+  { key: "sourceSites", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/site", dataKey: "data", idKey: "id", labelKey: "label", paged: true, sourcePolicyTypeId: 21 },
+  { key: "sourceSecurityGroupTags", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/security_group_tag", dataKey: "data", idKey: "id", labelKey: "label", paged: true, sourcePolicyTypeId: 54 },
+  { key: "sourceCatalystSdwan", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/catalyst_sdwan", dataKey: "data", idKey: "id", labelKey: "label", paged: true, sourcePolicyTypeId: 52 },
+  { key: "sourceTunnelGroups", tokenKey: "sse_token", host: "https://api.sse.cisco.com", path: "deployments/v2/msa/networkTunnelGroupsAndBranches?limit=100&offset=0&sortBy=name&sortOrder=asc", dataKey: "data", idKey: "id", labelKey: "name", sourcePolicyTypeId: 40, mapEntries: (items) => items.filter(entry => entry.type === "Network Tunnel Group").map(entry => ({ id: entry.id, label: entry.name })) },
+  // Network/service objects were captured only as destination conditions.
+  // The identity container response supplies these child URLs and type IDs;
+  // load them so every dashboard source category has a real catalog state.
+  { key: "sourceNetworkDevices", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/network_device", dataKey: "data", idKey: "id", labelKey: "label", paged: true, sourcePolicyTypeId: 32 },
+  { key: "sourceMobileDevices", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/mobile_device", dataKey: "data", idKey: "id", labelKey: "label", paged: true, sourcePolicyTypeId: 36 },
+  { key: "sourceChromebooks", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/chromebook_user", dataKey: "data", idKey: "id", labelKey: "label", paged: true, sourcePolicyTypeId: 38 },
+  { key: "sourceZtnaClients", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/ztna_client", dataKey: "data", idKey: "id", labelKey: "label", paged: true, sourcePolicyTypeId: 57 },
   { key: "applications", tokenKey: "opendns_token", path: "v3/organizations/{orgId}/applications?outputFormat=jsonHttpStatusOverride", dataKey: "data", idKey: "id", labelKey: "name" },
+  { key: "enterpriseApplications", tokenKey: "opendns_token", path: "v3/organizations/{orgId}/enterpriseapplications", dataKey: "data", idKey: "id", labelKey: "name" },
   { key: "applicationCategories", tokenKey: "opendns_token", path: "v3/organizations/{orgId}/applicationcategories?optionalFields=%5B%22applicationsCount%22%5D&outputFormat=jsonHttpStatusOverride", dataKey: "data", idKey: "id", labelKey: "name" },
+  { key: "contentCategories", tokenKey: "opendns_token", path: "v3/categories?sort=%7B%22name%22%3A%22asc%22%2C%22createdAt%22%3A%22desc%22%7D&filters=%7B%22CategoryTypeId%22%3A1%7D&GenAIContentCategory=%7B%22showGenAIContentCategory%22%3A1%7D&outputFormat=jsonHttpStatusOverride", dataKey: "data", idKey: "categoryId", labelKey: "name" },
   { key: "geolocations", tokenKey: "sse_token", path: "v1/geolocations", dataKey: "results", idKey: "id", labelKey: "name", mapEntries: (items) => items.flatMap(continent => (continent.countries || []).map(country => ({ id: country.code, label: `${country.name} (${country.code})` }))) },
 ];
 
-function catalogHost(tokenKey) {
-  return tokenKey === "mgmt_authz_token" ? "https://management.api.umbrella.com" :
-    tokenKey === "opendns_token" ? "https://api.opendns.com" : "https://api.umbrella.com";
+function catalogHost(catalog) {
+  if (catalog.host) return catalog.host;
+  return catalog.tokenKey === "mgmt_authz_token" ? "https://management.api.umbrella.com" :
+    catalog.tokenKey === "opendns_token" ? "https://api.opendns.com" : "https://api.umbrella.com";
 }
 
 async function resolveFullCatalogs(orgId, tabId) {
@@ -1717,7 +1733,7 @@ async function resolveFullCatalogs(orgId, tabId) {
       do {
         const separator = catalog.path.includes("?") ? "&" : "?";
         const suffix = catalog.paged ? `${separator}offset=${offset}&limit=100` : "";
-        const response = await fetch(`${catalogHost(catalog.tokenKey)}/${catalog.path.replace("{orgId}", orgId)}${suffix}`, {
+        const response = await fetch(`${catalogHost(catalog)}/${catalog.path.replace("{orgId}", orgId)}${suffix}`, {
           headers: {
             Authorization: `Bearer ${tokenObj.token}`,
             Accept: "application/json",
@@ -1727,7 +1743,13 @@ async function resolveFullCatalogs(orgId, tabId) {
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const json = await response.json();
-        const page = Array.isArray(json) ? json : (Array.isArray(json[catalog.dataKey]) ? json[catalog.dataKey] : []);
+        // Cisco uses different collection wrappers across catalog endpoints.
+        // Prefer the HAR-observed key but accept the other observed wrappers.
+        const page = Array.isArray(json) ? json :
+          (Array.isArray(json[catalog.dataKey]) ? json[catalog.dataKey] :
+            (Array.isArray(json.data) ? json.data :
+              (Array.isArray(json.results) ? json.results :
+                (Array.isArray(json.items) ? json.items : []))));
         entries.push(...page);
         if (!catalog.paged || page.length === 0 || offset + page.length >= (json.total || 0) || page.length < 100) break;
         offset += page.length;
@@ -1738,11 +1760,22 @@ async function resolveFullCatalogs(orgId, tabId) {
       maps[catalog.key] = Object.fromEntries(normalizedEntries
         .filter(entry => entry && entry.id !== undefined && entry.label)
         .map(entry => [String(entry.id), entry.label]));
+      // HAR: /applications is a mixed 10k-item catalog. Protocol signatures
+      // are exactly the Application Protocol group, not a separate endpoint.
+      if (catalog.key === "applications") {
+        maps.applicationProtocols = Object.fromEntries(entries
+          .filter(entry => entry && entry.groupName === "Application Protocol" && entry.id !== undefined && entry.name)
+          .map(entry => [String(entry.id), entry.name]));
+        maps.internetApplications = Object.fromEntries(entries
+          .filter(entry => entry && entry.groupName !== "Application Protocol" && entry.id !== undefined && entry.name)
+          .map(entry => [String(entry.id), entry.name]));
+      }
       if (catalog.key.startsWith("source")) {
         maps.sourceIdentityTypeIds = maps.sourceIdentityTypeIds || {};
         for (const entry of entries) {
-          if (entry && entry.id !== undefined && entry.typeId !== undefined) {
-            maps.sourceIdentityTypeIds[String(entry.id)] = entry.typeId;
+          if (entry && entry.id !== undefined) {
+            const policyTypeId = catalog.sourcePolicyTypeId ?? entry.typeId;
+            if (policyTypeId !== undefined) maps.sourceIdentityTypeIds[String(entry.id)] = policyTypeId;
           }
         }
       }

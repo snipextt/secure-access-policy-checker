@@ -216,7 +216,8 @@ document.addEventListener("DOMContentLoaded", () => {
     // destination selectors are ready only after their own catalog keys exist.
     const requiredCatalogs = [
       "sourceUsers", "sourceRoaming", "sourceGroups", "sourceEndpointDevices",
-      "sourceNetworks", "sourceSites", "sourceSecurityGroupTags", "sourceTunnels",
+      "sourceNetworks", "sourceSites", "sourceSecurityGroupTags", "sourceCatalystSdwan",
+      "sourceTunnelGroups", "sourceNetworkDevices", "sourceMobileDevices", "sourceChromebooks", "sourceZtnaClients",
       "destinationScopes",
     ];
     const catalogsReady = requiredCatalogs.every(key => Object.prototype.hasOwnProperty.call(om, key));

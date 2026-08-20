@@ -1091,8 +1091,22 @@
     sitesSelect.input.disabled = false;
     const sgtSelect = createSearchableSelect("Security Group Tags", "Search SGT by name...", "psc-src-sgt", maps.sourceSecurityGroupTags);
     sgtSelect.input.disabled = false;
-    const tunnelsSelect = createSearchableSelect("Network Tunnels / Branches", "Search tunnel by name...", "psc-src-tunnels", maps.sourceTunnels);
-    tunnelsSelect.input.disabled = false;
+    const catalystSdwanSelect = createSearchableSelect("Catalyst SD-WAN Service VPN IDs", "Search service VPN ID...", "psc-src-catalyst-sdwan", maps.sourceCatalystSdwan);
+    catalystSdwanSelect.input.disabled = false;
+    const tunnelGroupsSelect = createSearchableSelect("Network Tunnel Groups", "Search tunnel group by name...", "psc-src-tunnel-groups", maps.sourceTunnelGroups);
+    tunnelGroupsSelect.input.disabled = false;
+    const networkObjectsSelect = createSearchableSelect("Network Objects", "Catalog unavailable — no HAR-observed source condition", "psc-src-network-objects", {}, "unavailable");
+    networkObjectsSelect.input.disabled = true;
+    const networkObjectGroupsSelect = createSearchableSelect("Network Object Groups", "Catalog unavailable — no HAR-observed source condition", "psc-src-network-object-groups", {}, "unavailable");
+    networkObjectGroupsSelect.input.disabled = true;
+    const networkDevicesSelect = createSearchableSelect("Network Devices", "No devices configured in this organization", "psc-src-network-devices", maps.sourceNetworkDevices || {});
+    networkDevicesSelect.input.disabled = false;
+    const mobileDevicesSelect = createSearchableSelect("Mobile Devices", "Search mobile device by name...", "psc-src-mobile-devices", maps.sourceMobileDevices || {});
+    mobileDevicesSelect.input.disabled = false;
+    const chromebooksSelect = createSearchableSelect("Chromebooks", "Search Chromebook by name...", "psc-src-chromebooks", maps.sourceChromebooks || {});
+    chromebooksSelect.input.disabled = false;
+    const ztnaClientsSelect = createSearchableSelect("ZTNA Clients", "Search ZTNA client by name...", "psc-src-ztna-clients", maps.sourceZtnaClients || {});
+    ztnaClientsSelect.input.disabled = false;
 
     const sourceInputMap = {
       users: usersSelect,
@@ -1102,7 +1116,14 @@
       networks: networksSelect,
       sites: sitesSelect,
       sgt: sgtSelect,
-      tunnels: tunnelsSelect,
+      catalystSdwan: catalystSdwanSelect,
+      tunnelGroups: tunnelGroupsSelect,
+      networkObjects: networkObjectsSelect,
+      networkObjectGroups: networkObjectGroupsSelect,
+      networkDevices: networkDevicesSelect,
+      mobileDevices: mobileDevicesSelect,
+      chromebooks: chromebooksSelect,
+      ztnaClients: ztnaClientsSelect,
     };
 
     const sourceSettingsToggles = {
@@ -1113,7 +1134,14 @@
       networks: { label: "Networks", enabled: savedEnabled("source", "networks", false) },
       sites: { label: "Sites", enabled: savedEnabled("source", "sites", false) },
       sgt: { label: "Security Group Tags", enabled: savedEnabled("source", "sgt", false) },
-      tunnels: { label: "Network Tunnels / Branches", enabled: savedEnabled("source", "tunnels", false) },
+      catalystSdwan: { label: "Catalyst SD-WAN Service VPN IDs", enabled: savedEnabled("source", "catalystSdwan", false) },
+      tunnelGroups: { label: "Network Tunnel Groups", enabled: savedEnabled("source", "tunnelGroups", false) },
+      networkObjects: { label: "Network Objects", enabled: savedEnabled("source", "networkObjects", false) },
+      networkObjectGroups: { label: "Network Object Groups", enabled: savedEnabled("source", "networkObjectGroups", false) },
+      networkDevices: { label: "Network Devices", enabled: savedEnabled("source", "networkDevices", false) },
+      mobileDevices: { label: "Mobile Devices", enabled: savedEnabled("source", "mobileDevices", false) },
+      chromebooks: { label: "Chromebooks", enabled: savedEnabled("source", "chromebooks", false) },
+      ztnaClients: { label: "ZTNA Clients", enabled: savedEnabled("source", "ztnaClients", false) },
     };
 
     // Source Section Box
@@ -1193,12 +1221,18 @@
     netObjSelect.input.disabled = false;
     const svcObjSelect = createSearchableSelect("Service Object Groups", "Search service groups by name...", "psc-svcobj", maps.serviceObjectGroups || {});
     svcObjSelect.input.disabled = false;
-    const appSelect = createSearchableSelect("Applications", "Search applications by name...", "psc-app", maps.applications || {});
+    const appSelect = createSearchableSelect("Internet Applications", "Search internet applications by name...", "psc-app", maps.internetApplications || maps.applications || {});
     appSelect.input.disabled = false;
+    const protocolSelect = createSearchableSelect("Application Protocols", "Search protocol signatures by name...", "psc-protocol", maps.applicationProtocols || {});
+    protocolSelect.input.disabled = false;
+    const enterpriseAppSelect = createSearchableSelect("Enterprise Applications", "Search enterprise applications by name...", "psc-enterprise-app", maps.enterpriseApplications || {});
+    enterpriseAppSelect.input.disabled = false;
     const appListSelect = createSearchableSelect("Application Lists", "Search application lists by name...", "psc-applist", maps.applicationLists || {});
     appListSelect.input.disabled = false;
     const appCatSelect = createSearchableSelect("Application Categories", "Search application categories by name...", "psc-appcat", maps.applicationCategories || {});
     appCatSelect.input.disabled = false;
+    const contentCatSelect = createSearchableSelect("Content Categories", "Search content categories by name...", "psc-content-cat", maps.contentCategories || {});
+    contentCatSelect.input.disabled = false;
     const catListSelect = createSearchableSelect("Category Lists", "Search category lists by name...", "psc-catlist", maps.categoryLists || {});
     catListSelect.input.disabled = false;
     const geolocationSelect = createSearchableSelect("Geolocations", "Search country by name or code...", "psc-geolocation", maps.geolocations || {});
@@ -1216,8 +1250,11 @@
       netObject: netObjSelect,
       serviceObject: svcObjSelect,
       application: appSelect,
+      protocol: protocolSelect,
+      enterpriseApplication: enterpriseAppSelect,
       appList: appListSelect,
       appCategory: appCatSelect,
+      contentCategory: contentCatSelect,
       catList: catListSelect,
       geolocation: geolocationSelect,
       privateResourceType: privateResourceTypeSelect,
@@ -1231,11 +1268,16 @@
       destinationList: { label: "Destination Lists", enabled: savedEnabled("destination", "destinationList", false) },
       netObject: { label: "Network Objects", enabled: savedEnabled("destination", "netObject", false) },
       serviceObject: { label: "Service Object Groups", enabled: savedEnabled("destination", "serviceObject", false) },
-      application: { label: "Applications", enabled: savedEnabled("destination", "application", false) },
+      application: { label: "Internet Applications", enabled: savedEnabled("destination", "application", false) },
+      protocol: { label: "Application Protocols", enabled: savedEnabled("destination", "protocol", false) },
+      enterpriseApplication: { label: "Enterprise Applications", enabled: savedEnabled("destination", "enterpriseApplication", false) },
       appList: { label: "Application Lists", enabled: savedEnabled("destination", "appList", false) },
       appCategory: { label: "Application Categories", enabled: savedEnabled("destination", "appCategory", false) },
+      contentCategory: { label: "Content Categories", enabled: savedEnabled("destination", "contentCategory", false) },
       catList: { label: "Category Lists", enabled: savedEnabled("destination", "catList", false) },
       geolocation: { label: "Geolocations", enabled: savedEnabled("destination", "geolocation", false) },
+      privateResourceType: { label: "Private Resource Type", enabled: savedEnabled("destination", "privateResourceType", false) },
+      appRiskProfile: { label: "App Risk Profile", enabled: savedEnabled("destination", "appRiskProfile", false) },
     };
 
     // Destination Section Box
@@ -1444,7 +1486,14 @@
       const networksId = networksSelect.getValue();
       const sitesId = sitesSelect.getValue();
       const sgtId = sgtSelect.getValue();
-      const tunnelsId = tunnelsSelect.getValue();
+      const catalystSdwanId = catalystSdwanSelect.getValue();
+      const tunnelGroupId = tunnelGroupsSelect.getValue();
+      const sourceNetworkObjectId = networkObjectsSelect.getValue();
+      const sourceNetworkObjectGroupId = networkObjectGroupsSelect.getValue();
+      const mobileDeviceId = mobileDevicesSelect.getValue();
+      const chromebookId = chromebooksSelect.getValue();
+      const ztnaClientId = ztnaClientsSelect.getValue();
+      const networkDeviceId = networkDevicesSelect.getValue();
       const destScopeVal = destScopeSelect.getValue();
       const privResId = privResSelect.getValue();
       const privResGroupId = privResGroupSelect.getValue();
@@ -1452,14 +1501,17 @@
       const netObjId = netObjSelect.getValue();
       const svcObjId = svcObjSelect.getValue();
       const appId = appSelect.getValue();
+      const protocolId = protocolSelect.getValue();
+      const enterpriseAppId = enterpriseAppSelect.getValue();
       const appListId = appListSelect.getValue();
       const appCatId = appCatSelect.getValue();
+      const contentCatId = contentCatSelect.getValue();
       const catListId = catListSelect.getValue();
       const geoVal = geolocationSelect.getValue();
       const privateResourceTypeVal = privateResourceTypeSelect.getValue();
       const appRiskProfileId = appRiskProfileSelect.getValue();
 
-      if (!srcVal && !destVal && !usersId && !roamingId && !groupsId && !endpointDevicesId && !networksId && !sitesId && !sgtId && !tunnelsId && !destScopeVal && !privResId && !privResGroupId && !destListId && !netObjId && !svcObjId && !appId && !appListId && !appCatId && !catListId && !geoVal && !privateResourceTypeVal && !appRiskProfileId) {
+      if (!srcVal && !destVal && !usersId && !roamingId && !groupsId && !endpointDevicesId && !networksId && !sitesId && !sgtId && !catalystSdwanId && !tunnelGroupId && !sourceNetworkObjectId && !sourceNetworkObjectGroupId && !networkDeviceId && !mobileDeviceId && !chromebookId && !ztnaClientId && !destScopeVal && !privResId && !privResGroupId && !destListId && !netObjId && !svcObjId && !appId && !protocolId && !enterpriseAppId && !appListId && !appCatId && !contentCatId && !catListId && !geoVal && !privateResourceTypeVal && !appRiskProfileId) {
         errorLine.textContent = "SELECT AT LEAST ONE CRITERION.";
         return;
       }
@@ -1481,16 +1533,24 @@
         sourceNetworkId:           networksId,
         sourceSiteId:              sitesId,
         sourceSecurityGroupTagId:  sgtId,
-        sourceTunnelId:            tunnelsId,
+        sourceCatalystSdwanId:    catalystSdwanId,
+        sourceTunnelGroupId:      tunnelGroupId,
+        sourceNetworkObjectId,
+        sourceNetworkObjectGroupId,
+        sourceNetworkDeviceId:    networkDeviceId,
+        sourceMobileDeviceId:      mobileDeviceId,
+        sourceChromebookId:        chromebookId,
+        sourceZtnaClientId:        ztnaClientId,
         destinationScope:          destScopeVal,
         privateResourceId:         privResId,
         privateResourceGroupId:    privResGroupId,
         destinationListId:         destListId,
         networkObjectId:           netObjId,
         serviceObjectGroupId:      svcObjId,
-        applicationId:             appId,
+        applicationId:             appId || protocolId || enterpriseAppId,
         applicationListId:         appListId,
         applicationCategoryId:     appCatId,
+        contentCategoryId:         contentCatId,
         categoryListId:            catListId,
         geolocation:               geoVal,
         privateResourceType:       privateResourceTypeVal,
@@ -1516,7 +1576,14 @@
       networksSelect.reset();
       sitesSelect.reset();
       sgtSelect.reset();
-      tunnelsSelect.reset();
+      catalystSdwanSelect.reset();
+      tunnelGroupsSelect.reset();
+      networkObjectsSelect.reset();
+      networkObjectGroupsSelect.reset();
+      networkDevicesSelect.reset();
+      mobileDevicesSelect.reset();
+      chromebooksSelect.reset();
+      ztnaClientsSelect.reset();
       destScopeSelect.reset();
       privResSelect.reset();
       privResGroupSelect.reset();
@@ -1526,6 +1593,7 @@
       appSelect.reset();
       appListSelect.reset();
       appCatSelect.reset();
+      contentCatSelect.reset();
       catListSelect.reset();
       geolocationSelect.reset();
       privateResourceTypeSelect.reset();

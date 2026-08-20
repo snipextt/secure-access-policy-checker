@@ -399,11 +399,14 @@
       selected = [
         testInput.sourceUserId, testInput.sourceRoamingId, testInput.sourceGroupId,
         testInput.sourceEndpointDeviceId, testInput.sourceNetworkId, testInput.sourceSiteId,
-        testInput.sourceSecurityGroupTagId, testInput.sourceTunnelId,
+        testInput.sourceSecurityGroupTagId, testInput.sourceCatalystSdwanId,
+        testInput.sourceMobileDeviceId, testInput.sourceChromebookId,
+        testInput.sourceZtnaClientId, testInput.sourceTunnelGroupId,
+        testInput.sourceNetworkDeviceId,
       ].map(id => id && typeMap[String(id)]).filter(Boolean);
     } else {
       selected =
-        an === "umbrella.source.identity_ids" ? [testInput.sourceUserId, testInput.sourceRoamingId, testInput.sourceGroupId, testInput.sourceEndpointDeviceId, testInput.sourceNetworkId, testInput.sourceSiteId, testInput.sourceSecurityGroupTagId, testInput.sourceTunnelId] :
+        an === "umbrella.source.identity_ids" ? [testInput.sourceUserId, testInput.sourceRoamingId, testInput.sourceGroupId, testInput.sourceEndpointDeviceId, testInput.sourceNetworkId, testInput.sourceSiteId, testInput.sourceSecurityGroupTagId, testInput.sourceCatalystSdwanId, testInput.sourceMobileDeviceId, testInput.sourceChromebookId, testInput.sourceZtnaClientId, testInput.sourceNetworkDeviceId] :
         an.includes("private_resource_group") ? [testInput.privateResourceGroupId] :
         an.includes("private_resource") ? [testInput.privateResourceId] :
         an.includes("destination_list") ? [testInput.destinationListId] :
@@ -411,7 +414,8 @@
         an.includes("serviceobjectgroup") ? [testInput.serviceObjectGroupId] :
         an.includes("application_list") ? [testInput.applicationListId] :
         an.includes("category_list") ? [testInput.categoryListId] :
-        an.includes("application_category") || an.includes("category_ids") ? [testInput.applicationCategoryId] :
+        an.includes("application_category") ? [testInput.applicationCategoryId] :
+        an.includes("category_ids") ? [testInput.contentCategoryId] :
         an.includes("application_ids") ? [testInput.applicationId] :
         an.includes("appriskprofile") ? [testInput.appRiskProfileId] :
         an.includes("private_resource_types") ? [testInput.privateResourceType] :
@@ -872,7 +876,14 @@
       sourceNetworkId = null,
       sourceSiteId = null,
       sourceSecurityGroupTagId = null,
-      sourceTunnelId = null,
+      sourceCatalystSdwanId = null,
+      sourceTunnelGroupId = null,
+      sourceNetworkObjectId = null,
+      sourceNetworkObjectGroupId = null,
+      sourceMobileDeviceId = null,
+      sourceChromebookId = null,
+      sourceZtnaClientId = null,
+      sourceNetworkDeviceId = null,
       destinationScope = null,
       privateResourceId = null,
       privateResourceGroupId = null,
@@ -882,6 +893,7 @@
       applicationId = null,
       applicationListId = null,
       applicationCategoryId = null,
+      contentCategoryId = null,
       categoryListId = null,
       geolocation = null,
       appRiskProfileId = null,
@@ -891,12 +903,16 @@
     } = testInput;
     const hasSource = source.trim() !== "" || [
       sourceUserId, sourceRoamingId, sourceGroupId, sourceEndpointDeviceId,
-      sourceNetworkId, sourceSiteId, sourceSecurityGroupTagId, sourceTunnelId,
+      sourceNetworkId, sourceSiteId, sourceSecurityGroupTagId,
+      sourceCatalystSdwanId, sourceTunnelGroupId,
+      sourceNetworkObjectId, sourceNetworkObjectGroupId,
+      sourceMobileDeviceId, sourceChromebookId, sourceZtnaClientId,
+      sourceNetworkDeviceId,
     ].some(v => v !== null && v !== "");
     const hasDestination = destination.trim() !== "" || [
       destinationScope, privateResourceId, privateResourceGroupId,
       destinationListId, networkObjectId, serviceObjectGroupId, applicationId,
-      applicationListId, applicationCategoryId, categoryListId, geolocation,
+      applicationListId, applicationCategoryId, contentCategoryId, categoryListId, geolocation,
       appRiskProfileId, privateResourceType,
     ].some(v => v !== null && v !== "");
 
