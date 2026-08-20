@@ -219,8 +219,24 @@ async function fetchAllData(explicitOrgId) {
       const stored = await api.storage.local.get("sse_rules");
       rules = stored.sse_rules || [];
     }
+    // Fetch source/destination catalogs independently of rule availability.
+    // They power the tester and must not be blocked by a rule API failure.
+    try {
+      const catalogMaps = await resolveFullCatalogs(orgId, tabId);
+      const previous = await api.storage.local.get("sse_object_maps");
+      const previousMaps = (previous && previous.sse_object_maps) || {};
+      for (const [key, map] of Object.entries(catalogMaps)) {
+        if (Object.keys(map).length === 0 && previousMaps[key] && Object.keys(previousMaps[key]).length > 0) {
+          catalogMaps[key] = previousMaps[key];
+        }
+      }
+      await api.storage.local.set({ sse_object_maps: { ...previousMaps, ...catalogMaps } });
+    } catch (err) {
+      logEvent("auto-fetch", "Full catalog fetch failed", { error: err.message });
+    }
+
     if (rules.length === 0) {
-      logEvent("auto-fetch", "No rules available, stopping");
+      logEvent("auto-fetch", "No rules available; catalogs refreshed, skipping rule-dependent resolution");
       return;
     }
 
@@ -259,29 +275,11 @@ async function fetchAllData(explicitOrgId) {
           objectMaps[key] = prevMaps[key];
         }
       }
-      await api.storage.local.set({ sse_object_maps: objectMaps });
+      await api.storage.local.set({ sse_object_maps: { ...prevMaps, ...objectMaps } });
       const totalObjects = Object.values(objectMaps).reduce((sum, m) => sum + Object.keys(m).length, 0);
       logEvent("auto-fetch", "Objects resolved", { total: totalObjects });
     } catch (err) {
       logEvent("auto-fetch", "Object resolution failed", { error: err.message });
-    }
-
-    // 7. Fetch complete source/destination catalogs observed in the dashboard
-    // HAR. Merge each successful catalog with cached data so a short-lived
-    // token failure never empties an already-populated selector.
-    try {
-      const catalogMaps = await resolveFullCatalogs(orgId, tabId);
-      const prev = await api.storage.local.get("sse_object_maps");
-      const previousMaps = (prev && prev.sse_object_maps) || {};
-      for (const [key, map] of Object.entries(catalogMaps)) {
-        if (Object.keys(map).length === 0 && previousMaps[key] && Object.keys(previousMaps[key]).length > 0) {
-          catalogMaps[key] = previousMaps[key];
-        }
-      }
-      const existing = await api.storage.local.get("sse_object_maps");
-      await api.storage.local.set({ sse_object_maps: { ...(existing.sse_object_maps || {}), ...catalogMaps } });
-    } catch (err) {
-      logEvent("auto-fetch", "Full catalog fetch failed", { error: err.message });
     }
 
     // 8. Schedule next periodic refresh

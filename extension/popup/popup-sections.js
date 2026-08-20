@@ -1018,7 +1018,17 @@
   function buildTesterPanel(container, identityOptions, objectMaps, identityTypeMap, identityMap, onRun, onReset) {
     injectStyles();
 
-    const maps = objectMaps && objectMaps.privateResources ? objectMaps : {
+    // Catalog updates re-render this panel. Preserve which optional fields the
+    // user enabled so a background refresh cannot make them appear to vanish.
+    const fieldSettingsKey = "psc-enabled-filter-fields";
+    let savedFieldSettings = {};
+    try { savedFieldSettings = JSON.parse(sessionStorage.getItem(fieldSettingsKey) || "{}"); } catch (_) {}
+    const savedEnabled = (section, key, fallback) =>
+      Object.prototype.hasOwnProperty.call(savedFieldSettings[section] || {}, key)
+        ? Boolean(savedFieldSettings[section][key])
+        : fallback;
+
+    const maps = objectMaps && typeof objectMaps === "object" ? objectMaps : {
       privateResources: objectMaps || {},
       destinationLists: {},
       networkObjects: {},
@@ -1085,14 +1095,14 @@
     };
 
     const sourceSettingsToggles = {
-      users: { label: "Users", enabled: true },
-      roaming: { label: "Roaming Devices", enabled: false },
-      groups: { label: "Groups", enabled: false },
-      endpointDevices: { label: "Endpoint Devices", enabled: false },
-      networks: { label: "Networks", enabled: false },
-      sites: { label: "Sites", enabled: false },
-      sgt: { label: "Security Group Tags", enabled: false },
-      tunnels: { label: "Network Tunnels / Branches", enabled: false },
+      users: { label: "Users", enabled: savedEnabled("source", "users", true) },
+      roaming: { label: "Roaming Devices", enabled: savedEnabled("source", "roaming", false) },
+      groups: { label: "Groups", enabled: savedEnabled("source", "groups", false) },
+      endpointDevices: { label: "Endpoint Devices", enabled: savedEnabled("source", "endpointDevices", false) },
+      networks: { label: "Networks", enabled: savedEnabled("source", "networks", false) },
+      sites: { label: "Sites", enabled: savedEnabled("source", "sites", false) },
+      sgt: { label: "Security Group Tags", enabled: savedEnabled("source", "sgt", false) },
+      tunnels: { label: "Network Tunnels / Branches", enabled: savedEnabled("source", "tunnels", false) },
     };
 
     // Source Section Box
@@ -1120,6 +1130,8 @@
         toggle.classList.toggle("active");
         const isActive = toggle.classList.contains("active");
         cfg.enabled = isActive;
+        savedFieldSettings.source = { ...(savedFieldSettings.source || {}), [key]: isActive };
+        try { sessionStorage.setItem(fieldSettingsKey, JSON.stringify(savedFieldSettings)); } catch (_) {}
         if (sourceInputMap[key] && sourceInputMap[key].input) {
           sourceInputMap[key].input.disabled = !isActive;
         }
@@ -1202,17 +1214,17 @@
     };
 
     const destSettingsToggles = {
-      destScope: { label: "Destination Scope", enabled: true },
-      privateResource: { label: "Private Resources", enabled: false },
-      privateResourceGroup: { label: "Private Resource Groups", enabled: false },
-      destinationList: { label: "Destination Lists", enabled: false },
-      netObject: { label: "Network Objects", enabled: false },
-      serviceObject: { label: "Service Object Groups", enabled: false },
-      application: { label: "Applications", enabled: false },
-      appList: { label: "Application Lists", enabled: false },
-      appCategory: { label: "Application Categories", enabled: false },
-      catList: { label: "Category Lists", enabled: false },
-      geolocation: { label: "Geolocations", enabled: false },
+      destScope: { label: "Destination Scope", enabled: savedEnabled("destination", "destScope", true) },
+      privateResource: { label: "Private Resources", enabled: savedEnabled("destination", "privateResource", false) },
+      privateResourceGroup: { label: "Private Resource Groups", enabled: savedEnabled("destination", "privateResourceGroup", false) },
+      destinationList: { label: "Destination Lists", enabled: savedEnabled("destination", "destinationList", false) },
+      netObject: { label: "Network Objects", enabled: savedEnabled("destination", "netObject", false) },
+      serviceObject: { label: "Service Object Groups", enabled: savedEnabled("destination", "serviceObject", false) },
+      application: { label: "Applications", enabled: savedEnabled("destination", "application", false) },
+      appList: { label: "Application Lists", enabled: savedEnabled("destination", "appList", false) },
+      appCategory: { label: "Application Categories", enabled: savedEnabled("destination", "appCategory", false) },
+      catList: { label: "Category Lists", enabled: savedEnabled("destination", "catList", false) },
+      geolocation: { label: "Geolocations", enabled: savedEnabled("destination", "geolocation", false) },
     };
 
     // Destination Section Box
@@ -1240,6 +1252,8 @@
         toggle.classList.toggle("active");
         const isActive = toggle.classList.contains("active");
         cfg.enabled = isActive;
+        savedFieldSettings.destination = { ...(savedFieldSettings.destination || {}), [key]: isActive };
+        try { sessionStorage.setItem(fieldSettingsKey, JSON.stringify(savedFieldSettings)); } catch (_) {}
         if (destInputMap[key] && destInputMap[key].input) {
           destInputMap[key].input.disabled = !isActive;
         }
