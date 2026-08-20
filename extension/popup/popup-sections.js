@@ -1057,12 +1057,17 @@
       categoryLists: {},
     };
 
+    const panel = el("div", { id: "psc-panel" });
+
     // Keep a small draft in session storage so a necessary catalog/rule
     // re-render never destroys work in progress. Values are cleared only by
     // the explicit Reset button.
     const draftStorageKey = "psc-tester-draft";
     let draft = {};
-    try { draft = JSON.parse(sessionStorage.getItem(draftStorageKey) || "{}"); } catch (_) {}
+    try {
+      const parsedDraft = JSON.parse(sessionStorage.getItem(draftStorageKey) || "{}");
+      draft = parsedDraft && typeof parsedDraft === "object" && !Array.isArray(parsedDraft) ? parsedDraft : {};
+    } catch (_) {}
     const persistDraft = () => {
       const fields = Array.from(panel.querySelectorAll("input, textarea, select"));
       const next = {};

@@ -671,14 +671,14 @@ function summarizeConditions(rule, lookups) {
       case "umbrella.source.networkObjectIds":
       case "umbrella.source.networkObjectIds_shared": {
         const ids = Array.isArray(values) ? values : [values];
-        const names = ids.map((id) => (lookups.objects && lookups.objects[String(id)]) || `Network Object #${id}`);
+        const names = ids.map((id) => objectName(networkObjects, id, `Unresolved Network Object (${id})`));
         summaryText = `Source Network Objects: ${names.join(", ")}`;
         break;
       }
       case "umbrella.source.networkObjectGroupIds":
       case "umbrella.source.networkObjectGroupIds_shared": {
         const ids = Array.isArray(values) ? values : [values];
-        const names = ids.map((id) => (lookups.objects && lookups.objects[String(id)]) || `Network Group #${id}`);
+        const names = ids.map((id) => objectName(networkObjectGroups, id, `Unresolved Network Object Group (${id})`));
         summaryText = `Source Network Object Groups: ${names.join(", ")}`;
         break;
       }
@@ -697,14 +697,26 @@ function summarizeConditions(rule, lookups) {
       }
       case "umbrella.destination.networkObjectGroupIds": {
         const ids = Array.isArray(values) ? values : [values];
-        const names = ids.map((id) => (lookups.objects && lookups.objects[String(id)]) || `Network Group #${id}`);
+        const names = ids.map((id) => objectName(networkObjectGroups, id, `Unresolved Network Object Group (${id})`));
         summaryText = `Destination Network Object Groups: ${names.join(", ")}`;
+        break;
+      }
+      case "umbrella.destination.networkObjectIds": {
+        const ids = Array.isArray(values) ? values : [values];
+        const names = ids.map((id) => objectName(networkObjects, id, `Unresolved Network Object (${id})`));
+        summaryText = `Destination Network Objects: ${names.join(", ")}`;
         break;
       }
       case "umbrella.destination.serviceObjectIds": {
         const ids = Array.isArray(values) ? values : [values];
-        const names = ids.map((id) => (lookups.objects && lookups.objects[String(id)]) || `Service Object #${id}`);
+        const names = ids.map((id) => objectName(serviceObjects, id, `Unresolved Service Object (${id})`));
         summaryText = `Service Objects: ${names.join(", ")}`;
+        break;
+      }
+      case "umbrella.destination.serviceObjectGroupIds": {
+        const ids = Array.isArray(values) ? values : [values];
+        const names = ids.map((id) => objectName(serviceObjectGroups, id, `Unresolved Service Object Group (${id})`));
+        summaryText = `Service Object Groups: ${names.join(", ")}`;
         break;
       }
       case "umbrella.destination.application_category_ids": {
@@ -889,6 +901,17 @@ function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSumma
   }
   body.appendChild(findingsWrap);
 
+  const objectName = (map, id, fallback) => {
+    const raw = map && map[String(id)];
+    if (typeof raw === "string" && raw) return raw;
+    if (raw && typeof raw === "object") return raw.name || raw.label || raw.displayName || fallback;
+    return fallback;
+  };
+  const objectMaps = lookups.objectMaps || {};
+  const networkObjects = objectMaps.networkObjects || {};
+  const networkObjectGroups = objectMaps.networkObjectGroups || {};
+  const serviceObjects = objectMaps.serviceObjects || {};
+  const serviceObjectGroups = objectMaps.serviceObjectGroups || {};
   const sourceConditions = (matchSummary || []).filter(item => /^umbrella\.source\./.test(item.raw && item.raw.attributeName || ""));
   const destinationConditions = (matchSummary || []).filter(item => /^umbrella\.destination\./.test(item.raw && item.raw.attributeName || ""));
   const renderConditionGroup = (title, items) => {
@@ -1071,6 +1094,7 @@ function showPopoverForRule(anchorEl, ruleName, testMatchReasons, autoHideMs) {
       const om = objectMapResult.objectMaps || {};
       lookups.sourceIdentityTypeIds = om.sourceIdentityTypeIds || {};
       lookups.objects = objectMapResult.objectMap || objectMapResult;
+      lookups.objectMaps = om;
       // Wire typed object maps for lookups (appRiskProfiles, etc.)
       lookups.appRiskProfiles = om.appRiskProfiles || {};
       const matchSummary = summarizeConditions(rule, lookups);
