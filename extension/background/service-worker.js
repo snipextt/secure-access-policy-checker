@@ -30,14 +30,23 @@ api.runtime.onStartup.addListener(() => {
   api.storage.session.get("__sw_keepalive").catch(() => {});
 });
 
-// Auto-inject content script whenever a Cisco dashboard tab loads/reloads
+// Auto-inject only into a valid HTTPS Cisco dashboard URL. onUpdated also
+// fires for transient chrome:// and extension URLs; passing those to scripting
+// can produce an uncaught "Invalid URL" error during an extension reload.
 api.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  const url = tab.url || changeInfo.url || "";
-  if (url.includes("cisco.com")) {
-    api.scripting.executeScript({
+  const rawUrl = tab.url || changeInfo.url;
+  if (!rawUrl) return;
+  let parsed;
+  try { parsed = new URL(rawUrl); } catch { return; }
+  const host = parsed.hostname.toLowerCase();
+  if (parsed.protocol !== "https:" || !(host === "cisco.com" || host.endsWith(".cisco.com"))) return;
+  try {
+    Promise.resolve(api.scripting.executeScript({
       target: { tabId },
       files: ["content/content-script.js"]
-    }).catch(() => {});
+    })).catch(() => {});
+  } catch (_) {
+    // Chromium can synchronously reject an already-closed tab during reload.
   }
 });
 

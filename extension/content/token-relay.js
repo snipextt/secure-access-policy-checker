@@ -27,6 +27,35 @@
 
   const pendingRequests = new Map(); // requestId -> resolver
 
+  function extensionContextAlive() {
+    try { return Boolean(api.runtime && api.runtime.id); } catch (_) { return false; }
+  }
+
+  function relayCapturedToken(data, captureTime) {
+    // Content scripts injected before a reload retain the old extension
+    // context. Chrome throws "Extension context invalidated" for both
+    // runtime messaging and storage in that state; do not surface it as an
+    // uncaught dashboard error. A page reload installs the current relay.
+    if (!extensionContextAlive()) return;
+    try {
+      api.runtime.sendMessage(
+        {
+          type: "TOKEN_CAPTURED",
+          tokenKey: data.tokenKey,
+          token: data.token,
+          source: "main-world-patch",
+          capturedAt: captureTime,
+        },
+        () => { void api.runtime.lastError; }
+      );
+      Promise.resolve(api.storage.local.set({
+        [data.tokenKey]: { token: data.token, capturedAt: captureTime, source: "main-world-patch" }
+      })).catch(() => {});
+    } catch (_) {
+      // The context may be invalidated between the check and this call.
+    }
+  }
+
   window.addEventListener("message", (event) => {
     if (event.source !== window) return;
     if (event.origin !== window.location.origin) return;
@@ -41,18 +70,7 @@
       // sniffer catches one — no SW wake needed. Also sends via
       // runtime.sendMessage as a live-forward for any actively-awake SW.
       const captureTime = data.capturedAt || Date.now();
-      api.runtime.sendMessage(
-        {
-          type: "TOKEN_CAPTURED",
-          tokenKey: data.tokenKey,
-          token: data.token,
-          source: "main-world-patch",
-          capturedAt: captureTime,
-        },
-        () => { void api.runtime.lastError; }
-      );
-      // Direct write to local storage — persists across SW restarts
-      api.storage.local.set({ [data.tokenKey]: { token: data.token, capturedAt: captureTime, source: "main-world-patch" } });
+      relayCapturedToken(data, captureTime);
       return;
     }
 
