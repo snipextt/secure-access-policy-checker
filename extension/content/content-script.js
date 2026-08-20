@@ -1104,35 +1104,39 @@ function showPopoverForRule(anchorEl, ruleName, testMatchReasons, autoHideMs) {
   });
 }
 
-function handleRuleRowMouseEnter(event) {
-  const row = event.currentTarget;
+function handlePolicyColumnMouseEnter(event) {
+  const chip = event.currentTarget;
   clearTimeout(hoverHideTimer);
   hoverPointer = { x: event.clientX, y: event.clientY };
+  const row = chip.closest("tr");
+  if (!row) return;
   const ruleName = getRuleName(row);
-  if (ruleName && ruleName !== "unknown") showPopoverForRule(row, ruleName, null, undefined);
+  if (ruleName && ruleName !== "unknown") showPopoverForRule(chip, ruleName, null, undefined);
 }
 
-function handleRuleRowMouseLeave() {
+function handlePolicyColumnMouseLeave() {
   scheduleHideHoverPopover();
 }
 
 function attachChipListeners() {
-  // Attach to complete rule rows. Dashboard chips remain inside their row, so
-  // this also covers source/destination cells without limiting hover to them.
-  const rows = document.querySelectorAll(HOVER_ROW_SELECTOR);
-  for (const row of rows) {
-    if (attachedChips.has(row)) continue;
-    attachedChips.add(row);
-    row.addEventListener("mouseenter", handleRuleRowMouseEnter);
-    row.addEventListener("mouseleave", handleRuleRowMouseLeave);
+  // Deliberately limit the detail popover to Cisco's source/destination
+  // condition chips. Hovering rule names, action, priority, and empty cells
+  // remains passive, while each policy-condition column opens the full detail.
+  const chips = document.querySelectorAll(CHIP_SELECTOR);
+  for (const chip of chips) {
+    if (attachedChips.has(chip)) continue;
+    attachedChips.add(chip);
+    chip.addEventListener("mouseenter", handlePolicyColumnMouseEnter);
+    chip.addEventListener("mouseleave", handlePolicyColumnMouseLeave);
   }
 }
 
 function initHoverPopover() {
   attachChipListeners();
 
-  // SPA re-renders (sort/filter/pagination) create new chip elements, so
-  // re-scan on DOM mutation rather than relying on a one-time query.
+  // SPA re-renders (sort/filter/pagination) create new source/destination
+  // chip elements, so re-scan on DOM mutation rather than relying on a
+  // one-time query.
   let debounceTimer = null;
   const observer = new MutationObserver(() => {
     clearTimeout(debounceTimer);
