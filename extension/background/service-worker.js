@@ -1742,8 +1742,15 @@ function catalogHost(catalog) {
 async function resolveFullCatalogs(orgId, tabId) {
   const maps = { destinationScopes: { public_internet: "Internet", private_network: "Private Access" } };
   await Promise.all(FULL_CATALOGS.map(async (catalog) => {
+    // Always publish a key, including on token/API failure. The popup can then
+    // render that selector as configured-empty/unavailable instead of treating
+    // one failed optional catalog as an endless global loading operation.
+    maps[catalog.key] = {};
     const tokenObj = await getFreshToken(catalog.tokenKey, tabId);
-    if (!tokenObj) return;
+    if (!tokenObj) {
+      logEvent("catalog-fetch", "Catalog skipped — no fresh token", { catalog: catalog.key, tokenKey: catalog.tokenKey });
+      return;
+    }
     const entries = [];
     let offset = 0;
     try {
