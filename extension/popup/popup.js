@@ -65,6 +65,8 @@ document.addEventListener("DOMContentLoaded", () => {
   };
   let currentIdentityTypeMap = {};
   let currentRuleFetchStatus = {};
+  let deferredStorageRender = false;
+  let deferredRenderTimer = null;
 
   // ---------------------------------------------------------------------------
   // Highlight matched rule on the dashboard page
@@ -300,6 +302,17 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function editorIsActive() {
+    const active = document.activeElement;
+    return active && (active.matches("input, textarea, select") || active.isContentEditable);
+  }
+
+  function flushDeferredRender() {
+    if (!deferredStorageRender || editorIsActive()) return;
+    deferredStorageRender = false;
+    loadAndRender();
+  }
+
   // ---------------------------------------------------------------------------
   // Entry point — render results immediately and listen for live updates
   // ---------------------------------------------------------------------------
@@ -311,10 +324,21 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Live update: when SW writes new data to storage, re-render
+  document.addEventListener("focusout", () => {
+    clearTimeout(deferredRenderTimer);
+    deferredRenderTimer = setTimeout(flushDeferredRender, 0);
+  });
+
+  // Live update: when SW writes new data to storage, re-render only when the
+  // user is not actively editing a tester control. Rebuilding the form during
+  // an input event destroys the focused element and its unsaved draft.
   api.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
     if (changes.sse_rules || changes.sse_identity_map || changes.sse_object_maps || changes.sse_identity_type_map || changes.sse_rule_fetch_status) {
+      if (editorIsActive()) {
+        deferredStorageRender = true;
+        return;
+      }
       loadAndRender();
     }
   });

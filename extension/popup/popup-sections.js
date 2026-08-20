@@ -973,6 +973,7 @@
         ]);
         li.addEventListener("click", () => {
           selectedValue = k;
+          input.dataset.selectedValue = k;
           input.value = labelStr;
           list.style.display = "none";
         });
@@ -987,6 +988,7 @@
 
     input.addEventListener("input", () => {
       selectedValue = "";
+      delete input.dataset.selectedValue;
       renderList(input.value);
       list.style.display = "block";
     });
@@ -1018,9 +1020,16 @@
       wrapper,
       input,
       setItems,
-      getValue: () => selectedValue || input.value.trim(),
+      getValue: () => selectedValue || input.dataset.selectedValue || input.value.trim(),
+      restore: (value, selected) => {
+        selectedValue = selected || "";
+        if (selectedValue) input.dataset.selectedValue = selectedValue;
+        else delete input.dataset.selectedValue;
+        input.value = value || "";
+      },
       reset: () => {
         selectedValue = "";
+        delete input.dataset.selectedValue;
         input.value = "";
       }
     };
@@ -1048,7 +1057,32 @@
       categoryLists: {},
     };
 
-    const panel = el("div", { id: "psc-panel" });
+    // Keep a small draft in session storage so a necessary catalog/rule
+    // re-render never destroys work in progress. Values are cleared only by
+    // the explicit Reset button.
+    const draftStorageKey = "psc-tester-draft";
+    let draft = {};
+    try { draft = JSON.parse(sessionStorage.getItem(draftStorageKey) || "{}"); } catch (_) {}
+    const persistDraft = () => {
+      const fields = Array.from(panel.querySelectorAll("input, textarea, select"));
+      const next = {};
+      for (const field of fields) {
+        if (!field.id) continue;
+        next[field.id] = { value: field.value || "", selected: field.dataset && field.dataset.selectedValue || "" };
+      }
+      try { sessionStorage.setItem(draftStorageKey, JSON.stringify(next)); } catch (_) {}
+    };
+    const restoreDraft = () => {
+      for (const [id, saved] of Object.entries(draft)) {
+        const field = panel.querySelector(`#${typeof CSS !== "undefined" && CSS.escape ? CSS.escape(id) : id}`);
+        if (!field) continue;
+        field.value = saved && saved.value || "";
+        if (saved && saved.selected) field.dataset.selectedValue = saved.selected;
+      }
+    };
+    panel.addEventListener("input", persistDraft);
+    panel.addEventListener("change", persistDraft);
+
     const body = el("div", { id: "psc-panel-body" });
     const formRow = el("div", { id: "psc-form-row" });
 
@@ -1374,6 +1408,7 @@
 
     panel.appendChild(body);
     container.appendChild(panel);
+    restoreDraft();
 
     function updateResult(result) {
       resultCol.innerHTML = "";
@@ -1599,6 +1634,7 @@
 
     resetBtn.addEventListener("click", () => {
       sourceInput.value = "";
+      try { sessionStorage.removeItem(draftStorageKey); } catch (_) {}
       usersSelect.reset();
       roamingSelect.reset();
       groupsSelect.reset();
