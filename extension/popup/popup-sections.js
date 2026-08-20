@@ -983,12 +983,19 @@
         const li = el("li", {}, [
           labelStr
         ]);
-        li.addEventListener("click", () => {
+        const selectOption = (event) => {
+          // Commit on pointer-down rather than waiting for click/blur ordering.
+          // This makes clear → reselect reliable when the input is focused and
+          // prevents an outside-dismiss listener from winning the race.
+          event.preventDefault();
+          event.stopPropagation();
           selectedValue = k;
           input.dataset.selectedValue = k;
           input.value = labelStr;
           list.style.display = "none";
-        });
+          input.focus();
+        };
+        li.addEventListener("pointerdown", selectOption);
         list.appendChild(li);
       });
     }
@@ -1399,11 +1406,17 @@
     dstBox.appendChild(dstIpField.element);
     dstBox.appendChild(dstEnabledContainer);
 
-    // Close popovers when clicking outside
-    document.addEventListener("click", (e) => {
-      if (!srcBox.contains(e.target)) srcSettingsPopover.classList.remove("open");
-      if (!dstBox.contains(e.target)) dstSettingsPopover.classList.remove("open");
-    });
+    // Close field-settings menus whenever the press starts outside their menu
+    // and trigger. Capture phase makes this independent of stopped bubble
+    // events inside searchable selects and dynamically moved field controls.
+    document.addEventListener("pointerdown", (e) => {
+      if (!srcSettingsPopover.contains(e.target) && !srcSettingsToggle.contains(e.target)) {
+        srcSettingsPopover.classList.remove("open");
+      }
+      if (!dstSettingsPopover.contains(e.target) && !dstSettingsToggle.contains(e.target)) {
+        dstSettingsPopover.classList.remove("open");
+      }
+    }, true);
 
     // Grid row containing SOURCE on left, DESTINATION on right
     const criteriaGrid = el("div", { class: "psc-criteria-grid" }, [
