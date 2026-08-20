@@ -156,6 +156,36 @@ console.log("\n=== Group 1: Default catch-all rules ===");
 }
 
 // ---------------------------------------------------------------------------
+// TEST GROUP 1B: HAR-confirmed destination scope
+// ---------------------------------------------------------------------------
+console.log("\n=== Group 1B: Public/private destination scope ===");
+
+{
+  const privateDefault = makeRule(102, "For all private access", "allow", [sourceAll(), destAll()], {
+    isDefault: true, priority: 102, trafficScope: "private_network",
+  });
+  const publicDefault = makeRule(103, "For all Internet access", "allow", [sourceAll(), destAll()], {
+    isDefault: true, priority: 103, trafficScope: "public_internet",
+  });
+  assertMatch(privateDefault, { source: "10.0.0.1", destination: "cisco.com", destinationScope: "public_internet" }, false,
+    "Internet destination: private default is excluded");
+  assertMatch(publicDefault, { source: "10.0.0.1", destination: "cisco.com", destinationScope: "public_internet" }, true,
+    "Internet destination: public default matches");
+  assertMatch(privateDefault, { source: "10.0.0.1", privateResourceId: "311420", destinationScope: "private_network" }, true,
+    "Private destination: private default matches");
+}
+
+{
+  const userRule = makeRule(104, "Specific user", "allow", [
+    sourceIdentityIds([42]), destAll(),
+  ], { trafficScope: "public_internet" });
+  assertMatch(userRule, { sourceUserId: "42", destination: "cisco.com", destinationScope: "public_internet" }, true,
+    "Source catalog: exact user ID matches");
+  assertMatch(userRule, { sourceUserId: "43", destination: "cisco.com", destinationScope: "public_internet" }, false,
+    "Source catalog: different user ID does not match");
+}
+
+// ---------------------------------------------------------------------------
 // TEST GROUP 2: CIDR/IP matching
 // ---------------------------------------------------------------------------
 console.log("\n=== Group 2: CIDR/IP matching ===");

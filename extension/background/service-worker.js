@@ -266,7 +266,25 @@ async function fetchAllData(explicitOrgId) {
       logEvent("auto-fetch", "Object resolution failed", { error: err.message });
     }
 
-    // 7. Schedule next periodic refresh
+    // 7. Fetch complete source/destination catalogs observed in the dashboard
+    // HAR. Merge each successful catalog with cached data so a short-lived
+    // token failure never empties an already-populated selector.
+    try {
+      const catalogMaps = await resolveFullCatalogs(orgId, tabId);
+      const prev = await api.storage.local.get("sse_object_maps");
+      const previousMaps = (prev && prev.sse_object_maps) || {};
+      for (const [key, map] of Object.entries(catalogMaps)) {
+        if (Object.keys(map).length === 0 && previousMaps[key] && Object.keys(previousMaps[key]).length > 0) {
+          catalogMaps[key] = previousMaps[key];
+        }
+      }
+      const existing = await api.storage.local.get("sse_object_maps");
+      await api.storage.local.set({ sse_object_maps: { ...(existing.sse_object_maps || {}), ...catalogMaps } });
+    } catch (err) {
+      logEvent("auto-fetch", "Full catalog fetch failed", { error: err.message });
+    }
+
+    // 8. Schedule next periodic refresh
     api.alarms.create(REFRESH_ALARM, { delayInMinutes: REFRESH_INTERVAL_MIN });
 
     logEvent("auto-fetch", "fetchAllData completed", { durationMs: Date.now() - startTime, orgId });
@@ -344,11 +362,9 @@ async function getActiveOrgId() {
 // ---------------------------------------------------------------------------
 
 async function fetchRules(token, orgId) {
-  // ---- Live API path -------------------------------------------------------
-  // NOTE: /v2/access/rules is a placeholder. Confirm the exact endpoint URL
-  // by inspecting the Network tab in DevTools on the real SSE dashboard, then
-  // update BASE_URL and the path below accordingly.
-  const BASE_URL = "https://api.umbrella.com";
+  // HAR-confirmed dashboard endpoint. It preserves `ruleAccess`, which is
+  // required to distinguish private-network and public-Internet defaults.
+  const BASE_URL = "https://api.sse.cisco.com";
   const ORG_ID = orgId;
   const LIMIT = 100;
   let offset = 0;
@@ -369,7 +385,7 @@ async function fetchRules(token, orgId) {
   // gracefully if default rules turn out to have fewer fields, but this
   // should be re-checked against real API output.
   while (true) {
-    const url = `${BASE_URL}/v1/sse/organizations/${ORG_ID}/rules?offset=${offset}&limit=${LIMIT}`;
+    const url = `${BASE_URL}/policies/v2/rules?expandRuleDetails=true&ruleIsDefault=false&offset=${offset}&limit=${LIMIT}`;
     let response;
     const startedAt = Date.now();
 
@@ -425,11 +441,11 @@ async function fetchRules(token, orgId) {
 
     const data = await response.json();
 
-    // Handle both array response and wrapped response shapes.
-    // The real API returns { rules: [...] }.
+    // HAR shape: { count, results, meta }; keep legacy fallbacks for cached
+    // mock/test payloads.
     const pageRules = Array.isArray(data)
       ? data
-      : (data.rules || data.data || data.items || []);
+      : (data.results || data.rules || data.data || data.items || []);
 
     // Normalize each raw rule into our internal shape.
     // API response shape is not yet confirmed.
@@ -488,6 +504,9 @@ async function fetchRules(token, orgId) {
       applications: raw.applications || raw.application || [],
       ports: raw.ports || raw.port || ["any"],
       protocol: raw.protocol || "any",
+      // HAR-confirmed on default rules: public_internet | private_network.
+      // destination.all is only a catch-all inside this traffic scope.
+      trafficScope: raw.ruleAccess || null,
       conditions: raw.conditions || raw.ruleConditions || [],
       logging_enabled: loggingEnabled,
       security_profiles: {
@@ -505,6 +524,32 @@ async function fetchRules(token, orgId) {
     // Stop paginating when we get fewer results than the page limit
     if (pageRules.length < LIMIT) break;
     offset += LIMIT;
+  }
+
+  // Fetch the two default rules separately: the HAR proves they are excluded
+  // from the custom-rule query and carry the ruleAccess scope discriminator.
+  const defaultsResponse = await fetch(`${BASE_URL}/policies/v2/rules?expandRuleDetails=true&ruleIsDefault=true`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+  });
+  if (defaultsResponse.ok) {
+    const defaultsData = await defaultsResponse.json();
+    const defaults = Array.isArray(defaultsData) ? defaultsData : (defaultsData.results || defaultsData.rules || []);
+    for (const raw of defaults) {
+      const duplicate = allRules.some(rule => String(rule.id) === String(raw.ruleId || raw.id));
+      if (!duplicate) allRules.push({
+        id: raw.ruleId !== undefined ? raw.ruleId : raw.id,
+        name: raw.ruleName || raw.name || "Unnamed Rule",
+        order: raw.rulePriority || 0,
+        action: (raw.ruleAction || raw.action || "allow").toLowerCase(),
+        enabled: raw.ruleIsEnabled !== false,
+        is_default: true,
+        trafficScope: raw.ruleAccess || null,
+        conditions: raw.ruleConditions || raw.conditions || [],
+        raw,
+      });
+    }
+  } else {
+    logEvent("rules-fetch", "Default-rule fetch failed", { status: defaultsResponse.status });
   }
 
   return allRules;
@@ -1548,6 +1593,7 @@ async function resolveObjectRefs(orgId, tabId, rules) {
   
   const maps = {
     privateResources: {},
+    privateResourceGroups: {},
     destinationLists: {},
     networkObjects: {},
     networkObjectGroups: {},
@@ -1597,7 +1643,7 @@ async function resolveObjectRefs(orgId, tabId, rules) {
         // Populate the appropriate map based on endpoint name
         const mapKey =
           endpoint.name === "private_resources" ? "privateResources" :
-          endpoint.name === "private_resource_groups" ? "privateResources" :
+          endpoint.name === "private_resource_groups" ? "privateResourceGroups" :
           endpoint.name === "destination_lists" ? "destinationLists" :
           endpoint.name === "network_objects" ? "networkObjects" :
           endpoint.name === "network_object_groups" ? "networkObjectGroups" :
@@ -1624,6 +1670,80 @@ async function resolveObjectRefs(orgId, tabId, rules) {
     })
   );
 
+  return maps;
+}
+
+// ---------------------------------------------------------------------------
+// Full source/destination catalog fetches. These endpoints and payloads were
+// captured from the Cisco dashboard HAR while opening its rule builder.
+// Entries are kept in separate maps so numeric IDs from different namespaces
+// cannot collide. Unsupported dashboard categories are intentionally omitted
+// until their endpoint has been observed; we never guess endpoint paths.
+// ---------------------------------------------------------------------------
+const FULL_CATALOGS = [
+  { key: "sourceUsers", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/directory_user", dataKey: "data", idKey: "id", labelKey: "label", paged: true },
+  { key: "sourceRoaming", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/roaming", dataKey: "data", idKey: "id", labelKey: "label", paged: true },
+  { key: "sourceGroups", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/directory_group", dataKey: "data", idKey: "id", labelKey: "label", paged: true },
+  { key: "sourceEndpointDevices", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/directory_computer", dataKey: "data", idKey: "id", labelKey: "label", paged: true },
+  { key: "sourceNetworks", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/network", dataKey: "data", idKey: "id", labelKey: "label", paged: true },
+  { key: "sourceSites", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/site", dataKey: "data", idKey: "id", labelKey: "label", paged: true },
+  { key: "sourceSecurityGroupTags", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/security_group_tag", dataKey: "data", idKey: "id", labelKey: "label", paged: true },
+  { key: "sourceTunnels", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/catalyst_sdwan", dataKey: "data", idKey: "id", labelKey: "label", paged: true },
+  { key: "applications", tokenKey: "opendns_token", path: "v3/organizations/{orgId}/applications?outputFormat=jsonHttpStatusOverride", dataKey: "data", idKey: "id", labelKey: "name" },
+  { key: "applicationCategories", tokenKey: "opendns_token", path: "v3/organizations/{orgId}/applicationcategories?optionalFields=%5B%22applicationsCount%22%5D&outputFormat=jsonHttpStatusOverride", dataKey: "data", idKey: "id", labelKey: "name" },
+  { key: "geolocations", tokenKey: "sse_token", path: "v1/geolocations", dataKey: "results", idKey: "id", labelKey: "name", mapEntries: (items) => items.flatMap(continent => (continent.countries || []).map(country => ({ id: country.code, label: `${country.name} (${country.code})` }))) },
+];
+
+function catalogHost(tokenKey) {
+  return tokenKey === "mgmt_authz_token" ? "https://management.api.umbrella.com" :
+    tokenKey === "opendns_token" ? "https://api.opendns.com" : "https://api.umbrella.com";
+}
+
+async function resolveFullCatalogs(orgId, tabId) {
+  const maps = { destinationScopes: { public_internet: "Internet", private_network: "Private Access" } };
+  await Promise.all(FULL_CATALOGS.map(async (catalog) => {
+    const tokenObj = await getFreshToken(catalog.tokenKey, tabId);
+    if (!tokenObj) return;
+    const entries = [];
+    let offset = 0;
+    try {
+      do {
+        const separator = catalog.path.includes("?") ? "&" : "?";
+        const suffix = catalog.paged ? `${separator}offset=${offset}&limit=100` : "";
+        const response = await fetch(`${catalogHost(catalog.tokenKey)}/${catalog.path.replace("{orgId}", orgId)}${suffix}`, {
+          headers: {
+            Authorization: `Bearer ${tokenObj.token}`,
+            Accept: "application/json",
+            Origin: "https://dashboard.sse.cisco.com",
+            Referer: "https://dashboard.sse.cisco.com/",
+          },
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const json = await response.json();
+        const page = Array.isArray(json) ? json : (Array.isArray(json[catalog.dataKey]) ? json[catalog.dataKey] : []);
+        entries.push(...page);
+        if (!catalog.paged || page.length === 0 || offset + page.length >= (json.total || 0) || page.length < 100) break;
+        offset += page.length;
+      } while (true);
+      const normalizedEntries = catalog.mapEntries
+        ? catalog.mapEntries(entries)
+        : entries.map(entry => ({ id: entry[catalog.idKey], label: entry[catalog.labelKey] }));
+      maps[catalog.key] = Object.fromEntries(normalizedEntries
+        .filter(entry => entry && entry.id !== undefined && entry.label)
+        .map(entry => [String(entry.id), entry.label]));
+      if (catalog.key.startsWith("source")) {
+        maps.sourceIdentityTypeIds = maps.sourceIdentityTypeIds || {};
+        for (const entry of entries) {
+          if (entry && entry.id !== undefined && entry.typeId !== undefined) {
+            maps.sourceIdentityTypeIds[String(entry.id)] = entry.typeId;
+          }
+        }
+      }
+      logEvent("catalog-fetch", "Catalog fetched", { catalog: catalog.key, count: Object.keys(maps[catalog.key]).length });
+    } catch (err) {
+      logEvent("catalog-fetch", "Catalog fetch failed", { catalog: catalog.key, error: err.message });
+    }
+  }));
   return maps;
 }
 

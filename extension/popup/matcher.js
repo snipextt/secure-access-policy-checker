@@ -147,8 +147,30 @@
     if (an === "umbrella.source.composite_inline_ip")      return "source";      // prepped
 
     // --- Fallbacks for identity/app (no exact pattern known yet) ---
-    if (an.includes("identity_type")) return "identity";  // identity_type_ids - filter by identity TYPE
+    // umbrella.source.identity_ids / umbrella.source.identity_type_ids are
+    // HAR-verified source conditions, not a separate "identity" dimension.
+    // They match against testInput.sourceIdentityIds / sourceIdentityTypeIds.
+    if (an === "umbrella.source.identity_ids") return "source";
+    if (an === "umbrella.source.identity_type_ids") return "source";
+    // HAR-confirmed destination attributes are evaluated in the destination
+    // bucket, even where their names contain application/category.
+    if (
+      an === "umbrella.destination.application_ids" ||
+      an === "umbrella.destination.application_category_ids" ||
+      an === "umbrella.destination.category_ids" ||
+      an === "umbrella.destination.application_list_ids" ||
+      an === "umbrella.destination.category_list_ids" ||
+      an === "umbrella.destination.appriskprofileid" ||
+      an === "umbrella.destination.private_resource_types"
+    ) return "destination";
+    // Remaining identity attributes (non-source-scoped) stay as "identity"
+    if (an.includes("identity_type")) return "identity";
     if (an.includes("identity")) return "identity";
+
+    if (an.includes("application_list")) return "destination";
+    if (an.includes("category_list")) return "destination";
+    if (an.includes("appriskprofile")) return "destination";
+
     // "category" covers both confirmed field-name variants for content/app
     // category matching: "application_category_ids" (org 8415583) and the
     // shorter "category_ids" (org 8416432) — same INTERSECT semantics, just
@@ -368,12 +390,52 @@
     return "Configured Destination";
   }
 
+  function matchCatalogCondition(cond, testInput, lookups) {
+    const an = (cond.attributeName || "").toLowerCase();
+    const values = Array.isArray(cond.attributeValue) ? cond.attributeValue : [cond.attributeValue];
+    let selected;
+    if (an === "umbrella.source.identity_type_ids") {
+      const typeMap = lookups.sourceIdentityTypeIds || {};
+      selected = [
+        testInput.sourceUserId, testInput.sourceRoamingId, testInput.sourceGroupId,
+        testInput.sourceEndpointDeviceId, testInput.sourceNetworkId, testInput.sourceSiteId,
+        testInput.sourceSecurityGroupTagId, testInput.sourceTunnelId,
+      ].map(id => id && typeMap[String(id)]).filter(Boolean);
+    } else {
+      selected =
+        an === "umbrella.source.identity_ids" ? [testInput.sourceUserId, testInput.sourceRoamingId, testInput.sourceGroupId, testInput.sourceEndpointDeviceId, testInput.sourceNetworkId, testInput.sourceSiteId, testInput.sourceSecurityGroupTagId, testInput.sourceTunnelId] :
+        an.includes("private_resource_group") ? [testInput.privateResourceGroupId] :
+        an.includes("private_resource") ? [testInput.privateResourceId] :
+        an.includes("destination_list") ? [testInput.destinationListId] :
+        an.includes("networkobject") ? [testInput.networkObjectId] :
+        an.includes("serviceobjectgroup") ? [testInput.serviceObjectGroupId] :
+        an.includes("application_list") ? [testInput.applicationListId] :
+        an.includes("category_list") ? [testInput.categoryListId] :
+        an.includes("application_category") || an.includes("category_ids") ? [testInput.applicationCategoryId] :
+        an.includes("application_ids") ? [testInput.applicationId] :
+        an.includes("appriskprofile") ? [testInput.appRiskProfileId] :
+        an.includes("private_resource_types") ? [testInput.privateResourceType] :
+        an.includes("geolocations") ? [testInput.geolocation] : null;
+    }
+    if (!selected) return null;
+    const hit = selected.filter(v => v !== null && v !== undefined && v !== "")
+      .find(v => values.some(candidate => String(candidate) === String(v)));
+    if (hit === undefined) return { matched: false, note: `No selected value matches ${cond.attributeName}` };
+    return { matched: true, note: `${cond.attributeName}: '${hit}' matched`, display: String(hit) };
+  }
+
   function matchConditionValue(cond, dimension, testValue, testPort = null, lookups = {}, testInput = {}) {
     const { attributeName, attributeOperator, attributeValue } = cond;
     const tvObj = typeof testValue === "object" && testValue !== null ? testValue : null;
     const tv  = tvObj ? "" : String(testValue).trim();
     const an  = attributeName.toLowerCase();
     const op  = (attributeOperator || "=").toUpperCase();
+
+    // HAR-confirmed source and destination catalogs match by exact ID/code.
+    // Do this before legacy generic operator paths, which are intentionally
+    // not allowed to infer catalog membership from free-form text.
+    const catalogResult = matchCatalogCondition(cond, testInput, lookups);
+    if (catalogResult) return catalogResult;
 
     // Extract all destination object IDs from testInput
     const { privateResourceId = null, destinationListId = null, networkObjectId = null,
@@ -411,9 +473,8 @@
         }
         if (dimension === "identity" || dimension === "app") {
           const checkTv = tvObj ? String(tvObj.categoryId || tvObj.applicationId || tvObj.protocolId || "") : tv;
-          const avL = av.toLowerCase(), tvL = checkTv.toLowerCase();
-          if (avL === tvL || avL.includes(tvL) || tvL.includes(avL)) {
-            return { matched: true, note: `${dimension}: '${av}' matched '${checkTv}' (${attributeName})`, display: av };
+          if (av === checkTv) {
+            return { matched: true, note: `${dimension}: exact value '${av}' matched (${attributeName})`, display: av };
           }
         }
       }
@@ -611,7 +672,7 @@
         if (dimension === "source" || dimension === "destination") {
           return cidrMatch(tv, String(entry)) || fqdnMatch(String(entry), tv) || ev === tvL || tvL === "";
         }
-        return ev === tvL || ev.includes(tvL) || tvL.includes(ev) || tvL === "";
+        return ev === tvL;
       });
 
       // Identity/app dimensions carry numeric IDs (group tags, branch IDs,
@@ -793,40 +854,51 @@
       };
     }
 
+    // HAR-confirmed default-rule discriminator. A destination catch-all is
+    // limited to either PUBLIC_INTERNET or PRIVATE_NETWORK, never both.
+    const ruleScope = rule.trafficScope || rule.ruleAccess || (rule.raw && rule.raw.ruleAccess) || null;
+    const testScope = testInput.destinationScope || null;
+    if (ruleScope && (!testScope || ruleScope !== testScope)) {
+      return { matched: false, matchedConditions: [], matchFields: null };
+    }
+
     const { 
       source = "", 
-      sourcePort = null, 
-      identity = "", 
-      identityTypeId = null,
-      sgt = "",
-      location = "",
-      internalNetwork = "",
-      sourceNetworkObjectId = null,
-      tunnel = "",
-      posture = "",
-      networkDevice = "",
-      categoryId = null, 
-      applicationId = null, 
-      protocolId = null, 
-      destination = "", 
-      destinationPort = null, 
+      sourcePort = null,
+      sourceUserId = null,
+      sourceRoamingId = null,
+      sourceGroupId = null,
+      sourceEndpointDeviceId = null,
+      sourceNetworkId = null,
+      sourceSiteId = null,
+      sourceSecurityGroupTagId = null,
+      sourceTunnelId = null,
+      destinationScope = null,
       privateResourceId = null,
+      privateResourceGroupId = null,
       destinationListId = null,
       networkObjectId = null,
       serviceObjectGroupId = null,
+      applicationId = null,
       applicationListId = null,
+      applicationCategoryId = null,
       categoryListId = null,
+      geolocation = null,
+      appRiskProfileId = null,
+      privateResourceType = null,
+      destination = "",
+      destinationPort = null,
     } = testInput;
-    const hasSource      = source.trim() !== "" || sgt.trim() !== "" || location.trim() !== "" || internalNetwork.trim() !== "" || (sourceNetworkObjectId !== null && sourceNetworkObjectId !== "") || tunnel.trim() !== "" || posture.trim() !== "" || networkDevice.trim() !== "";
-    const hasIdentity    = identity.trim()    !== "" || (identityTypeId !== null && identityTypeId !== "");
-    const hasApp         = categoryId !== null || applicationId !== null || protocolId !== null || (applicationListId !== null && applicationListId !== "") || (categoryListId !== null && categoryListId !== "");
-    const hasDestination = destination.trim() !== "" || 
-                          (privateResourceId !== null && privateResourceId !== "") ||
-                          (destinationListId !== null && destinationListId !== "") ||
-                          (networkObjectId !== null && networkObjectId !== "") ||
-                          (serviceObjectGroupId !== null && serviceObjectGroupId !== "") ||
-                          (applicationListId !== null && applicationListId !== "") ||
-                          (categoryListId !== null && categoryListId !== "");
+    const hasSource = source.trim() !== "" || [
+      sourceUserId, sourceRoamingId, sourceGroupId, sourceEndpointDeviceId,
+      sourceNetworkId, sourceSiteId, sourceSecurityGroupTagId, sourceTunnelId,
+    ].some(v => v !== null && v !== "");
+    const hasDestination = destination.trim() !== "" || [
+      destinationScope, privateResourceId, privateResourceGroupId,
+      destinationListId, networkObjectId, serviceObjectGroupId, applicationId,
+      applicationListId, applicationCategoryId, categoryListId, geolocation,
+      appRiskProfileId, privateResourceType,
+    ].some(v => v !== null && v !== "");
 
     const matchedConditions = [];
     // Structured, presentation-ready version of the same info as
@@ -866,7 +938,7 @@
       } else {
         const displays = [];
         for (const cond of srcConds) {
-          const result = matchConditionValue(cond, "source", source, sourcePort, lookups);
+          const result = matchConditionValue(cond, "source", source, sourcePort, lookups, testInput);
           if (!result.matched) return NO_MATCH;
           matchedConditions.push(result.note);
           if (result.display) displays.push(result.display);
@@ -881,38 +953,6 @@
     }
 
     // ------------------------------------------------------------------
-    // Identity dimension
-    // ------------------------------------------------------------------
-    if (hasIdentity) {
-      const idConds = byDim.identity;
-      if (idConds.length === 0) {
-        // No dedicated identity conditions — check if source is catch-all
-        const anySourceCatchAll = byDim.source.some(
-          (c) => c.attributeValue === true && c.attributeName.toLowerCase().endsWith(".all")
-        );
-        if (byDim.source.length === 0 || anySourceCatchAll) {
-          matchedConditions.push("identity: no identity conditions on rule (unrestricted via source catch-all)");
-        } else {
-          return NO_MATCH;
-        }
-      } else {
-        const displays = [];
-        for (const cond of idConds) {
-          const result = matchConditionValue(cond, "identity", identity, null, lookups, testInput);
-          if (!result.matched) return NO_MATCH;
-          matchedConditions.push(result.note);
-          if (result.display) displays.push(result.display);
-        }
-        if (displays.length) {
-          matchFields.identity = { label: "Identity", constrained: true, display: displays.join(", ") };
-        }
-      }
-    } else {
-      if (hasSpecificConditions(byDim.identity)) return NO_MATCH;
-      matchedConditions.push("identity: not constrained (field blank, rule has no specific conditions)");
-    }
-
-    // ------------------------------------------------------------------
     // Destination dimension
     // ------------------------------------------------------------------
     if (hasDestination) {
@@ -922,8 +962,7 @@
       } else {
         const displays = [];
         for (const cond of dstConds) {
-          const testInputObj = { privateResourceId, destinationListId, networkObjectId, serviceObjectGroupId, applicationListId, categoryListId };
-          const result = matchConditionValue(cond, "destination", destination, destinationPort, lookups, testInputObj);
+          const result = matchConditionValue(cond, "destination", destination, destinationPort, lookups, testInput);
           if (!result.matched) return NO_MATCH;
           matchedConditions.push(result.note);
           if (result.display) displays.push(result.display);
@@ -937,30 +976,10 @@
       matchedConditions.push("destination: not constrained (field blank, rule has no specific conditions)");
     }
 
-    // ------------------------------------------------------------------
-    // App dimension
-    // ------------------------------------------------------------------
-    if (hasApp) {
-      const appConds = byDim.app;
-      if (appConds.length === 0) {
-        matchedConditions.push("app: no app conditions on rule (unrestricted)");
-      } else {
-        const displays = [];
-        for (const cond of appConds) {
-          const testValObj = { categoryId, applicationId, protocolId };
-          const result = matchConditionValue(cond, "app", testValObj, null, lookups);
-          if (!result.matched) return NO_MATCH;
-          matchedConditions.push(result.note);
-          if (result.display) displays.push(result.display);
-        }
-        if (displays.length) {
-          matchFields.app = { label: "App / Category / Protocol", constrained: true, display: displays.join(", ") };
-        }
-      }
-    } else {
-      if (hasSpecificConditions(byDim.app)) return NO_MATCH;
-      matchedConditions.push("app: not constrained (field blank, rule has no specific conditions)");
-    }
+    // This tester deliberately supports only the HAR-observed source and
+    // destination condition set. Any other specific condition is unevaluable
+    // and must fail closed rather than being ignored.
+    if (hasSpecificConditions(byDim.identity) || hasSpecificConditions(byDim.app)) return NO_MATCH;
 
     if (byDim.unknown && byDim.unknown.length > 0) {
       if (hasSpecificConditions(byDim.unknown)) return NO_MATCH;

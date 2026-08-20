@@ -1056,58 +1056,43 @@
     });
     const srcIpField = createFieldGroup("Source IP / CIDR / Port", sourceInput);
 
-    const identityItems = {};
-    if (Array.isArray(identityOptions)) {
-      identityOptions.forEach(id => {
-        const resolvedName = identityMap && identityMap[id];
-        const typeLabel = identityTypeMap && identityTypeMap[id];
-        if (resolvedName) {
-          identityItems[id] = typeLabel ? `${resolvedName} (${typeLabel})` : `${resolvedName} (ID: ${id})`;
-        } else if (typeLabel) {
-          identityItems[id] = `${typeLabel} (ID: ${id})`;
-        } else {
-          identityItems[id] = `Identity #${id}`;
-        }
-      });
-    }
-    const identitySelect = createSearchableSelect("Identity", "Search AD user, group, or device name...", "psc-identity", identityItems);
-    identitySelect.input.disabled = false;
-
-    const mergedIdentityTypeMap = Object.assign({}, DEFAULT_IDENTITY_TYPES, identityTypeMap || {});
-    const identityTypeSelect = createSearchableSelect("Identity Type", "Search identity type by name...", "psc-identity-type", mergedIdentityTypeMap);
-    identityTypeSelect.input.disabled = false;
-
-    const sgtField = createFieldGroup("Security Group Tag (SGT)", el("input", { id: "psc-sgt", type: "text", placeholder: "Search Security Group Tag name...", autocomplete: "off" }));
-    const locField = createFieldGroup("Location / Branch", el("input", { id: "psc-location", type: "text", placeholder: "Search Location / Branch name...", autocomplete: "off" }));
-    const intNetField = createFieldGroup("Internal Network", el("input", { id: "psc-internal-net", type: "text", placeholder: "Internal Network CIDR or name...", autocomplete: "off" }));
-    const srcNetObjSelect = createSearchableSelect("Source Network Object", "Search network object by name...", "psc-netobj-src", maps.networkObjects || {});
-    srcNetObjSelect.input.disabled = false;
-    const tunnelField = createFieldGroup("Network Tunnel", el("input", { id: "psc-tunnel", type: "text", placeholder: "Search Network Tunnel by name...", autocomplete: "off" }));
-    const postureField = createFieldGroup("Device Posture Profile", el("input", { id: "psc-posture", type: "text", placeholder: "Search Device Posture Profile name...", autocomplete: "off" }));
-    const netDevField = createFieldGroup("Network Device", el("input", { id: "psc-network-device", type: "text", placeholder: "Search Network Device hostname or IP...", autocomplete: "off" }));
+    const usersSelect = createSearchableSelect("Users", "Search user by name...", "psc-src-users", maps.sourceUsers || {});
+    usersSelect.input.disabled = false;
+    const roamingSelect = createSearchableSelect("Roaming Devices", "Search roaming device by name...", "psc-src-roaming", maps.sourceRoaming || {});
+    roamingSelect.input.disabled = false;
+    const groupsSelect = createSearchableSelect("Groups", "Search group by name...", "psc-src-groups", maps.sourceGroups || {});
+    groupsSelect.input.disabled = false;
+    const endpointDevicesSelect = createSearchableSelect("Endpoint Devices", "Search endpoint device by name...", "psc-src-endpoints", maps.sourceEndpointDevices || {});
+    endpointDevicesSelect.input.disabled = false;
+    const networksSelect = createSearchableSelect("Networks", "Search network by name...", "psc-src-networks", maps.sourceNetworks || {});
+    networksSelect.input.disabled = false;
+    const sitesSelect = createSearchableSelect("Sites", "Search site by name...", "psc-src-sites", maps.sourceSites || {});
+    sitesSelect.input.disabled = false;
+    const sgtSelect = createSearchableSelect("Security Group Tags", "Search SGT by name...", "psc-src-sgt", maps.sourceSecurityGroupTags || {});
+    sgtSelect.input.disabled = false;
+    const tunnelsSelect = createSearchableSelect("Network Tunnels / Branches", "Search tunnel by name...", "psc-src-tunnels", maps.sourceTunnels || {});
+    tunnelsSelect.input.disabled = false;
 
     const sourceInputMap = {
-      identity: identitySelect,
-      identityType: identityTypeSelect,
-      sgt: sgtField,
-      location: locField,
-      internalNetwork: intNetField,
-      networkObject: srcNetObjSelect,
-      tunnel: tunnelField,
-      posture: postureField,
-      networkDevice: netDevField,
+      users: usersSelect,
+      roaming: roamingSelect,
+      groups: groupsSelect,
+      endpointDevices: endpointDevicesSelect,
+      networks: networksSelect,
+      sites: sitesSelect,
+      sgt: sgtSelect,
+      tunnels: tunnelsSelect,
     };
 
     const sourceSettingsToggles = {
-      identity: { label: "Identity", enabled: true },
-      identityType: { label: "Identity Type", enabled: true },
-      sgt: { label: "Security Group Tag", enabled: true },
-      location: { label: "Location / Branch", enabled: false },
-      internalNetwork: { label: "Internal Network", enabled: false },
-      networkObject: { label: "Network Object", enabled: false },
-      tunnel: { label: "Network Tunnel", enabled: false },
-      posture: { label: "Device Posture Profile", enabled: false },
-      networkDevice: { label: "Network Device", enabled: false },
+      users: { label: "Users", enabled: true },
+      roaming: { label: "Roaming Devices", enabled: false },
+      groups: { label: "Groups", enabled: false },
+      endpointDevices: { label: "Endpoint Devices", enabled: false },
+      networks: { label: "Networks", enabled: false },
+      sites: { label: "Sites", enabled: false },
+      sgt: { label: "Security Group Tags", enabled: false },
+      tunnels: { label: "Network Tunnels / Branches", enabled: false },
     };
 
     // Source Section Box
@@ -1173,47 +1158,61 @@
     });
     const dstIpField = createFieldGroup("Destination IP / Domain / Port", destInput);
 
-    const appSelect = createSearchableSelect("Internet Application", "Search applications by name...", "psc-app", {});
-    appSelect.input.disabled = false;
-    const protoSelect = createSearchableSelect("Application Protocol", "Search protocols by name...", "psc-proto", {});
-    protoSelect.input.disabled = false;
-    const catSelect = createSearchableSelect("Content Category", "Search categories by name...", "psc-cat", {});
-    catSelect.input.disabled = false;
-    const privResSelect = createSearchableSelect("Private Resource", "Search private resources by name...", "psc-privres", maps.privateResources || {});
+    const destScopeSelect = createSearchableSelect("Destination Scope", "Search destination scope by name...", "psc-dst-scope", maps.destinationScopes || {});
+    destScopeSelect.input.disabled = false;
+    const privResSelect = createSearchableSelect("Private Resources", "Search private resources by name...", "psc-privres", maps.privateResources || {});
     privResSelect.input.disabled = false;
-    const destListSelect = createSearchableSelect("Destination List", "Search destination lists by name...", "psc-destlist", maps.destinationLists || {});
+    const privResGroupSelect = createSearchableSelect("Private Resource Groups", "Search resource groups by name...", "psc-privresgrp", maps.privateResourceGroups || {});
+    privResGroupSelect.input.disabled = false;
+    const destListSelect = createSearchableSelect("Destination Lists", "Search destination lists by name...", "psc-destlist", maps.destinationLists || {});
     destListSelect.input.disabled = false;
-    const netObjSelect = createSearchableSelect("Network Object", "Search network objects by name...", "psc-netobj", maps.networkObjects || {});
+    const netObjSelect = createSearchableSelect("Network Objects", "Search network objects by name...", "psc-netobj", maps.networkObjects || {});
     netObjSelect.input.disabled = false;
-    const svcObjSelect = createSearchableSelect("Service Object Group", "Search service groups by name...", "psc-svcobj", maps.serviceObjectGroups || {});
+    const svcObjSelect = createSearchableSelect("Service Object Groups", "Search service groups by name...", "psc-svcobj", maps.serviceObjectGroups || {});
     svcObjSelect.input.disabled = false;
-    const appListSelect = createSearchableSelect("Application List", "Search application lists by name...", "psc-applist", maps.applicationLists || {});
+    const appSelect = createSearchableSelect("Applications", "Search applications by name...", "psc-app", maps.applications || {});
+    appSelect.input.disabled = false;
+    const appListSelect = createSearchableSelect("Application Lists", "Search application lists by name...", "psc-applist", maps.applicationLists || {});
     appListSelect.input.disabled = false;
-    const catListSelect = createSearchableSelect("Category List", "Search category lists by name...", "psc-catlist", maps.categoryLists || {});
+    const appCatSelect = createSearchableSelect("Application Categories", "Search application categories by name...", "psc-appcat", maps.applicationCategories || {});
+    appCatSelect.input.disabled = false;
+    const catListSelect = createSearchableSelect("Category Lists", "Search category lists by name...", "psc-catlist", maps.categoryLists || {});
     catListSelect.input.disabled = false;
+    const geolocationSelect = createSearchableSelect("Geolocations", "Search country by name or code...", "psc-geolocation", maps.geolocations || {});
+    geolocationSelect.input.disabled = false;
+    const privateResourceTypeSelect = createSearchableSelect("Private Resource Type", "Search resource type...", "psc-privres-type", { apps: "Applications", networks: "Networks" });
+    privateResourceTypeSelect.input.disabled = false;
+    const appRiskProfileSelect = createSearchableSelect("App Risk Profile", "Search app risk profile...", "psc-app-risk", maps.appRiskProfiles || {});
+    appRiskProfileSelect.input.disabled = false;
 
     const destInputMap = {
-      app: appSelect,
-      protocol: protoSelect,
-      category: catSelect,
+      destScope: destScopeSelect,
       privateResource: privResSelect,
+      privateResourceGroup: privResGroupSelect,
       destinationList: destListSelect,
       netObject: netObjSelect,
       serviceObject: svcObjSelect,
+      application: appSelect,
       appList: appListSelect,
+      appCategory: appCatSelect,
       catList: catListSelect,
+      geolocation: geolocationSelect,
+      privateResourceType: privateResourceTypeSelect,
+      appRiskProfile: appRiskProfileSelect,
     };
 
     const destSettingsToggles = {
-      app: { label: "Internet Application", enabled: true },
-      protocol: { label: "Application Protocol", enabled: true },
-      category: { label: "Content Category", enabled: true },
-      privateResource: { label: "Private Resource", enabled: false },
-      destinationList: { label: "Destination List", enabled: false },
-      netObject: { label: "Network Object", enabled: false },
-      serviceObject: { label: "Service Object Group", enabled: false },
-      appList: { label: "Application List", enabled: false },
-      catList: { label: "Category List", enabled: false },
+      destScope: { label: "Destination Scope", enabled: true },
+      privateResource: { label: "Private Resources", enabled: false },
+      privateResourceGroup: { label: "Private Resource Groups", enabled: false },
+      destinationList: { label: "Destination Lists", enabled: false },
+      netObject: { label: "Network Objects", enabled: false },
+      serviceObject: { label: "Service Object Groups", enabled: false },
+      application: { label: "Applications", enabled: false },
+      appList: { label: "Application Lists", enabled: false },
+      appCategory: { label: "Application Categories", enabled: false },
+      catList: { label: "Category Lists", enabled: false },
+      geolocation: { label: "Geolocations", enabled: false },
     };
 
     // Destination Section Box
@@ -1286,14 +1285,6 @@
     renderSourceFields();
     renderDestFields();
 
-    // Asynchronously populate lookups
-    loadLookups().then(lookups => {
-      if (lookups) {
-        if (lookups.apps) appSelect.setItems(lookups.apps);
-        if (lookups.protocols) protoSelect.setItems(lookups.protocols);
-        if (lookups.categories) catSelect.setItems(lookups.categories);
-      }
-    });
 
     // Footer actions
     const formFooter = el("div", { id: "psc-form-footer" });
@@ -1421,27 +1412,29 @@
     runBtn.addEventListener("click", () => {
       const srcVal = sourceInput.value.trim();
       const destVal = destInput.value.trim();
-      const appId = appSelect.getValue();
-      const protoId = protoSelect.getValue();
-      const catId = catSelect.getValue();
+      const usersId = usersSelect.getValue();
+      const roamingId = roamingSelect.getValue();
+      const groupsId = groupsSelect.getValue();
+      const endpointDevicesId = endpointDevicesSelect.getValue();
+      const networksId = networksSelect.getValue();
+      const sitesId = sitesSelect.getValue();
+      const sgtId = sgtSelect.getValue();
+      const tunnelsId = tunnelsSelect.getValue();
+      const destScopeVal = destScopeSelect.getValue();
       const privResId = privResSelect.getValue();
+      const privResGroupId = privResGroupSelect.getValue();
       const destListId = destListSelect.getValue();
       const netObjId = netObjSelect.getValue();
       const svcObjId = svcObjSelect.getValue();
+      const appId = appSelect.getValue();
       const appListId = appListSelect.getValue();
+      const appCatId = appCatSelect.getValue();
       const catListId = catListSelect.getValue();
-      const identityTypeIdVal = identityTypeSelect.getValue();
-      const identityVal = identitySelect.getValue();
+      const geoVal = geolocationSelect.getValue();
+      const privateResourceTypeVal = privateResourceTypeSelect.getValue();
+      const appRiskProfileId = appRiskProfileSelect.getValue();
 
-      const sgtVal = sgtField.getValue();
-      const locVal = locField.getValue();
-      const intNetVal = intNetField.getValue();
-      const srcNetObjId = srcNetObjSelect.getValue();
-      const tunnelVal = tunnelField.getValue();
-      const postureVal = postureField.getValue();
-      const netDevVal = netDevField.getValue();
-
-      if (!srcVal && !destVal && !appId && !protoId && !catId && !identityVal && !identityTypeIdVal && !privResId && !destListId && !netObjId && !svcObjId && !appListId && !catListId && !sgtVal && !locVal && !intNetVal && !srcNetObjId && !tunnelVal && !postureVal && !netDevVal) {
+      if (!srcVal && !destVal && !usersId && !roamingId && !groupsId && !endpointDevicesId && !networksId && !sitesId && !sgtId && !tunnelsId && !destScopeVal && !privResId && !privResGroupId && !destListId && !netObjId && !svcObjId && !appId && !appListId && !appCatId && !catListId && !geoVal && !privateResourceTypeVal && !appRiskProfileId) {
         errorLine.textContent = "SELECT AT LEAST ONE CRITERION.";
         return;
       }
@@ -1454,28 +1447,31 @@
       runBtn.textContent = "SIMULATING…";
       
       const testInput = {
-        source:                srcParsed.ipCidr,
-        sourcePort:            srcParsed.port,
-        identity:              identityVal,
-        identityTypeId:        identityTypeIdVal,
-        sgt:                   sgtVal,
-        location:              locVal,
-        internalNetwork:       intNetVal,
-        sourceNetworkObjectId: srcNetObjId,
-        tunnel:                tunnelVal,
-        posture:               postureVal,
-        networkDevice:         netDevVal,
-        applicationId:         appId,
-        protocolId:            protoId,
-        categoryId:            catId,
-        destination:           destParsed.ipCidr,
-        destinationPort:       destParsed.port,
-        privateResourceId:     privResId,
-        destinationListId:     destListId,
-        networkObjectId:       netObjId,
-        serviceObjectGroupId:  svcObjId,
-        applicationListId:     appListId,
-        categoryListId:        catListId,
+        source:                    srcParsed.ipCidr,
+        sourcePort:                srcParsed.port,
+        sourceUserId:              usersId,
+        sourceRoamingId:           roamingId,
+        sourceGroupId:             groupsId,
+        sourceEndpointDeviceId:    endpointDevicesId,
+        sourceNetworkId:           networksId,
+        sourceSiteId:              sitesId,
+        sourceSecurityGroupTagId:  sgtId,
+        sourceTunnelId:            tunnelsId,
+        destinationScope:          destScopeVal,
+        privateResourceId:         privResId,
+        privateResourceGroupId:    privResGroupId,
+        destinationListId:         destListId,
+        networkObjectId:           netObjId,
+        serviceObjectGroupId:      svcObjId,
+        applicationId:             appId,
+        applicationListId:         appListId,
+        applicationCategoryId:     appCatId,
+        categoryListId:            catListId,
+        geolocation:               geoVal,
+        privateResourceType:       privateResourceTypeVal,
+        appRiskProfileId,
+        destination:               destParsed.ipCidr,
+        destinationPort:           destParsed.port,
       };
 
       setTimeout(() => {
@@ -1488,24 +1484,27 @@
 
     resetBtn.addEventListener("click", () => {
       sourceInput.value = "";
-      identitySelect.reset();
-      appSelect.reset();
-      protoSelect.reset();
-      catSelect.reset();
+      usersSelect.reset();
+      roamingSelect.reset();
+      groupsSelect.reset();
+      endpointDevicesSelect.reset();
+      networksSelect.reset();
+      sitesSelect.reset();
+      sgtSelect.reset();
+      tunnelsSelect.reset();
+      destScopeSelect.reset();
       privResSelect.reset();
+      privResGroupSelect.reset();
       destListSelect.reset();
       netObjSelect.reset();
       svcObjSelect.reset();
+      appSelect.reset();
       appListSelect.reset();
+      appCatSelect.reset();
       catListSelect.reset();
-      identityTypeSelect.reset();
-      srcNetObjSelect.reset();
-      sgtField.reset();
-      locField.reset();
-      intNetField.reset();
-      tunnelField.reset();
-      postureField.reset();
-      netDevField.reset();
+      geolocationSelect.reset();
+      privateResourceTypeSelect.reset();
+      appRiskProfileSelect.reset();
       destInput.value = "";
       errorLine.textContent = "";
       onReset();

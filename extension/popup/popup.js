@@ -98,6 +98,7 @@ document.addEventListener("DOMContentLoaded", () => {
       identityMap || {},
       /* onRun */ async (testInput) => {
         const lookups = await window.PopupSections.loadLookups();
+        Object.assign(lookups, currentObjectMaps || {});
         lookups.identities = currentIdentityMap;
         lookups.objects = currentObjectMap;
         lookups.privateResources = (currentObjectMaps && currentObjectMaps.privateResources) || currentObjectMap || {};
