@@ -1385,9 +1385,27 @@
         return;
       }
 
+      if (result && result.noMatch) {
+        const diagnostic = result.diagnostic || {};
+        const defaults = diagnostic.defaults || [];
+        const defaultSummary = defaults.length
+          ? defaults.map(rule => `${rule.name || "Unnamed"} [${rule.scope || "no scope"}]`).join("; ")
+          : "No default rules are loaded.";
+        resultCol.appendChild(el("div", { class: "psc-no-match-card" }, [
+          el("span", {}, ["⚠️ No rule matched the current runtime data." ]),
+          el("div", { style: { marginTop: "6px", fontSize: "11px", color: "#cbd5e1", lineHeight: "1.45" } }, [
+            `Debug: destination=${diagnostic.destination || "(blank)"}; selected scope=${diagnostic.scope || "(blank)"}; normalized=${diagnostic.normalizedScope || "(none)"}.`
+          ]),
+          el("div", { style: { marginTop: "4px", fontSize: "11px", color: "#94a3b8", lineHeight: "1.45" } }, [
+            `Loaded defaults: ${defaultSummary}`
+          ]),
+        ]));
+        return;
+      }
+
       if (result === "NO_MATCH") {
         resultCol.appendChild(el("div", { class: "psc-no-match-card" }, [
-          el("span", {}, ["⚠️ No specific rule matched — default policy action applies."]),
+          el("span", {}, ["⚠️ No rule matched the current runtime data."]),
         ]));
         return;
       }

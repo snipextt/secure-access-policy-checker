@@ -78,9 +78,24 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // ---------------------------------------------------------------------------
-  // Build / re-build the full results UI
-  // ---------------------------------------------------------------------------
+  function buildNoMatchDiagnostic(rules, testInput) {
+    const scopeText = String(testInput.destinationScope || "").trim().toLowerCase();
+    const normalizedScope =
+      scopeText === "internet" || scopeText === "public internet" || scopeText === "public_internet"
+        ? "public_internet"
+        : scopeText === "private access" || scopeText === "private_network"
+          ? "private_network"
+          : null;
+    const defaults = (rules || []).filter(rule => rule.is_default || rule.ruleIsDefault).map(rule => ({
+      id: rule.id || rule.ruleId,
+      name: rule.name || rule.ruleName,
+      scope: rule.trafficScope || rule.ruleAccess || (rule.raw && rule.raw.ruleAccess) || null,
+      action: rule.action || rule.ruleAction,
+      conditions: (rule.conditions || rule.ruleConditions || []).map(condition => condition.attributeName),
+    }));
+    return { destination: testInput.destination || "", scope: testInput.destinationScope || "", normalizedScope, defaults };
+  }
+
   function renderResults(rules, findings, identityMap, objectMap, objectMaps, identityTypeMap) {
     testerRoot.innerHTML = "";
     rulesRoot.innerHTML = "";
@@ -110,7 +125,10 @@ document.addEventListener("DOMContentLoaded", () => {
         lookups.appRiskProfiles  = (currentObjectMaps && currentObjectMaps.appRiskProfiles) || {};
         const result = window.Matcher.matchPolicy(currentRules, testInput, lookups);
         if (testerHandle) {
-          testerHandle.updateResult(result === null ? "NO_MATCH" : result);
+          testerHandle.updateResult(result === null ? {
+            noMatch: true,
+            diagnostic: buildNoMatchDiagnostic(currentRules, testInput),
+          } : result);
         }
         if (result) {
           const displayName = result.rule.ruleName || result.rule.name || "(unnamed)";
