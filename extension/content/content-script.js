@@ -1104,14 +1104,36 @@ function showPopoverForRule(anchorEl, ruleName, testMatchReasons, autoHideMs) {
   });
 }
 
+function policyConditionCells() {
+  // Cisco has changed the inner markup of these cells across dashboard builds,
+  // so test IDs alone are not reliable. Resolve the Source/Destination column
+  // indices from each table's visible headers and bind the corresponding cells.
+  const cells = new Set(document.querySelectorAll(CHIP_SELECTOR));
+  const rows = [...findRuleRows(), ...findDefaultRuleRows()];
+  for (const row of rows) {
+    const table = row.closest("table");
+    if (!table) continue;
+    const headers = Array.from(table.querySelectorAll("thead th"));
+    const indices = headers
+      .map((header, index) => ({ index, text: (header.innerText || header.textContent || "").trim().toLowerCase() }))
+      .filter(({ text }) => /^(source|sources|destination|destinations)$/.test(text))
+      .map(({ index }) => index);
+    const rowCells = row.querySelectorAll(":scope > td");
+    for (const index of indices) {
+      if (rowCells[index]) cells.add(rowCells[index]);
+    }
+  }
+  return cells;
+}
+
 function handlePolicyColumnMouseEnter(event) {
-  const chip = event.currentTarget;
+  const cell = event.currentTarget;
   clearTimeout(hoverHideTimer);
   hoverPointer = { x: event.clientX, y: event.clientY };
-  const row = chip.closest("tr");
+  const row = cell.closest("tr");
   if (!row) return;
   const ruleName = getRuleName(row);
-  if (ruleName && ruleName !== "unknown") showPopoverForRule(chip, ruleName, null, undefined);
+  if (ruleName && ruleName !== "unknown") showPopoverForRule(cell, ruleName, null, undefined);
 }
 
 function handlePolicyColumnMouseLeave() {
@@ -1122,7 +1144,7 @@ function attachChipListeners() {
   // Deliberately limit the detail popover to Cisco's source/destination
   // condition chips. Hovering rule names, action, priority, and empty cells
   // remains passive, while each policy-condition column opens the full detail.
-  const chips = document.querySelectorAll(CHIP_SELECTOR);
+  const chips = policyConditionCells();
   for (const chip of chips) {
     if (attachedChips.has(chip)) continue;
     attachedChips.add(chip);
