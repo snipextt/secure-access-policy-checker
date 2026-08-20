@@ -245,7 +245,9 @@ function highlightRule(ruleName, matchedConditions) {
 // we just position our own element near the chip.
 // ---------------------------------------------------------------------------
 
-var CHIP_SELECTOR = '[data-testid="policy-destination-item"], [data-testid="policy-source-item"]';
+// Live dashboard selectors supplied from the rendered policy table. Source
+// uses its column wrapper; destination uses the individual policy item.
+var CHIP_SELECTOR = '[data-testid="policy-source-column"], [data-testid="policy-destination-item"]';
 var HOVER_ROW_SELECTOR = 'table[rowkey="ruleId"] tr.cds-table__row, table.policy-default-rule-table tr.cds-table__row, [data-rule-id], .rule-row';
 var HOVER_HIDE_DELAY_MS = 150;
 // Programmatically-triggered popovers (from "Highlight on page") aren't
@@ -261,8 +263,7 @@ var TRIGGERED_POPOVER_AUTO_HIDE_MS = 4000;
 var hoverPopoverEl = null;
 var hoverHideTimer = null;
 var hoverPointer = null;
-var policyHoverDelegationAttached = false;
-var activePolicyRow = null;
+var attachedChips = new WeakSet();
 var currentHighlightEl = null;
 var triggeredDismissListener = null;
 
@@ -1145,90 +1146,45 @@ function handlePolicyColumnMouseLeave() {
   scheduleHideHoverPopover();
 }
 
-function columnIndexForTarget(target, event) {
-  const path = event && typeof event.composedPath === "function" ? event.composedPath() : [];
-  const pathCell = path.find(node => node && node.nodeType === 1 && (node.matches("td, [role='cell']") || node.getAttribute && node.getAttribute("role") === "gridcell"));
-  const cell = pathCell || target.closest("td, [role='cell'], [role='gridcell']");
-  const row = (cell && cell.closest("tr, [role='row']")) || path.find(node => node && node.nodeType === 1 && node.matches && node.matches("tr, [role='row']"));
-  const table = (row && row.closest("table, [role='table'], [role='grid']")) || path.find(node => node && node.nodeType === 1 && node.matches && node.matches("table, [role='table'], [role='grid']"));
-  if (!cell || !row || !table) return null;
-  const cells = Array.from(row.children).filter(node => node.matches && node.matches("td, [role='cell'], [role='gridcell']"));
-  const index = cells.indexOf(cell);
-  if (index < 0) return null;
-  const headerNodes = Array.from(table.querySelectorAll("thead th, thead [role='columnheader'], [role='columnheader']"));
-  const header = headerNodes[index];
-  const headerText = (header && (header.innerText || header.textContent) || "").trim().toLowerCase();
-  if (/\b(source|sources|destination|destinations)\b/.test(headerText)) return { cell, row };
-  // Current Cisco policy tables use leading selection/name/type columns,
-  // followed by Source and Destination. This fallback covers table variants
-  // that expose visual headers through non-semantic shadow components.
-  return index === 3 || index === 4 ? { cell, row } : null;
-}
-
-function policyColumnAtPoint(x, y) {
-  // Use the actual visible Source/Destination header geometry rather than any
-  // Cisco-internal row class, test ID, or cell position. This survives their
-  // virtualized table and shadow-style component revisions.
-  let headers = Array.from(document.querySelectorAll("thead th, [role='columnheader']"));
-  if (headers.length === 0) {
-    headers = Array.from(document.querySelectorAll("div, span"))
-      .filter(element => element.children.length === 0);
-  }
-  return headers.some(header => {
-    const text = (header.textContent || "").trim();
-    if (!/^(source|sources|destination|destinations)$/i.test(text)) return false;
-    const rect = header.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0 && x >= rect.left && x <= rect.right;
-  });
-}
-
-function ruleRowAtPoint(y) {
-  return [...findRuleRows(), ...findDefaultRuleRows()].find(row => {
-    const rect = row.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0 && y >= rect.top && y <= rect.bottom;
-  }) || null;
-}
-
-function handleDelegatedPolicyHover(event) {
-  if (!policyColumnAtPoint(event.clientX, event.clientY)) return;
-  const row = ruleRowAtPoint(event.clientY);
-  if (!row || activePolicyRow === row) return;
-  activePolicyRow = row;
+function handlePolicyColumnMouseEnter(event) {
+  const target = event.currentTarget;
   clearTimeout(hoverHideTimer);
   hoverPointer = { x: event.clientX, y: event.clientY };
+  const row = target.closest("tr");
+  if (!row) return;
   const ruleName = getRuleName(row);
-  if (ruleName && ruleName !== "unknown") showPopoverForRule(row, ruleName, null, undefined);
+  if (ruleName && ruleName !== "unknown") showPopoverForRule(target, ruleName, null, undefined);
 }
 
-function handleDelegatedPolicyLeave(event) {
-  const row = ruleRowAtPoint(event.clientY);
-  if (row && policyColumnAtPoint(event.clientX, event.clientY)) return;
-  activePolicyRow = null;
+function handlePolicyColumnMouseLeave(event) {
+  const target = event.currentTarget;
+  const related = event.relatedTarget;
+  if (related && target.contains(related)) return;
   scheduleHideHoverPopover();
 }
 
 function attachChipListeners() {
-  // Delegate from the document rather than binding transient inner chips.
-  // Cisco frequently remounts virtualized policy-cell DOM without a mutation
-  // shape that preserves the old target nodes.
-  if (policyHoverDelegationAttached) return;
-  policyHoverDelegationAttached = true;
-  document.addEventListener("pointermove", (event) => {
-    handleDelegatedPolicyHover(event);
-  }, true);
-  document.addEventListener("pointerout", handleDelegatedPolicyLeave, true);
+  // Bind directly to the live Cisco source-column and destination-item nodes.
+  // The mutation observer below attaches handlers to replacement nodes after
+  // the dashboard virtualizes, filters, or re-sorts its rule rows.
+  const targets = document.querySelectorAll(CHIP_SELECTOR);
+  for (const target of targets) {
+    if (attachedChips.has(target)) continue;
+    attachedChips.add(target);
+    target.addEventListener("mouseenter", handlePolicyColumnMouseEnter);
+    target.addEventListener("mouseleave", handlePolicyColumnMouseLeave);
+  }
 }
 
 function initHoverPopover() {
   attachChipListeners();
 
-  // SPA re-renders (sort/filter/pagination) create new source/destination
-  // chip elements, so re-scan on DOM mutation rather than relying on a
-  // one-time query.
+  // Cisco replaces these source/destination nodes when the virtualized table
+  // sorts, filters, or pages; bind handlers to each new live node.
   let debounceTimer = null;
   const observer = new MutationObserver(() => {
     clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(attachChipListeners, 300);
+    debounceTimer = setTimeout(attachChipListeners, 150);
   });
   observer.observe(document.body, { childList: true, subtree: true });
 }
