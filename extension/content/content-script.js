@@ -1,5 +1,41 @@
 var api = typeof browser !== 'undefined' ? browser : chrome;
 
+// Reloading an unpacked MV3 extension invalidates content scripts already
+// injected into dashboard tabs. A stale script must quietly stop instead of
+// throwing from a later hover/message callback; the fresh script takes over
+// after the dashboard tab is reloaded.
+function runtimeUrl(path) {
+  try {
+    return api && api.runtime && api.runtime.id ? api.runtime.getURL(path) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function safeRuntimeMessage(message, callback) {
+  try {
+    if (!api || !api.runtime || !api.runtime.id) {
+      if (callback) callback(null);
+      return false;
+    }
+    api.runtime.sendMessage(message, (response) => {
+      try {
+        if (api.runtime.lastError) {
+          if (callback) callback(null);
+          return;
+        }
+        if (callback) callback(response);
+      } catch (_) {
+        if (callback) callback(null);
+      }
+    });
+    return true;
+  } catch (_) {
+    if (callback) callback(null);
+    return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // findRuleRows — matches the real Cisco Secure Access dashboard DOM.
 //
@@ -440,10 +476,13 @@ function positionHoverPopover(popover, anchor) {
 var hoverLookupsPromise = null;
 function loadLookups() {
   if (!hoverLookupsPromise) {
+    const extensionUrl = runtimeUrl("data/categories-lookup.json");
+    if (!extensionUrl) return Promise.resolve({ categories: {}, apps: {}, protocols: {} });
+    const base = extensionUrl.replace(/data\/categories-lookup\.json$/, "data/");
     hoverLookupsPromise = Promise.all([
-      fetch(api.runtime.getURL("data/categories-lookup.json")).then((r) => r.json()).catch(() => ({})),
-      fetch(api.runtime.getURL("data/apps-lookup.json")).then((r) => r.json()).catch(() => ({})),
-      fetch(api.runtime.getURL("data/protocols-lookup.json")).then((r) => r.json()).catch(() => ({})),
+      fetch(base + "categories-lookup.json").then((r) => r.json()).catch(() => ({})),
+      fetch(base + "apps-lookup.json").then((r) => r.json()).catch(() => ({})),
+      fetch(base + "protocols-lookup.json").then((r) => r.json()).catch(() => ({})),
     ]).then(([categories, apps, protocols]) => ({ categories, apps, protocols }));
   }
   return hoverLookupsPromise;
@@ -483,12 +522,8 @@ var HOVER_DEFAULT_IDENTITY_TYPES = {
 // between hovers — re-fetching per hover is cheap (just a storage read).
 function loadIdentityMap() {
   return new Promise((resolve) => {
-    api.runtime.sendMessage({ type: "GET_IDENTITY_MAP" }, (response) => {
-      if (api.runtime.lastError || !response) {
-        resolve({});
-        return;
-      }
-      resolve(response.identityMap || {});
+    safeRuntimeMessage({ type: "GET_IDENTITY_MAP" }, (response) => {
+      resolve(response && response.identityMap || {});
     });
   });
 }
@@ -500,12 +535,8 @@ function loadIdentityMap() {
 // merge). Fetched per-hover like loadIdentityMap() — cheap storage read.
 function loadIdentityTypeMap() {
   return new Promise((resolve) => {
-    api.runtime.sendMessage({ type: "GET_IDENTITY_TYPE_MAP" }, (response) => {
-      if (api.runtime.lastError || !response) {
-        resolve({});
-        return;
-      }
-      resolve(response.identityTypeMap || {});
+    safeRuntimeMessage({ type: "GET_IDENTITY_TYPE_MAP" }, (response) => {
+      resolve(response && response.identityTypeMap || {});
     });
   });
 }
@@ -516,8 +547,8 @@ function loadIdentityTypeMap() {
 // ID space, see popup.js's currentObjectMap comment).
 function loadObjectMap() {
   return new Promise((resolve) => {
-    api.runtime.sendMessage({ type: "GET_OBJECT_MAP" }, (response) => {
-      if (api.runtime.lastError || !response) {
+    safeRuntimeMessage({ type: "GET_OBJECT_MAP" }, (response) => {
+      if (!response) {
         resolve({ objectMap: {}, objectMaps: {} });
         return;
       }
@@ -943,6 +974,7 @@ function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSumma
   body.appendChild(findingsWrap);
 
   const sourceConditions = (matchSummary || []).filter(item => /^umbrella\.source\./.test(item.raw && item.raw.attributeName || ""));
+  const destinationConditions = (matchSummary || []).filter(item => /^umbrella\.destination\./.test(item.raw && item.raw.attributeName || ""));
   const postureConditions = (matchSummary || []).filter(item => /^umbrella\.posture\./.test(item.raw && item.raw.attributeName || ""));
   const conditionDisplayLines = (condition) => {
     const attribute = (condition.raw && condition.raw.attributeName || "").toLowerCase();
@@ -1053,11 +1085,11 @@ function loadRulesAndFindings(callback) {
     callback(rules, findings);
   };
 
-  api.runtime.sendMessage({ type: "GET_RULES" }, (response) => {
+  safeRuntimeMessage({ type: "GET_RULES" }, (response) => {
     rules = (response && response.rules) || [];
     maybeDone();
   });
-  api.runtime.sendMessage({ type: "GET_FINDINGS" }, (response) => {
+  safeRuntimeMessage({ type: "GET_FINDINGS" }, (response) => {
     findings = (response && response.findings) || [];
     maybeDone();
   });
@@ -1381,7 +1413,9 @@ function initEmbeddedPopup() {
   // This is more reliable than the postMessage handshake
   const orgMatch = window.location.href.match(/\/org\/(\d+)/);
   const orgId = orgMatch ? orgMatch[1] : null;
-  const iframeSrc = api.runtime.getURL("popup/popup.html") + (orgId ? `?orgId=${orgId}` : "");
+  const iframeSrcBase = runtimeUrl("popup/popup.html");
+  if (!iframeSrcBase) return;
+  const iframeSrc = iframeSrcBase + (orgId ? `?orgId=${orgId}` : "");
   iframe.src = iframeSrc;
   panel.appendChild(iframe);
 
@@ -1411,8 +1445,8 @@ function initEmbeddedPopup() {
 
   // Cache orgId in storage when we detect it — makes it resilient to timing issues
   // Use the orgId already extracted above for the iframe URL
-  if (orgId) {
-    chrome.storage.local.set({ cached_org_id: orgId });
+  if (orgId && api && api.storage && api.storage.local) {
+    try { api.storage.local.set({ cached_org_id: orgId }); } catch (_) {}
   }
 
   window.addEventListener("message", (event) => {
@@ -1471,6 +1505,7 @@ function setupPersistence() {
   // Listen for messages from the popup (toolbar or embedded panel).
   // The popup sends HIGHLIGHT_RULE via chrome.tabs.sendMessage() after a
   // successful "Run Simulation" — this listener routes it to highlightRule().
+  if (!api || !api.runtime || !api.runtime.id) return;
   api.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg && msg.type === "HIGHLIGHT_RULE") {
       highlightRule(msg.ruleName, msg.matchedConditions);
