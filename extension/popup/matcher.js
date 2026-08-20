@@ -858,11 +858,28 @@
       };
     }
 
-    // HAR-confirmed default-rule discriminator. A destination catch-all is
-    // limited to either PUBLIC_INTERNET or PRIVATE_NETWORK, never both.
+    // Cisco's rules are explicitly scoped to Internet or Private Access.
+    // A public FQDN is an Internet destination, so allow a domain-only test to
+    // fall through to the Internet default without forcing a redundant scope
+    // selection. IP/CIDR inputs and empty destination tests stay ambiguous and
+    // must still specify scope.
     const ruleScope = rule.trafficScope || rule.ruleAccess || (rule.raw && rule.raw.ruleAccess) || null;
-    const testScope = testInput.destinationScope || null;
-    if (ruleScope && (!testScope || ruleScope !== testScope)) {
+    const scopeText = String(testInput.destinationScope || "").trim().toLowerCase();
+    // getValue() returns the catalog key after a menu click, but normalize the
+    // visible labels too so a typed "Internet" / "Private Access" does not
+    // turn a valid default-rule test into a false no-match.
+    const explicitScope =
+      scopeText === "internet" || scopeText === "public internet" || scopeText === "public_internet"
+        ? "public_internet"
+        : scopeText === "private access" || scopeText === "private_network"
+          ? "private_network"
+          : null;
+    const destinationValue = String(testInput.destination || "").trim();
+    const inferredScope = explicitScope ||
+      (destinationValue && Number.isNaN(ipv4ToInt(destinationValue.split("/")[0])) && /[a-z]/i.test(destinationValue)
+        ? "public_internet"
+        : null);
+    if (ruleScope && (!inferredScope || ruleScope !== inferredScope)) {
       return { matched: false, matchedConditions: [], matchFields: null };
     }
 
