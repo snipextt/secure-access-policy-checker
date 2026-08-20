@@ -198,6 +198,9 @@ document.addEventListener("DOMContentLoaded", () => {
     ]);
 
     if (!cached.sse_rules || cached.sse_rules.length === 0) {
+      // The catalog APIs do not depend on rules. Start them immediately so
+      // selector fields can render a loading state and populate in place.
+      triggerRefresh();
       return "empty";
     }
 
@@ -209,16 +212,25 @@ document.addEventListener("DOMContentLoaded", () => {
     currentObjectMaps = om;
     currentObjectMap = om.privateResources || {};
 
-    // Check if we have enough resolved data
-    const hasIdentities = Object.keys(currentIdentityMap).length > 0;
-    const hasObjects = Object.values(om).some(m => Object.keys(m).length > 0);
+    // A partial object map must not suppress catalog loading. Source and
+    // destination selectors are ready only after their own catalog keys exist.
+    const requiredCatalogs = [
+      "sourceUsers", "sourceRoaming", "sourceGroups", "sourceEndpointDevices",
+      "sourceNetworks", "sourceSites", "sourceSecurityGroupTags", "sourceTunnels",
+      "destinationScopes",
+    ];
+    const catalogsReady = requiredCatalogs.every(key => Object.prototype.hasOwnProperty.call(om, key));
 
     errorBanner.style.display = "none";
     renderResults(currentRules, currentFindings, currentIdentityMap, currentObjectMap, currentObjectMaps, currentIdentityTypeMap);
 
-    if (hasIdentities || hasObjects) {
+    if (catalogsReady) {
       return "resolved";
     }
+
+    // Catalogs load independently of rules. Trigger their fetch as soon as
+    // the tester opens; storage updates will re-render this panel in place.
+    triggerRefresh();
 
     // Rules loaded but labels still resolving — show rules + subtle indicator
     const resolvingBar = document.createElement("div");

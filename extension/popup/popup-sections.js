@@ -113,19 +113,22 @@
         gap: 12px;
         padding: 14px 18px 0;
         width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
       }
 
       /* 2-Column Grid Layout: SOURCE on Left, DESTINATION on Right */
       .psc-criteria-grid {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
         gap: 16px;
         width: 100%;
+        min-width: 0;
         box-sizing: border-box;
       }
-      @media (max-width: 640px) {
+      @media (max-width: 720px) {
         .psc-criteria-grid {
-          grid-template-columns: 1fr;
+          grid-template-columns: minmax(0, 1fr);
         }
       }
 
@@ -187,7 +190,10 @@
         border: 1px solid #cbd5e1;
         border-radius: 4px;
         padding: 10px;
-        min-width: 220px;
+        width: min(260px, calc(100vw - 48px));
+        min-width: 0;
+        max-width: calc(100% - 24px);
+        box-sizing: border-box;
         box-shadow: 0 4px 16px rgba(15, 23, 42, 0.15);
       }
       .psc-section-popover.open {
@@ -915,7 +921,7 @@
     if (t) t.style.display = "none";
   }
 
-  function createSearchableSelect(labelStr, hintStr, inputId, itemsObj) {
+  function createSearchableSelect(labelStr, hintStr, inputId, itemsObj, catalogStatus = itemsObj === undefined ? "loading" : null) {
     const wrapper = el("div", { class: "psc-dropdown-wrapper" });
     const input = el("input", {
       id: inputId,
@@ -950,7 +956,12 @@
       }).slice(0, 50);
 
       if (matches.length === 0) {
-        list.appendChild(el("li", { style: { color: "#94a3b8", cursor: "default" } }, ["No matching names found"]));
+        const emptyText = catalogStatus === "loading"
+          ? "Loading catalog…"
+          : catalogStatus === "unavailable"
+            ? "Catalog unavailable — refresh the dashboard"
+            : `No ${labelStr.toLowerCase()} configured`;
+        list.appendChild(el("li", { style: { color: "#94a3b8", cursor: "default" } }, [emptyText]));
         return;
       }
 
@@ -1066,21 +1077,21 @@
     });
     const srcIpField = createFieldGroup("Source IP / CIDR / Port", sourceInput);
 
-    const usersSelect = createSearchableSelect("Users", "Search user by name...", "psc-src-users", maps.sourceUsers || {});
+    const usersSelect = createSearchableSelect("Users", "Search user by name...", "psc-src-users", maps.sourceUsers);
     usersSelect.input.disabled = false;
-    const roamingSelect = createSearchableSelect("Roaming Devices", "Search roaming device by name...", "psc-src-roaming", maps.sourceRoaming || {});
+    const roamingSelect = createSearchableSelect("Roaming Devices", "Search roaming device by name...", "psc-src-roaming", maps.sourceRoaming);
     roamingSelect.input.disabled = false;
-    const groupsSelect = createSearchableSelect("Groups", "Search group by name...", "psc-src-groups", maps.sourceGroups || {});
+    const groupsSelect = createSearchableSelect("Groups", "Search group by name...", "psc-src-groups", maps.sourceGroups);
     groupsSelect.input.disabled = false;
-    const endpointDevicesSelect = createSearchableSelect("Endpoint Devices", "Search endpoint device by name...", "psc-src-endpoints", maps.sourceEndpointDevices || {});
+    const endpointDevicesSelect = createSearchableSelect("Endpoint Devices", "Search endpoint device by name...", "psc-src-endpoints", maps.sourceEndpointDevices);
     endpointDevicesSelect.input.disabled = false;
-    const networksSelect = createSearchableSelect("Networks", "Search network by name...", "psc-src-networks", maps.sourceNetworks || {});
+    const networksSelect = createSearchableSelect("Networks", "Search network by name...", "psc-src-networks", maps.sourceNetworks);
     networksSelect.input.disabled = false;
-    const sitesSelect = createSearchableSelect("Sites", "Search site by name...", "psc-src-sites", maps.sourceSites || {});
+    const sitesSelect = createSearchableSelect("Sites", "Search site by name...", "psc-src-sites", maps.sourceSites);
     sitesSelect.input.disabled = false;
-    const sgtSelect = createSearchableSelect("Security Group Tags", "Search SGT by name...", "psc-src-sgt", maps.sourceSecurityGroupTags || {});
+    const sgtSelect = createSearchableSelect("Security Group Tags", "Search SGT by name...", "psc-src-sgt", maps.sourceSecurityGroupTags);
     sgtSelect.input.disabled = false;
-    const tunnelsSelect = createSearchableSelect("Network Tunnels / Branches", "Search tunnel by name...", "psc-src-tunnels", maps.sourceTunnels || {});
+    const tunnelsSelect = createSearchableSelect("Network Tunnels / Branches", "Search tunnel by name...", "psc-src-tunnels", maps.sourceTunnels);
     tunnelsSelect.input.disabled = false;
 
     const sourceInputMap = {

@@ -1136,7 +1136,7 @@ function ensureEmbeddedPopupStyle() {
       top: 0;
       bottom: 0;
       right: 0;
-      width: 600px;
+      width: min(680px, 100vw);
       height: 100vh;
       max-width: 100vw;
       background: #ffffff;
