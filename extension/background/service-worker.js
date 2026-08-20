@@ -212,10 +212,15 @@ async function fetchAllData(explicitOrgId) {
     try {
       const tokenObj = await getFreshToken("sse_token", tabId);
       if (tokenObj) {
-        rules = await fetchRules(tokenObj.token, orgId);
+        const fetched = await fetchRules(tokenObj.token, orgId);
+        rules = fetched.rules;
         const findings = runChecks(rules);
-        await api.storage.local.set({ sse_rules: rules, sse_findings: findings });
-        logEvent("auto-fetch", "Rules fetched", { count: rules.length, findings: findings.length });
+        await api.storage.local.set({
+          sse_rules: rules,
+          sse_findings: findings,
+          sse_rule_fetch_status: { defaultRuleFetch: fetched.defaultRuleFetch, fetchedAt: Date.now() },
+        });
+        logEvent("auto-fetch", "Rules fetched", { count: rules.length, findings: findings.length, defaultRuleFetch: fetched.defaultRuleFetch });
       } else {
         logEvent("auto-fetch", "No sse_token available, skipping rules fetch");
       }
@@ -372,6 +377,7 @@ async function fetchRules(token, orgId) {
   // HAR-confirmed dashboard endpoint. It preserves `ruleAccess`, which is
   // required to distinguish private-network and public-Internet defaults.
   const BASE_URL = "https://api.sse.cisco.com";
+  const defaultRuleUrl = `${BASE_URL}/policies/v2/rules?expandRuleDetails=true&ruleIsDefault=true`;
   const ORG_ID = orgId;
   const LIMIT = 100;
   let offset = 0;
@@ -535,31 +541,42 @@ async function fetchRules(token, orgId) {
 
   // Fetch the two default rules separately: the HAR proves they are excluded
   // from the custom-rule query and carry the ruleAccess scope discriminator.
-  const defaultsResponse = await fetch(`${BASE_URL}/policies/v2/rules?expandRuleDetails=true&ruleIsDefault=true`, {
-    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-  });
-  if (defaultsResponse.ok) {
-    const defaultsData = await defaultsResponse.json();
-    const defaults = Array.isArray(defaultsData) ? defaultsData : (defaultsData.results || defaultsData.rules || []);
-    for (const raw of defaults) {
-      const duplicate = allRules.some(rule => String(rule.id) === String(raw.ruleId || raw.id));
-      if (!duplicate) allRules.push({
-        id: raw.ruleId !== undefined ? raw.ruleId : raw.id,
-        name: raw.ruleName || raw.name || "Unnamed Rule",
-        order: raw.rulePriority || 0,
-        action: (raw.ruleAction || raw.action || "allow").toLowerCase(),
-        enabled: raw.ruleIsEnabled !== false,
-        is_default: true,
-        trafficScope: raw.ruleAccess || null,
-        conditions: raw.ruleConditions || raw.conditions || [],
-        raw,
-      });
+  let defaultRuleFetch = { loaded: 0, error: null };
+  try {
+    const defaultsResponse = await fetch(defaultRuleUrl, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+    });
+    logEvent("rules-fetch", "Default-rule API response", { url: defaultRuleUrl, status: defaultsResponse.status });
+    if (!defaultsResponse.ok) {
+      const body = await defaultsResponse.text().catch(() => "");
+      defaultRuleFetch.error = `HTTP ${defaultsResponse.status}: ${body.slice(0, 200)}`;
+    } else {
+      const defaultsData = await defaultsResponse.json();
+      const defaults = Array.isArray(defaultsData) ? defaultsData : (defaultsData.results || defaultsData.rules || []);
+      for (const raw of defaults) {
+        const duplicate = allRules.some(rule => String(rule.id) === String(raw.ruleId || raw.id));
+        if (!duplicate) allRules.push({
+          id: raw.ruleId !== undefined ? raw.ruleId : raw.id,
+          name: raw.ruleName || raw.name || "Unnamed Rule",
+          order: raw.rulePriority || 0,
+          action: (raw.ruleAction || raw.action || "allow").toLowerCase(),
+          enabled: raw.ruleIsEnabled !== false,
+          is_default: true,
+          trafficScope: raw.ruleAccess || null,
+          conditions: raw.ruleConditions || raw.conditions || [],
+          raw,
+        });
+        defaultRuleFetch.loaded++;
+      }
+      if (defaultRuleFetch.loaded === 0) defaultRuleFetch.error = "Response contained no default rules";
     }
-  } else {
-    logEvent("rules-fetch", "Default-rule fetch failed", { status: defaultsResponse.status });
+  } catch (err) {
+    defaultRuleFetch.error = err.message;
   }
-
-  return allRules;
+  if (defaultRuleFetch.error) {
+    logEvent("rules-fetch", "Default-rule fetch failed", { url: defaultRuleUrl, error: defaultRuleFetch.error });
+  }
+  return { rules: allRules, defaultRuleFetch };
 }
 
 // ---------------------------------------------------------------------------

@@ -1399,7 +1399,12 @@
           el("div", { style: { marginTop: "4px", fontSize: "11px", color: "#94a3b8", lineHeight: "1.45" } }, [
             `Loaded defaults: ${defaultSummary}`
           ]),
-        ]));
+          diagnostic.defaultRuleFetch && diagnostic.defaultRuleFetch.error
+            ? el("div", { style: { marginTop: "4px", fontSize: "11px", color: "#fca5a5", lineHeight: "1.45" } }, [
+                `Default-rule fetch error: ${diagnostic.defaultRuleFetch.error}`
+              ])
+            : null,
+        ].filter(Boolean)));
         return;
       }
 

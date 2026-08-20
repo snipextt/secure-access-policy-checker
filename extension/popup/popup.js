@@ -18,6 +18,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const testerRoot = document.getElementById("tester-root");
   const rulesRoot = document.getElementById("rules-root");
 
+  let catalogRefreshRequested = false;
+
   // ---------------------------------------------------------------------------
   // Header close button logic
   // ---------------------------------------------------------------------------
@@ -62,6 +64,7 @@ document.addEventListener("DOMContentLoaded", () => {
     appRiskProfiles: {},
   };
   let currentIdentityTypeMap = {};
+  let currentRuleFetchStatus = {};
 
   // ---------------------------------------------------------------------------
   // Highlight matched rule on the dashboard page
@@ -78,7 +81,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  function buildNoMatchDiagnostic(rules, testInput) {
+  function buildNoMatchDiagnostic(rules, testInput, ruleFetchStatus) {
     const scopeText = String(testInput.destinationScope || "").trim().toLowerCase();
     const normalizedScope =
       scopeText === "internet" || scopeText === "public internet" || scopeText === "public_internet"
@@ -93,7 +96,13 @@ document.addEventListener("DOMContentLoaded", () => {
       action: rule.action || rule.ruleAction,
       conditions: (rule.conditions || rule.ruleConditions || []).map(condition => condition.attributeName),
     }));
-    return { destination: testInput.destination || "", scope: testInput.destinationScope || "", normalizedScope, defaults };
+    return {
+      destination: testInput.destination || "",
+      scope: testInput.destinationScope || "",
+      normalizedScope,
+      defaults,
+      defaultRuleFetch: (ruleFetchStatus && ruleFetchStatus.defaultRuleFetch) || null,
+    };
   }
 
   function renderResults(rules, findings, identityMap, objectMap, objectMaps, identityTypeMap) {
@@ -127,7 +136,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (testerHandle) {
           testerHandle.updateResult(result === null ? {
             noMatch: true,
-            diagnostic: buildNoMatchDiagnostic(currentRules, testInput),
+            diagnostic: buildNoMatchDiagnostic(currentRules, testInput, currentRuleFetchStatus),
           } : result);
         }
         if (result) {
@@ -212,7 +221,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ---------------------------------------------------------------------------
   async function loadAndRender() {
     const cached = await api.storage.local.get([
-      "sse_rules", "sse_findings", "sse_identity_map", "sse_identity_type_map", "sse_object_maps"
+      "sse_rules", "sse_findings", "sse_identity_map", "sse_identity_type_map", "sse_object_maps", "sse_rule_fetch_status"
     ]);
 
     if (!cached.sse_rules || cached.sse_rules.length === 0) {
@@ -226,6 +235,7 @@ document.addEventListener("DOMContentLoaded", () => {
     currentFindings = cached.sse_findings || [];
     currentIdentityMap = cached.sse_identity_map || {};
     currentIdentityTypeMap = cached.sse_identity_type_map || {};
+    currentRuleFetchStatus = cached.sse_rule_fetch_status || {};
     const om = cached.sse_object_maps || {};
     currentObjectMaps = om;
     currentObjectMap = om.privateResources || {};
@@ -238,25 +248,29 @@ document.addEventListener("DOMContentLoaded", () => {
       "sourceTunnelGroups", "sourceNetworkDevices", "sourceMobileDevices", "sourceChromebooks", "sourceZtnaClients",
       "destinationScopes",
     ];
-    const catalogsReady = requiredCatalogs.every(key => Object.prototype.hasOwnProperty.call(om, key));
-
+    // Render immediately with available maps. Individual selectors convey
+    // loading/unavailable/empty state, so one failed catalog must not hold the
+    // entire Rules tab in a permanent "Resolving labels" loop.
+    const missingCatalogs = requiredCatalogs.filter(key => !Object.prototype.hasOwnProperty.call(om, key));
     errorBanner.style.display = "none";
     renderResults(currentRules, currentFindings, currentIdentityMap, currentObjectMap, currentObjectMaps, currentIdentityTypeMap);
 
-    if (catalogsReady) {
+    if (missingCatalogs.length === 0) {
       return "resolved";
     }
 
-    // Catalogs load independently of rules. Trigger their fetch as soon as
-    // the tester opens; storage updates will re-render this panel in place.
-    triggerRefresh();
+    // Only ask once per popup instance. Storage writes from a refresh used to
+    // re-enter loadAndRender() and start another refresh indefinitely.
+    if (!catalogRefreshRequested) {
+      catalogRefreshRequested = true;
+      triggerRefresh();
+    }
 
-    // Rules loaded but labels still resolving — show rules + subtle indicator
     const resolvingBar = document.createElement("div");
     resolvingBar.id = "psc-resolving-bar";
     resolvingBar.style.cssText = "background:#1e293b;color:#60a5fa;padding:8px 16px;font-size:12px;" +
       "text-align:center;border-bottom:1px solid #334155;";
-    resolvingBar.textContent = "\u23F3 Resolving labels\u2026";
+    resolvingBar.textContent = `⏳ Loading ${missingCatalogs.length} catalog${missingCatalogs.length === 1 ? "" : "s"}… unavailable catalogs remain usable as unavailable fields.`;
     rulesRoot.prepend(resolvingBar);
     return "partial";
   }
@@ -291,7 +305,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Live update: when SW writes new data to storage, re-render
   api.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
-    if (changes.sse_rules || changes.sse_identity_map || changes.sse_object_maps || changes.sse_identity_type_map) {
+    if (changes.sse_rules || changes.sse_identity_map || changes.sse_object_maps || changes.sse_identity_type_map || changes.sse_rule_fetch_status) {
       loadAndRender();
     }
   });
