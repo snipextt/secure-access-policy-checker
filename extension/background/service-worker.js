@@ -313,6 +313,26 @@ async function fetchAllData(explicitOrgId) {
       logEvent("auto-fetch", "Object resolution failed", { error: err.message });
     }
 
+    // 7. Resolve group/list membership (powers the popover's recursive
+    //    expand). Best-effort; empty membership just leaves a group
+    //    non-expandable rather than sinking the scan.
+    try {
+      const memberMaps = await resolveMembership(orgId, tabId, rules);
+      const prevM = await api.storage.local.get("sse_member_maps");
+      const prevMaps = (prevM && prevM.sse_member_maps) || {};
+      for (const [key, map] of Object.entries(memberMaps)) {
+        if (Object.keys(map).length === 0 && prevMaps[key] && Object.keys(prevMaps[key]).length > 0) {
+          memberMaps[key] = prevMaps[key];
+        }
+      }
+      await api.storage.local.set({ sse_member_maps: { ...prevMaps, ...memberMaps } });
+      logEvent("auto-fetch", "Membership resolved", {
+        total: Object.values(memberMaps).reduce((s, m) => s + Object.keys(m).length, 0),
+      });
+    } catch (err) {
+      logEvent("auto-fetch", "Membership resolution failed", { error: err.message });
+    }
+
     // 8. Schedule next periodic refresh
     api.alarms.create(REFRESH_ALARM, { delayInMinutes: REFRESH_INTERVAL_MIN });
 
@@ -1793,6 +1813,223 @@ const FULL_CATALOGS = [
   { key: "geolocations", tokenKey: "sse_token", path: "v1/geolocations", dataKey: "results", idKey: "id", labelKey: "name", mapEntries: (items) => items.flatMap(continent => (continent.countries || []).map(country => ({ id: country.code, label: `${country.name} (${country.code})` }))) },
 ];
 
+// ---------------------------------------------------------------------------
+// Group / list membership resolution — powers the dashboard popover's
+// recursive "expand this source/destination" feature (see content-script.js's
+// renderMemberTree / showMemberPopover).
+//
+// The live popover shows a rule's source/destination conditions as resolved
+// names. Several of those conditions reference GROUPS/LISTS (network object
+// groups, service object groups, destination lists, application lists,
+// category lists, private resource groups, identity groups) whose *members*
+// the dashboard does not show inline. This layer fetches each referenced
+// group, records its members, and — because a member can itself be a group —
+// recurses to arbitrary depth so the popover can drill all the way down.
+//
+// Membership (group→member) endpoint shapes were NOT captured in a HAR like
+// the name-resolution endpoints above; the parsers below use candidate
+// field names observed across Cisco's object/group APIs and degrade
+// gracefully (empty members) when a shape differs. Marked UNVERIFIED so a
+// future live capture can correct the exact member-field names without
+// touching the recursion logic. Best-effort per group type — a failed fetch
+// just leaves that group un-expandable, exactly like an unresolved name.
+// ---------------------------------------------------------------------------
+
+function collectGroupIds(rules) {
+  const result = {
+    networkObjectGroups: new Set(),
+    serviceObjectGroups: new Set(),
+    destinationLists: new Set(),
+    applicationLists: new Set(),
+    categoryLists: new Set(),
+    privateResourceGroups: new Set(),
+  };
+  for (const rule of rules || []) {
+    const conds = rule.conditions || rule.ruleConditions || [];
+    if (!Array.isArray(conds)) continue;
+    for (const c of conds) {
+      const name = (c.attributeName || "").toLowerCase();
+      const values = Array.isArray(c.attributeValue) ? c.attributeValue : [c.attributeValue];
+      const add = (key) => values.forEach((v) => {
+        if (v && v !== "*" && String(v).toLowerCase() !== "any") result[key].add(String(v));
+      });
+      if (name.includes("networkobjectgroup")) add("networkObjectGroups");
+      else if (name.includes("serviceobjectgroup")) add("serviceObjectGroups");
+      else if (name.includes("destination_list")) add("destinationLists");
+      else if (name.includes("application_list")) add("applicationLists");
+      else if (name.includes("category_list")) add("categoryLists");
+      else if (name.includes("private_resource_group")) add("privateResourceGroups");
+    }
+  }
+  for (const key of Object.keys(result)) result[key] = Array.from(result[key]);
+  return result;
+}
+
+// Per group-type config. `leafKind` is the kind assigned to each resolved
+// member (used by content-script.js to resolve leaf names + to detect nested
+// groups). `memberFields` are the candidate member-array property names, tried
+// in order. UNVERIFIED member-field names — adjust against a live capture.
+const MEMBERSHIP_CONFIG = {
+  networkObjectGroups: {
+    tokenKey: "sse_token", leafKind: "networkObject",
+    wrapper: ["data", "items", "results"], idField: "id", nameField: ["name", "label"],
+    memberFields: ["objects", "objectIds", "networkObjectIds"],
+    url: (o) => `https://api.sse.cisco.com/policies/v2/objects/networkObjectGroups?offset=0&limit=100`,
+  },
+  serviceObjectGroups: {
+    tokenKey: "sse_token", leafKind: "serviceObject",
+    wrapper: ["data", "items", "results"], idField: "id", nameField: ["name", "label"],
+    memberFields: ["objects", "serviceObjects", "serviceObjectIds"],
+    url: (o) => `https://api.sse.cisco.com/policies/v2/objects/serviceObjectGroups?offset=0&limit=100`,
+  },
+  destinationLists: {
+    tokenKey: "opendns_token", leafKind: "fqdn",
+    wrapper: ["data", "items", "destinations", "results"], idField: "id", nameField: ["name", "label"],
+    memberFields: ["domains", "destinations", "entries"],
+    url: (o) => `https://api.opendns.com/v3/organizations/${o}/destinationlists?sort=%7B%22name%22%3A%22asc%22%7D&outputFormat=jsonHttpStatusOverride&page=1&limit=100&filters=%7B%22bundleTypeId%22%3A%5B2%5D%7D`,
+  },
+  applicationLists: {
+    tokenKey: "sse_token", leafKind: "application",
+    wrapper: ["applicationLists", "data", "items", "results"], idField: "applicationListId",
+    nameField: ["applicationListName", "name", "label"],
+    memberFields: ["applications", "applicationIds", "items", "members"],
+    url: (o) => `https://api.umbrella.com/v1/organizations/${o}/application_lists`,
+  },
+  categoryLists: {
+    tokenKey: "opendns_token", leafKind: "category",
+    wrapper: ["data", "items", "results"], idField: "categorySettingId",
+    nameField: ["categorySettingName", "name", "label"],
+    memberFields: ["categories", "categoryIds", "members"],
+    url: (o) => `https://api.opendns.com/v3/organizations/${o}/categorysettings?outputFormat=jsonHttpStatusOverride&filters=%7B%7D`,
+  },
+  privateResourceGroups: {
+    tokenKey: "sse_token", leafKind: "privateResource",
+    wrapper: ["data", "items", "results"], idField: "resourceGroupId", nameField: ["name", "label"],
+    memberFields: ["resourceIds", "resources", "members"],
+    url: (o) => `https://api.umbrella.com/v1/organizations/${o}/private_resource_groups?offset=0&limit=1000&sortBy=name&sortOrder=asc`,
+  },
+};
+
+function _classifyMember(m, key) {
+  const cfg = MEMBERSHIP_CONFIG[key];
+  const leafKind = cfg ? cfg.leafKind : "unknown";
+  // Destination lists are FQDN/CIDR strings, not IDs.
+  if (key === "destinationLists") {
+    const v = typeof m === "string" ? m : (m && (m.domain || m.value || m.name)) || "";
+    return v ? { value: v, kind: "fqdn" } : null;
+  }
+  if (typeof m === "string") return { id: m, kind: leafKind };
+  if (typeof m === "number") return { id: String(m), kind: leafKind };
+  if (m && typeof m === "object") {
+    const id = m.id !== undefined ? m.id
+      : (m.groupId !== undefined ? m.groupId
+        : (m.objectId !== undefined ? m.objectId
+          : (m.resourceId !== undefined ? m.resourceId
+            : (m.applicationId !== undefined ? m.applicationId
+              : (m.categoryId !== undefined ? m.categoryId : undefined)))));
+    if (id === undefined) return null;
+    // Nested group detection: any member that carries its own children or is
+    // typed as a group is itself recursively expandable.
+    if (Array.isArray(m.children) && m.children.length) return { id: String(id), kind: key };
+    if (m.type && /group/i.test(String(m.type))) return { id: String(id), kind: key };
+    return { id: String(id), kind: leafKind };
+  }
+  return null;
+}
+
+function _extractMemberList(item, key) {
+  const cfg = MEMBERSHIP_CONFIG[key];
+  if (!cfg) return [];
+  let raw = null;
+  for (const f of cfg.memberFields) {
+    if (Array.isArray(item[f]) && item[f].length) { raw = item[f]; break; }
+  }
+  if (!raw) return [];
+  return raw.map((m) => _classifyMember(m, key)).filter(Boolean);
+}
+
+function parseMembership(json, key) {
+  const cfg = MEMBERSHIP_CONFIG[key];
+  if (!cfg) return [];
+  let items = Array.isArray(json) ? json : null;
+  if (!items) {
+    for (const w of cfg.wrapper) {
+      if (json && Array.isArray(json[w])) { items = json[w]; break; }
+    }
+  }
+  if (!items) return [];
+  return items.map((item) => {
+    if (!item || typeof item !== "object") return null;
+    const id = item[cfg.idField];
+    if (id === undefined || id === null) return null;
+    const name = cfg.nameField.map((f) => item[f]).find((v) => v) || String(id);
+    return { id, name, members: _extractMemberList(item, key) };
+  }).filter(Boolean);
+}
+
+// Breadth-first recursive fetch. Each group's members are recorded flat under
+// its kind; any member that is itself a known group type is pushed onto the
+// next frontier so the popover can drill arbitrarily deep. `visited` prevents
+// cycles / re-fetches; MAX_DEPTH is a safety bound.
+async function resolveMembership(orgId, tabId, rules) {
+  const initialIds = collectGroupIds(rules);
+  const memberMaps = {
+    networkObjectGroups: {}, serviceObjectGroups: {}, destinationLists: {},
+    applicationLists: {}, categoryLists: {}, privateResourceGroups: {},
+  };
+  const visited = new Set();
+  let frontier = [];
+  for (const key of Object.keys(initialIds)) {
+    if (initialIds[key].length) frontier.push({ key, ids: initialIds[key] });
+  }
+  const MAX_DEPTH = 12;
+  let depth = 0;
+  while (frontier.length && depth < MAX_DEPTH) {
+    depth++;
+    const batch = frontier;
+    frontier = [];
+    await Promise.all(batch.map(async ({ key, ids }) => {
+      const cfg = MEMBERSHIP_CONFIG[key];
+      if (!cfg) return;
+      const todo = ids.filter((id) => !visited.has(`${key}:${id}`));
+      if (!todo.length) return;
+      todo.forEach((id) => visited.add(`${key}:${id}`));
+      try {
+        const tokenObj = await getFreshToken(cfg.tokenKey, tabId);
+        if (!tokenObj) { logEvent("membership", "no token", { key }); return; }
+        const response = await fetch(cfg.url(orgId), {
+          headers: { Authorization: `Bearer ${tokenObj.token}`, Accept: "application/json" },
+        });
+        if (!response.ok) { logEvent("membership", "non-OK", { key, status: response.status }); return; }
+        const json = await response.json();
+        const entries = parseMembership(json, key);
+        for (const e of entries) {
+          if (!e || e.id === undefined) continue;
+          const k = String(e.id);
+          if (!memberMaps[key][k]) {
+            memberMaps[key][k] = {
+              name: e.name || k,
+              members: (e.members || [])
+                .map((m) => (m.id !== undefined ? { id: String(m.id), kind: m.kind } : { value: m.value, kind: m.kind }))
+                .filter((m) => m.id !== undefined || m.value !== undefined),
+            };
+          }
+          // Enqueue nested groups for the next frontier.
+          for (const m of (e.members || [])) {
+            if (m && m.id !== undefined && MEMBERSHIP_CONFIG[m.kind] && !visited.has(`${m.kind}:${m.id}`)) {
+              frontier.push({ key: m.kind, ids: [String(m.id)] });
+            }
+          }
+        }
+        logEvent("membership", "resolved", { key, count: entries.length });
+      } catch (err) {
+        logEvent("membership", "error", { key, error: err.message });
+      }
+    }));
+  }
+  return memberMaps;
+}
+
 function catalogHost(catalog) {
   if (catalog.host) return catalog.host;
   return catalog.tokenKey === "mgmt_authz_token" ? "https://management.api.umbrella.com" :
@@ -1940,6 +2177,13 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         Object.assign(objectMap, map);
       }
       sendResponse({ objectMap, objectMaps });
+    });
+    return true;
+  }
+
+  if (msg.type === "GET_MEMBER_MAP") {
+    api.storage.local.get("sse_member_maps").then(result => {
+      sendResponse({ memberMaps: result.sse_member_maps || {} });
     });
     return true;
   }
