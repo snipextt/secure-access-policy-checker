@@ -119,6 +119,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // 1. Tab 1: Policy Tester panel
     testerHandle = window.PopupSections.buildTesterPanel(
       testerRoot,
+      rules,
       identityOptions,
       objectMaps || { privateResources: objectMap || {} },
       identityTypeMap || {},

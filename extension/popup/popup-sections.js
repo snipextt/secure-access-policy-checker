@@ -994,6 +994,7 @@
           input.value = labelStr;
           list.style.display = "none";
           input.focus();
+          input.dispatchEvent(new Event("change", { bubbles: true }));
         };
         li.addEventListener("pointerdown", selectOption);
         list.appendChild(li);
@@ -1054,7 +1055,72 @@
     };
   }
 
-  function buildTesterPanel(container, identityOptions, objectMaps, identityTypeMap, identityMap, onRun, onReset) {
+  // ---------------------------------------------------------------------------
+  // analyzeRuleCombinations — drives the dynamic tester gating.
+  //
+  // A Cisco access rule is either public_internet or private_network (its
+  // trafficScope). For each destination family we record which SOURCE field
+  // keys actually appear in this org's real rules. A null set means some
+  // rule for that family is source-unconstrained (so any source is valid).
+  // This lets the tester enable only source fields that can plausibly match
+  // the chosen destination family, instead of offering every combination.
+  //
+  // Source identities are resolved to field keys via the catalog's
+  // sourceIdentityTypeIds (typeId → source catalog), mirrored from the
+  // FULL_CATALOGS sourcePolicyTypeId values and HOVER_DEFAULT_IDENTITY_TYPES.
+  // ---------------------------------------------------------------------------
+  function analyzeRuleCombinations(rules, sourceIdentityTypeIds) {
+    const typeToKey = {
+      7: "users", 3: "groups", 9: "roaming", 5: "endpointDevices", 1: "networks",
+      21: "sites", 54: "sgt", 11: "sgt", 52: "catalystSdwan", 40: "tunnelGroups",
+      32: "networkDevices", 36: "mobileDevices", 38: "chromebooks", 57: "ztnaClients",
+    };
+    const co = { internet: new Set(), private: new Set() };
+    const anyUnconstrained = { internet: false, private: false };
+    const addSrc = (set, key) => { if (key) set.add(key); };
+    for (const rule of rules || []) {
+      const conds = rule.ruleConditions || rule.conditions || [];
+      if (!Array.isArray(conds)) continue;
+      let fam = null;
+      for (const c of conds) {
+        const an = (c.attributeName || "").toLowerCase();
+        if (an.includes("private_resource")) fam = "private";
+        else if (an.includes("application_ids") || an.includes("protocol") || an.includes("enterpriseapplication") ||
+                 an.includes("application_list") || an.includes("application_category") || an.includes("category_ids") ||
+                 an.includes("category_list") || an.includes("destination_list") || an.includes("geo")) fam = "internet";
+      }
+      if (!fam) continue;
+      const srcKeys = new Set();
+      let srcUnconstrained = true;
+      for (const c of conds) {
+        const an = (c.attributeName || "").toLowerCase();
+        if (an.includes("networkobjectgroup")) addSrc(srcKeys, "networkObjectGroups");
+        else if (an.includes("networkobject")) addSrc(srcKeys, "networkObjects");
+        else if (an.includes("identity")) {
+          srcUnconstrained = false;
+          const vals = Array.isArray(c.attributeValue) ? c.attributeValue : [c.attributeValue];
+          if (an.includes("identity_type_ids")) {
+            for (const t of vals) addSrc(srcKeys, typeToKey[String(t)]);
+          } else {
+            for (const id of vals) {
+              const t = sourceIdentityTypeIds && sourceIdentityTypeIds[String(id)];
+              if (t !== undefined) addSrc(srcKeys, typeToKey[String(t)]);
+            }
+          }
+        } else if (an.startsWith("umbrella.source")) {
+          srcUnconstrained = false;
+        }
+      }
+      if (srcUnconstrained || srcKeys.size === 0) anyUnconstrained[fam] = true;
+      else for (const k of srcKeys) co[fam].add(k);
+    }
+    return {
+      internet: anyUnconstrained.internet ? null : co.internet,
+      private: anyUnconstrained.private ? null : co.private,
+    };
+  }
+
+  function buildTesterPanel(container, rules, identityOptions, objectMaps, identityTypeMap, identityMap, onRun, onReset) {
     injectStyles();
 
     // Catalog updates re-render this panel. Preserve which optional fields the
@@ -1075,6 +1141,17 @@
       applicationLists: {},
       categoryLists: {},
     };
+
+    // ---------------------------------------------------------------------
+    // Dynamic tester gating data. FIELD_COMBINATIONS is derived from this
+    // org's real rules (analyzeRuleCombinations) so a source field is only
+    // enabled when it co-occurs with the chosen destination family. The two
+    // destination families are mutually exclusive by Cisco's scope invariant.
+    // ---------------------------------------------------------------------
+    const SRC_TESTINPUT = { users: "sourceUserId", roaming: "sourceRoamingId", groups: "sourceGroupId", endpointDevices: "sourceEndpointDeviceId", networks: "sourceNetworkId", sites: "sourceSiteId", sgt: "sourceSecurityGroupTagId", catalystSdwan: "sourceCatalystSdwanId", tunnelGroups: "sourceTunnelGroupId", networkObjects: "sourceNetworkObjectId", networkObjectGroups: "sourceNetworkObjectGroupId", networkDevices: "sourceNetworkDeviceId", mobileDevices: "sourceMobileDeviceId", chromebooks: "sourceChromebookId", ztnaClients: "sourceZtnaClientId" };
+    const DEST_TESTINPUT = { destScope: "destinationScope", privateResource: "privateResourceId", privateResourceGroup: "privateResourceGroupId", destinationList: "destinationListId", netObject: "networkObjectId", serviceObject: "serviceObjectGroupId", application: "applicationId", protocol: "protocolId", enterpriseApplication: "enterpriseApplicationId", appList: "applicationListId", appCategory: "applicationCategoryId", contentCategory: "contentCategoryId", catList: "categoryListId", geolocation: "geolocation", privateResourceType: "privateResourceType", appRiskProfile: "appRiskProfileId" };
+    const DEST_FAMILY = { privateResource: "private", privateResourceGroup: "private", privateResourceType: "private", destScope: "scope", destinationList: "internet", netObject: "internet", serviceObject: "internet", application: "internet", protocol: "internet", enterpriseApplication: "internet", appList: "internet", appCategory: "internet", contentCategory: "internet", catList: "internet", geolocation: "internet", appRiskProfile: "internet" };
+    const FIELD_COMBINATIONS = analyzeRuleCombinations(rules, maps.sourceIdentityTypeIds);
 
     const panel = el("div", { id: "psc-panel" });
 
@@ -1239,6 +1316,7 @@
           sourceInputMap[key].input.disabled = !isActive;
         }
         renderSourceFields();
+        recomputeEnabledFields();
       });
       srcSettingsPopover.appendChild(el("div", { class: "psc-setting-row" }, [
         el("label", { class: "psc-setting-label" }, [cfg.label]),
@@ -1379,6 +1457,7 @@
           destInputMap[key].input.disabled = !isActive;
         }
         renderDestFields();
+        recomputeEnabledFields();
       });
       dstSettingsPopover.appendChild(el("div", { class: "psc-setting-row" }, [
         el("label", { class: "psc-setting-label" }, [cfg.label]),
@@ -1430,6 +1509,60 @@
     renderSourceFields();
     renderDestFields();
 
+    // ---------------------------------------------------------------------
+    // Dynamic gating: keep source/destination fields consistent with the
+    // selected scope family. Internet vs Private Access destinations are
+    // mutually exclusive (Cisco trafficScope invariant); when a destination
+    // family is selected, only source fields that co-occur with that family
+    // in this org's rules stay enabled. No destination family chosen ⇒ all
+    // enabled (catch-all/blank source is valid).
+    // ---------------------------------------------------------------------
+    function recomputeEnabledFields() {
+      // Deterministically resolve the destination family. Private wins over
+      // Internet because a private resource forces private_network in the
+      // matcher — last-iteration-wins would let a stale disabled field flip it.
+      let fam = null;
+      const dstVals = Object.entries(destInputMap).map(([key, sel]) => ({ key, v: sel.getValue(), f: DEST_FAMILY[key] }));
+      if (dstVals.some(d => d.v && d.f === "private")) fam = "private";
+      else if (dstVals.some(d => d.v && d.f === "internet")) fam = "internet";
+      else if (destInput.value.trim() && /[a-z]/i.test(destInput.value.trim().split("/")[0])) fam = "internet";
+
+      // Clear stale values on the opposite destination family so they don't
+      // leak into testInput or keep the family ambiguous after a switch.
+      for (const d of dstVals) {
+        if (d.f !== "scope" && fam && d.f !== fam && d.v) destInputMap[d.key].reset();
+      }
+
+      // Reflect the chosen family in Destination Scope (only when empty).
+      if (fam === "private" && !destScopeSelect.getValue()) {
+        destScopeSelect.restore("Private Access", "private_network");
+      } else if (fam === "internet" && !destScopeSelect.getValue()) {
+        destScopeSelect.restore("Internet", "public_internet");
+      }
+
+      const allowedSrc = (fam && FIELD_COMBINATIONS[fam]) ? FIELD_COMBINATIONS[fam] : null;
+      for (const [key, sel] of Object.entries(sourceInputMap)) {
+        const userEnabled = sourceSettingsToggles[key].enabled;
+        const comboOk = !allowedSrc || allowedSrc.has(key);
+        const ok = userEnabled && comboOk;
+        sel.input.disabled = !ok;
+        // Drop a stale value when gating removes this source for the family.
+        if (!ok && sel.getValue()) sel.reset();
+      }
+      for (const [key, sel] of Object.entries(destInputMap)) {
+        const f = DEST_FAMILY[key];
+        if (f === "scope") continue;
+        if (fam && f !== fam) {
+          sel.input.disabled = true;
+          if (sel.getValue()) sel.reset();
+        }
+      }
+    }
+
+    panel.addEventListener("change", recomputeEnabledFields);
+    destInput.addEventListener("input", recomputeEnabledFields);
+    recomputeEnabledFields();
+
 
     // Footer actions
     const formFooter = el("div", { id: "psc-form-footer" });
@@ -1453,6 +1586,9 @@
     panel.appendChild(body);
     container.appendChild(panel);
     restoreDraft();
+    // Draft restore can pre-fill a destination that implies a scope family,
+    // so re-run gating now that values are present.
+    recomputeEnabledFields();
 
     function updateResult(result) {
       resultCol.innerHTML = "";
