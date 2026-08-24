@@ -186,6 +186,8 @@ console.log("\n=== Group 1B: Public/private destination scope ===");
     "Source catalog: exact user ID matches");
   assertMatch(userRule, { sourceUserId: "43", destination: "cisco.com", destinationScope: "public_internet" }, false,
     "Source catalog: different user ID does not match");
+  assertMatch(userRule, { sourceUserId: ["99", "42"], destination: "cisco.com", destinationScope: "public_internet" }, true,
+    "Source catalog: nested-picker multi-select still matches if one ID hits");
 }
 
 // Internet-side catalog selections must resolve Public Internet scope even when

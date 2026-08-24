@@ -422,45 +422,59 @@
     return "Configured Destination";
   }
 
+  // Nested picker checkboxes can send one id or an array of ids per field.
+  function flattenSelectedIds(values) {
+    const out = [];
+    (Array.isArray(values) ? values : [values]).forEach(value => {
+      if (value === null || value === undefined || value === "") return;
+      if (Array.isArray(value)) {
+        flattenSelectedIds(value).forEach(id => out.push(id));
+        return;
+      }
+      out.push(value);
+    });
+    return out;
+  }
+
   function matchCatalogCondition(cond, testInput, lookups) {
     const an = (cond.attributeName || "").toLowerCase();
     const values = Array.isArray(cond.attributeValue) ? cond.attributeValue : [cond.attributeValue];
     let selected;
     if (an === "umbrella.source.identity_type_ids") {
       const typeMap = lookups.sourceIdentityTypeIds || {};
-      selected = [
+      selected = flattenSelectedIds([
         testInput.sourceUserId, testInput.sourceRoamingId, testInput.sourceGroupId,
         testInput.sourceEndpointDeviceId, testInput.sourceNetworkId, testInput.sourceSiteId,
         testInput.sourceSecurityGroupTagId, testInput.sourceCatalystSdwanId,
         testInput.sourceMobileDeviceId, testInput.sourceChromebookId,
         testInput.sourceZtnaClientId, testInput.sourceTunnelGroupId,
         testInput.sourceNetworkDeviceId,
-      ].map(id => id && typeMap[String(id)]).filter(Boolean);
+      ]).map(id => id && typeMap[String(id)]).filter(Boolean);
     } else {
       selected =
-        an === "umbrella.source.identity_ids" ? [
+        an === "umbrella.source.identity_ids" ? flattenSelectedIds([
           testInput.sourceUserId, testInput.sourceRoamingId, testInput.sourceGroupId,
           testInput.sourceEndpointDeviceId, testInput.sourceNetworkId, testInput.sourceSiteId,
           testInput.sourceSecurityGroupTagId, testInput.sourceCatalystSdwanId,
           testInput.sourceTunnelGroupId, testInput.sourceMobileDeviceId,
           testInput.sourceChromebookId, testInput.sourceZtnaClientId,
           testInput.sourceNetworkDeviceId
-        ] :
-        an.includes("private_resource_group") ? [testInput.privateResourceGroupId] :
-        an.includes("private_resource_types") ? [testInput.privateResourceType] :
-        an.includes("private_resource") ? [testInput.privateResourceId] :
-        an.includes("destination_list") ? [testInput.destinationListId] :
-        an.includes("networkobject") ? [testInput.networkObjectId] :
-        an.includes("serviceobjectgroup") ? [testInput.serviceObjectGroupId] :
-        an.includes("application_list") ? [testInput.applicationListId] :
-        an.includes("category_list") ? [testInput.categoryListId] :
-        an.includes("application_category") ? [testInput.applicationCategoryId] :
-        an.endsWith(".category_ids") ? [testInput.contentCategoryId] :
-        an.includes("application_ids") ? [
+        ]) :
+        an.includes("private_resource_group") ? flattenSelectedIds(testInput.privateResourceGroupId) :
+        an.includes("private_resource_types") ? flattenSelectedIds(testInput.privateResourceType) :
+        an.includes("private_resource") ? flattenSelectedIds(testInput.privateResourceId) :
+        an.includes("destination_list") ? flattenSelectedIds(testInput.destinationListId) :
+        an.includes("networkobject") ? flattenSelectedIds(testInput.networkObjectId) :
+        an.includes("serviceobjectgroup") ? flattenSelectedIds(testInput.serviceObjectGroupId) :
+        an.includes("application_list") ? flattenSelectedIds(testInput.applicationListId) :
+        an.includes("category_list") ? flattenSelectedIds(testInput.categoryListId) :
+        an.includes("application_category") ? flattenSelectedIds(testInput.applicationCategoryId) :
+        an.endsWith(".category_ids") ? flattenSelectedIds(testInput.contentCategoryId) :
+        an.includes("application_ids") ? flattenSelectedIds([
           testInput.applicationId, testInput.protocolId, testInput.enterpriseApplicationId
-        ] :
-        an.includes("appriskprofile") ? [testInput.appRiskProfileId] :
-        an.includes("geolocations") ? [testInput.geolocation] : null;
+        ]) :
+        an.includes("appriskprofile") ? flattenSelectedIds(testInput.appRiskProfileId) :
+        an.includes("geolocations") ? flattenSelectedIds(testInput.geolocation) : null;
     }
     if (!selected) return null;
     const hit = selected.filter(v => v !== null && v !== undefined && v !== "")
@@ -905,7 +919,7 @@
     // selection. IP/CIDR inputs and empty destination tests stay ambiguous and
     // must still specify scope.
     const ruleScope = rule.trafficScope || rule.ruleAccess || (rule.raw && rule.raw.ruleAccess) || null;
-    const scopeText = String(testInput.destinationScope || "").trim().toLowerCase();
+    const scopeText = String(flattenSelectedIds(testInput.destinationScope)[0] || testInput.destinationScope || "").trim().toLowerCase();
     // getValue() returns the catalog key after a menu click, but normalize the
     // visible labels too so a typed "Internet" / "Private Access" does not
     // turn a valid default-rule test into a false no-match.
@@ -920,12 +934,12 @@
     // inherently Internet traffic, so a user should not have to repeat that
     // fact in Destination Scope. Destination and network lists stay ambiguous.
     const hasPrivateResource = [testInput.privateResourceId, testInput.privateResourceGroupId, testInput.privateResourceType]
-      .some(value => value !== null && value !== undefined && value !== "");
+      .some(value => flattenSelectedIds(value).length > 0);
     const hasInternetCatalog = [
       testInput.applicationId, testInput.protocolId, testInput.enterpriseApplicationId,
       testInput.applicationListId, testInput.applicationCategoryId, testInput.contentCategoryId,
       testInput.categoryListId, testInput.geolocation, testInput.appRiskProfileId,
-    ].some(value => value !== null && value !== undefined && value !== "");
+    ].some(value => flattenSelectedIds(value).length > 0);
     const destinationValue = String(testInput.destination || "").trim();
     const inferredScope = explicitScope ||
       (hasPrivateResource ? "private_network" : null) ||
@@ -974,6 +988,7 @@
       destination = "",
       destinationPort = null,
     } = testInput;
+    const hasSelected = (value) => flattenSelectedIds(value).length > 0;
     const hasSource = source.trim() !== "" || [
       sourceUserId, sourceRoamingId, sourceGroupId, sourceEndpointDeviceId,
       sourceNetworkId, sourceSiteId, sourceSecurityGroupTagId,
@@ -981,13 +996,13 @@
       sourceNetworkObjectId, sourceNetworkObjectGroupId,
       sourceMobileDeviceId, sourceChromebookId, sourceZtnaClientId,
       sourceNetworkDeviceId,
-    ].some(v => v !== null && v !== "");
+    ].some(hasSelected);
     const hasDestination = destination.trim() !== "" || [
       destinationScope, privateResourceId, privateResourceGroupId,
       destinationListId, networkObjectId, serviceObjectGroupId, applicationId,
       protocolId, enterpriseApplicationId, applicationListId, applicationCategoryId, contentCategoryId, categoryListId, geolocation,
       appRiskProfileId, privateResourceType,
-    ].some(v => v !== null && v !== "");
+    ].some(hasSelected);
 
     const matchedConditions = [];
     // Structured, presentation-ready version of the same info as

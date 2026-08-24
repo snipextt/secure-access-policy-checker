@@ -396,6 +396,148 @@
       }
       .psc-dropdown-list li:hover { background: #f1f5f9; color: #0f172a; }
 
+      /* Cisco-style nested catalog picker */
+      .psc-np {
+        display: flex;
+        flex-direction: column;
+        border: 1px solid #cbd5e1;
+        background: #ffffff;
+        min-width: 0;
+      }
+      .psc-np-search {
+        padding: 8px;
+        border-bottom: 1px solid #e2e8f0;
+      }
+      .psc-np-search input {
+        width: 100%;
+        padding: 7px 10px;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 2px !important;
+        font-size: 12px;
+        font-family: var(--hbr-font-family) !important;
+        color: #0f172a !important;
+        background: #ffffff !important;
+        outline: none;
+      }
+      .psc-np-search input:focus {
+        border-color: #0f172a !important;
+        box-shadow: 0 0 0 1px #0f172a !important;
+      }
+      .psc-np-crumb {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 10px;
+        border-bottom: 1px solid #e2e8f0;
+        font-size: 11px;
+        color: #0f172a;
+        font-weight: 600;
+        flex-wrap: wrap;
+      }
+      .psc-np-crumb button {
+        background: none;
+        border: none;
+        padding: 0;
+        color: #0f172a;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .psc-np-crumb button:hover { text-decoration: underline; }
+      .psc-np-crumb-sep { color: #94a3b8; font-weight: 500; }
+      .psc-np-list {
+        max-height: 260px;
+        overflow-y: auto;
+        padding: 4px 0;
+      }
+      .psc-np-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        font-size: 12px;
+        color: #0f172a;
+        cursor: pointer;
+        font-family: var(--hbr-font-family);
+        min-width: 0;
+      }
+      .psc-np-row:hover { background: #f8fafc; }
+      .psc-np-row.is-disabled { color: #94a3b8; cursor: default; }
+      .psc-np-name {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .psc-np-count {
+        color: #64748b;
+        font-size: 11px;
+        flex-shrink: 0;
+      }
+      .psc-np-chevron {
+        color: #94a3b8;
+        font-size: 16px;
+        line-height: 1;
+        flex-shrink: 0;
+      }
+      .psc-np-badge {
+        flex-shrink: 0;
+        font-size: 10px;
+        font-weight: 600;
+        color: #334155;
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        padding: 1px 6px;
+        white-space: nowrap;
+      }
+      .psc-np-row input[type="checkbox"] {
+        width: 14px;
+        height: 14px;
+        margin: 0;
+        flex-shrink: 0;
+        accent-color: #0f172a;
+      }
+      .psc-np-empty {
+        padding: 12px 10px;
+        color: #94a3b8;
+        font-size: 11px;
+      }
+      .psc-np-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        min-height: 0;
+      }
+      .psc-np-chips:empty { display: none; }
+      .psc-np-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #f1f5f9;
+        border: 1px solid #cbd5e1;
+        padding: 3px 6px 3px 8px;
+        font-size: 11px;
+        color: #0f172a;
+        max-width: 100%;
+      }
+      .psc-np-chip-label {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .psc-np-chip button {
+        background: none;
+        border: none;
+        color: #64748b;
+        cursor: pointer;
+        font-size: 12px;
+        line-height: 1;
+        padding: 0 2px;
+      }
+      .psc-np-chip button:hover { color: #0f172a; }
+      .psc-np-hidden { position: absolute; width: 0; height: 0; overflow: hidden; clip: rect(0, 0, 0, 0); }
+
       /* Form Footer Actions */
       #psc-form-footer {
         padding: 12px 18px;
@@ -933,125 +1075,343 @@
     if (t) t.style.display = "none";
   }
 
-  function createSearchableSelect(labelStr, hintStr, inputId, itemsObj, catalogStatus = itemsObj === undefined ? "loading" : null) {
-    const wrapper = el("div", { class: "psc-dropdown-wrapper" });
-    const input = el("input", {
-      id: inputId,
-      type: "text",
-      class: "psc-dropdown-input",
-      placeholder: hintStr || "Type to search by name...",
-      autocomplete: "off",
+  function catalogItemLabel(item, fallbackKey) {
+    if (item === undefined || item === null) return String(fallbackKey || "");
+    if (typeof item === "string") return item;
+    if (typeof item === "object") {
+      return item.name || item.label || item.displayName || String(fallbackKey || "");
+    }
+    return String(item);
+  }
+
+  function catalogMapSize(itemsObj) {
+    return itemsObj && typeof itemsObj === "object" ? Object.keys(itemsObj).length : 0;
+  }
+
+  function parseSelectedIds(raw) {
+    if (raw == null || raw === "") return [];
+    if (Array.isArray(raw)) return raw.map(String).filter(Boolean);
+    return String(raw).split(",").map(s => s.trim()).filter(Boolean);
+  }
+
+  // In-place Cisco drill-down: search, breadcrumb, category counts/chevrons,
+  // checkbox leaves, type badges. Each leaf writes the same hidden field ids
+  // the matcher already consumes (psc-src-users, psc-destlist, …).
+  function createNestedCatalogPicker({ idPrefix, rootLabel, tree, getFieldState }) {
+    const selectedByField = {};
+    const hiddenInputs = {};
+    const facades = {};
+    const fieldNodes = {};
+
+    function walk(nodes, visit) {
+      (nodes || []).forEach(node => {
+        visit(node);
+        if (node.children) walk(node.children, visit);
+      });
+    }
+    walk(tree, node => {
+      if (!node.fieldKey) return;
+      fieldNodes[node.fieldKey] = node;
+      selectedByField[node.fieldKey] = {};
+      const input = el("input", {
+        id: node.inputId,
+        type: "text",
+        class: "psc-np-hidden",
+        tabindex: "-1",
+        "aria-hidden": "true",
+        autocomplete: "off",
+      });
+      hiddenInputs[node.fieldKey] = input;
     });
 
-    let currentItemsObj = itemsObj || {};
-    let keys = Object.keys(currentItemsObj);
+    const wrap = el("div", { class: "psc-np-wrap" });
+    const chips = el("div", { class: "psc-np-chips" });
+    const panel = el("div", { class: "psc-np" });
+    const search = el("input", {
+      id: idPrefix + "-search",
+      type: "text",
+      placeholder: "Search",
+      autocomplete: "off",
+    });
+    const crumb = el("div", { class: "psc-np-crumb" });
+    const list = el("div", { class: "psc-np-list" });
+    panel.appendChild(el("div", { class: "psc-np-search" }, [search]));
+    panel.appendChild(crumb);
+    panel.appendChild(list);
+    const hiddenBox = el("div", { class: "psc-np-hidden" });
+    Object.values(hiddenInputs).forEach(input => hiddenBox.appendChild(input));
+    wrap.appendChild(chips);
+    wrap.appendChild(panel);
+    wrap.appendChild(hiddenBox);
 
-    const list = el("ul", { class: "psc-dropdown-list" });
-    let selectedValue = "";
+    let path = [];
 
-    function getItemLabel(item, fallbackKey) {
-      if (item === undefined || item === null) return String(fallbackKey || "");
-      if (typeof item === "string") return item;
-      if (typeof item === "object") {
-        return item.name || item.label || item.displayName || String(fallbackKey || "");
-      }
-      return String(item);
+    function fieldState(fieldKey) {
+      return (getFieldState && getFieldState(fieldKey)) || { enabled: true };
     }
 
-    function renderList(query) {
-      list.innerHTML = "";
-      const q = (query || "").toLowerCase();
-      const matches = keys.filter(k => {
-        const item = currentItemsObj[k];
-        const label = getItemLabel(item, k);
-        return k.toLowerCase().includes(q) || label.toLowerCase().includes(q);
-      }).slice(0, 500);
+    function nodeEnabled(node) {
+      if (node.fieldKey) return fieldState(node.fieldKey).enabled !== false;
+      return (node.children || []).some(nodeEnabled);
+    }
 
-      if (matches.length === 0) {
-        const emptyText = catalogStatus === "loading"
-          ? "Loading catalog…"
-          : catalogStatus === "unavailable"
-            ? "Catalog unavailable — refresh the dashboard"
-            : `No ${labelStr.toLowerCase()} configured`;
-        list.appendChild(el("li", { style: { color: "#94a3b8", cursor: "default" } }, [emptyText]));
-        return;
+    function nodeCount(node) {
+      if (node.fieldKey) {
+        if (node.status === "unavailable") return 0;
+        return catalogMapSize(node.items);
       }
+      return (node.children || []).reduce((sum, child) => sum + nodeCount(child), 0);
+    }
 
-      matches.forEach(k => {
-        const item = currentItemsObj[k];
-        const labelStr = getItemLabel(item, k);
-        const li = el("li", {}, [
-          labelStr
-        ]);
-        const selectOption = (event) => {
-          // Commit on pointer-down rather than waiting for click/blur ordering.
-          // This makes clear → reselect reliable when the input is focused and
-          // prevents an outside-dismiss listener from winning the race.
-          event.preventDefault();
-          event.stopPropagation();
-          selectedValue = k;
-          input.dataset.selectedValue = k;
-          input.value = labelStr;
-          list.style.display = "none";
-          input.focus();
-          input.dispatchEvent(new Event("change", { bubbles: true }));
-        };
-        li.addEventListener("pointerdown", selectOption);
-        list.appendChild(li);
+    function collectLeaves(node, acc) {
+      if (node.fieldKey) acc.push(node);
+      else (node.children || []).forEach(child => collectLeaves(child, acc));
+      return acc;
+    }
+
+    function selectedIds(fieldKey) {
+      return Object.keys(selectedByField[fieldKey] || {});
+    }
+
+    function syncHidden(fieldKey) {
+      const input = hiddenInputs[fieldKey];
+      if (!input) return;
+      const ids = selectedIds(fieldKey);
+      const labels = ids.map(id => selectedByField[fieldKey][id].label);
+      if (ids.length) input.dataset.selectedValue = ids.join(",");
+      else delete input.dataset.selectedValue;
+      input.value = labels.join(", ");
+    }
+
+    function dispatchChange() {
+      wrap.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    function renderChips() {
+      chips.innerHTML = "";
+      walk(tree, node => {
+        if (!node.fieldKey) return;
+        selectedIds(node.fieldKey).forEach(id => {
+          const rec = selectedByField[node.fieldKey][id];
+          const chip = el("span", { class: "psc-np-chip" }, [
+            el("span", { class: "psc-np-chip-label" }, [rec.label + (rec.badge ? " (" + rec.badge + ")" : "")]),
+          ]);
+          const remove = el("button", { type: "button", title: "Remove" }, ["×"]);
+          remove.addEventListener("click", (evt) => {
+            evt.preventDefault();
+            evt.stopPropagation();
+            setSelected(node.fieldKey, id, rec.label, rec.badge, false);
+          });
+          chip.appendChild(remove);
+          chips.appendChild(chip);
+        });
       });
     }
 
-    input.addEventListener("focus", () => {
-      renderList(input.value);
-      list.style.display = "block";
-    });
-
-    input.addEventListener("input", () => {
-      selectedValue = "";
-      delete input.dataset.selectedValue;
-      renderList(input.value);
-      list.style.display = "block";
-    });
-
-    document.addEventListener("click", (evt) => {
-      if (!wrapper.contains(evt.target)) {
-        list.style.display = "none";
+    function setSelected(fieldKey, id, label, badge, on) {
+      const node = fieldNodes[fieldKey];
+      selectedByField[fieldKey] = selectedByField[fieldKey] || {};
+      if (on) {
+        if (node && node.single) selectedByField[fieldKey] = {};
+        selectedByField[fieldKey][String(id)] = { label, badge: badge || (node && node.badge) || "" };
+      } else {
+        delete selectedByField[fieldKey][String(id)];
       }
-    });
-
-    wrapper.appendChild(input);
-    wrapper.appendChild(list);
-
-    const container = el("div", { class: "psc-field-group" }, [
-      el("label", { class: "psc-field-label", htmlFor: inputId }, [labelStr]),
-      wrapper
-    ]);
-
-    function setItems(newItemsObj, enable = true) {
-      currentItemsObj = newItemsObj || {};
-      keys = Object.keys(currentItemsObj);
-      if (enable) {
-        input.disabled = false;
-      }
+      syncHidden(fieldKey);
+      renderChips();
+      renderList();
+      dispatchChange();
     }
 
-    return {
-      element: container,
-      wrapper,
-      input,
-      setItems,
-      getValue: () => selectedValue || input.dataset.selectedValue || input.value.trim(),
-      restore: (value, selected) => {
-        selectedValue = selected || "";
-        if (selectedValue) input.dataset.selectedValue = selectedValue;
-        else delete input.dataset.selectedValue;
-        input.value = value || "";
-      },
-      reset: () => {
-        selectedValue = "";
-        delete input.dataset.selectedValue;
-        input.value = "";
+    function renderCrumb() {
+      crumb.innerHTML = "";
+      if (!path.length) {
+        crumb.style.display = "none";
+        return;
       }
+      crumb.style.display = "flex";
+      const rootBtn = el("button", { type: "button" }, [rootLabel]);
+      rootBtn.addEventListener("click", () => { path = []; renderList(); });
+      crumb.appendChild(rootBtn);
+      path.forEach((node, idx) => {
+        crumb.appendChild(el("span", { class: "psc-np-crumb-sep" }, [">"]));
+        const btn = el("button", { type: "button" }, [node.label]);
+        btn.addEventListener("click", () => { path = path.slice(0, idx + 1); renderList(); });
+        crumb.appendChild(btn);
+      });
+    }
+
+    function emptyMessage(node) {
+      if (node.status === "loading" || node.items === undefined) return "Loading catalog…";
+      if (node.status === "unavailable") return node.emptyText || "Catalog unavailable — refresh the dashboard";
+      return "No " + String(node.label || "items").toLowerCase() + " configured";
+    }
+
+    function matchesQuery(label, id, q) {
+      if (!q) return true;
+      return String(label).toLowerCase().includes(q) || String(id).toLowerCase().includes(q);
+    }
+
+    function sortedItemEntries(items) {
+      return Object.keys(items || {}).map(id => ({
+        id,
+        label: catalogItemLabel(items[id], id),
+      })).sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+    }
+
+    function appendCategoryRow(node) {
+      const enabled = nodeEnabled(node);
+      const count = nodeCount(node);
+      const row = el("div", { class: "psc-np-row" + (enabled ? "" : " is-disabled") });
+      row.appendChild(el("span", { class: "psc-np-name" }, [node.label]));
+      row.appendChild(el("span", { class: "psc-np-count" }, [String(count)]));
+      row.appendChild(el("span", { class: "psc-np-chevron" }, [">"]));
+      if (enabled) {
+        row.addEventListener("click", () => {
+          path = path.concat([node]);
+          search.value = "";
+          renderList();
+        });
+      }
+      list.appendChild(row);
+    }
+
+    function appendLeafRow(node, id, label) {
+      const enabled = nodeEnabled(node);
+      const checked = Boolean(selectedByField[node.fieldKey] && selectedByField[node.fieldKey][id]);
+      const row = el("div", { class: "psc-np-row" + (enabled ? "" : " is-disabled") });
+      const box = el("input", { type: "checkbox" });
+      box.checked = checked;
+      box.disabled = !enabled;
+      row.appendChild(box);
+      row.appendChild(el("span", { class: "psc-np-name" }, [label]));
+      if (node.badge) row.appendChild(el("span", { class: "psc-np-badge" }, [node.badge]));
+      if (enabled) {
+        const toggle = (evt) => {
+          evt.preventDefault();
+          evt.stopPropagation();
+          setSelected(node.fieldKey, id, label, node.badge, !checked);
+        };
+        row.addEventListener("click", toggle);
+        box.addEventListener("click", toggle);
+      }
+      list.appendChild(row);
+    }
+
+    function renderList() {
+      list.innerHTML = "";
+      renderCrumb();
+      const q = (search.value || "").trim().toLowerCase();
+      const current = path.length ? path[path.length - 1] : { label: rootLabel, children: tree };
+
+      if (q) {
+        const scope = path.length ? current : { children: tree };
+        const leaves = collectLeaves(scope, []);
+        let shown = 0;
+        leaves.forEach(node => {
+          if (!nodeEnabled(node) && !selectedIds(node.fieldKey).length) return;
+          if (node.status === "unavailable") return;
+          sortedItemEntries(node.items).forEach(({ id, label }) => {
+            if (!matchesQuery(label, id, q)) return;
+            appendLeafRow(node, id, label);
+            shown += 1;
+          });
+        });
+        if (!shown) list.appendChild(el("div", { class: "psc-np-empty" }, ["No matching items"]));
+        return;
+      }
+
+      if (current.fieldKey) {
+        if (current.status === "unavailable" || current.items === undefined || !catalogMapSize(current.items)) {
+          list.appendChild(el("div", { class: "psc-np-empty" }, [emptyMessage(current)]));
+          return;
+        }
+        sortedItemEntries(current.items).forEach(({ id, label }) => {
+          appendLeafRow(current, id, label);
+        });
+        return;
+      }
+
+      const children = (current.children || []).filter(child => nodeEnabled(child) || nodeCount(child) > 0 || child.status === "unavailable");
+      if (!children.length) {
+        list.appendChild(el("div", { class: "psc-np-empty" }, ["No categories available"]));
+        return;
+      }
+      children.forEach(appendCategoryRow);
+    }
+
+    search.addEventListener("input", renderList);
+
+    function getValue(fieldKey) {
+      const ids = selectedIds(fieldKey);
+      if (ids.length === 0) return "";
+      if (ids.length === 1) return ids[0];
+      return ids.slice();
+    }
+
+    function restore(fieldKey, value, selected) {
+      const node = fieldNodes[fieldKey];
+      selectedByField[fieldKey] = {};
+      const ids = parseSelectedIds(selected || "");
+      ids.forEach(id => {
+        const item = node && node.items ? node.items[id] : null;
+        const label = catalogItemLabel(item, value || id);
+        selectedByField[fieldKey][id] = { label, badge: (node && node.badge) || "" };
+      });
+      if (!ids.length && selected) {
+        selectedByField[fieldKey][String(selected)] = {
+          label: value || String(selected),
+          badge: (node && node.badge) || "",
+        };
+      }
+      syncHidden(fieldKey);
+      renderChips();
+    }
+
+    function resetField(fieldKey) {
+      selectedByField[fieldKey] = {};
+      syncHidden(fieldKey);
+      renderChips();
+    }
+
+    function ingestDraft() {
+      Object.keys(hiddenInputs).forEach(fieldKey => {
+        const input = hiddenInputs[fieldKey];
+        restore(fieldKey, input.value, input.dataset.selectedValue || "");
+      });
+      renderList();
+    }
+
+    function makeFacade(fieldKey) {
+      const input = hiddenInputs[fieldKey];
+      return {
+        element: wrap,
+        input,
+        getValue: () => getValue(fieldKey),
+        restore: (value, selected) => { restore(fieldKey, value, selected); renderList(); },
+        reset: () => { resetField(fieldKey); renderList(); },
+      };
+    }
+
+    walk(tree, node => {
+      if (node.fieldKey) facades[node.fieldKey] = makeFacade(node.fieldKey);
+    });
+
+    renderList();
+    renderChips();
+
+    return {
+      element: wrap,
+      facades,
+      refresh: renderList,
+      resetAll() {
+        Object.keys(selectedByField).forEach(resetField);
+        path = [];
+        search.value = "";
+        renderList();
+        renderChips();
+      },
+      ingestDraft,
     };
   }
 
@@ -1123,16 +1483,6 @@
   function buildTesterPanel(container, rules, identityOptions, objectMaps, identityTypeMap, identityMap, onRun, onReset) {
     injectStyles();
 
-    // Catalog updates re-render this panel. Preserve which optional fields the
-    // user enabled so a background refresh cannot make them appear to vanish.
-    const fieldSettingsKey = "psc-enabled-filter-fields";
-    let savedFieldSettings = {};
-    try { savedFieldSettings = JSON.parse(sessionStorage.getItem(fieldSettingsKey) || "{}"); } catch (_) {}
-    const savedEnabled = (section, key, fallback) =>
-      Object.prototype.hasOwnProperty.call(savedFieldSettings[section] || {}, key)
-        ? Boolean(savedFieldSettings[section][key])
-        : fallback;
-
     const maps = objectMaps && typeof objectMaps === "object" ? objectMaps : {
       privateResources: objectMaps || {},
       destinationLists: {},
@@ -1148,8 +1498,6 @@
     // enabled when it co-occurs with the chosen destination family. The two
     // destination families are mutually exclusive by Cisco's scope invariant.
     // ---------------------------------------------------------------------
-    const SRC_TESTINPUT = { users: "sourceUserId", roaming: "sourceRoamingId", groups: "sourceGroupId", endpointDevices: "sourceEndpointDeviceId", networks: "sourceNetworkId", sites: "sourceSiteId", sgt: "sourceSecurityGroupTagId", catalystSdwan: "sourceCatalystSdwanId", tunnelGroups: "sourceTunnelGroupId", networkObjects: "sourceNetworkObjectId", networkObjectGroups: "sourceNetworkObjectGroupId", networkDevices: "sourceNetworkDeviceId", mobileDevices: "sourceMobileDeviceId", chromebooks: "sourceChromebookId", ztnaClients: "sourceZtnaClientId" };
-    const DEST_TESTINPUT = { destScope: "destinationScope", privateResource: "privateResourceId", privateResourceGroup: "privateResourceGroupId", destinationList: "destinationListId", netObject: "networkObjectId", serviceObject: "serviceObjectGroupId", application: "applicationId", protocol: "protocolId", enterpriseApplication: "enterpriseApplicationId", appList: "applicationListId", appCategory: "applicationCategoryId", contentCategory: "contentCategoryId", catList: "categoryListId", geolocation: "geolocation", privateResourceType: "privateResourceType", appRiskProfile: "appRiskProfileId" };
     const DEST_FAMILY = { privateResource: "private", privateResourceGroup: "private", privateResourceType: "private", destScope: "scope", destinationList: "internet", netObject: "internet", serviceObject: "internet", application: "internet", protocol: "internet", enterpriseApplication: "internet", appList: "internet", appCategory: "internet", contentCategory: "internet", catList: "internet", geolocation: "internet", appRiskProfile: "internet" };
     const FIELD_COMBINATIONS = analyzeRuleCombinations(rules, maps.sourceIdentityTypeIds);
 
@@ -1212,137 +1560,79 @@
     });
     const srcIpField = createFieldGroup("Source IP / CIDR / Port", sourceInput);
 
-    // These are named catalog items, not a second set of vague "identity
-    // type" filters. Selecting a named AD User also satisfies a policy whose
-    // source is "Any AD User"; the matcher uses the catalog's type map to do
-    // that safely.
-    const usersSelect = createSearchableSelect("AD Users", "Search AD user by name...", "psc-src-users", maps.sourceUsers);
-    usersSelect.input.disabled = false;
-    const roamingSelect = createSearchableSelect("Roaming Computers", "Search roaming computer by name...", "psc-src-roaming", maps.sourceRoaming);
-    roamingSelect.input.disabled = false;
-    const groupsSelect = createSearchableSelect("AD Groups", "Search AD group by name...", "psc-src-groups", maps.sourceGroups);
-    groupsSelect.input.disabled = false;
-    const endpointDevicesSelect = createSearchableSelect("AD Computers", "Search AD computer by name...", "psc-src-endpoints", maps.sourceEndpointDevices);
-    endpointDevicesSelect.input.disabled = false;
-    const networksSelect = createSearchableSelect("Networks", "Search network by name...", "psc-src-networks", maps.sourceNetworks);
-    networksSelect.input.disabled = false;
-    const sitesSelect = createSearchableSelect("Sites", "Search site by name...", "psc-src-sites", maps.sourceSites);
-    sitesSelect.input.disabled = false;
-    const sgtSelect = createSearchableSelect("Security Group Tags", "Search SGT by name...", "psc-src-sgt", maps.sourceSecurityGroupTags);
-    sgtSelect.input.disabled = false;
-    const catalystSdwanSelect = createSearchableSelect("Catalyst SD-WAN Service VPN IDs", "Search service VPN ID...", "psc-src-catalyst-sdwan", maps.sourceCatalystSdwan);
-    catalystSdwanSelect.input.disabled = false;
-    const tunnelGroupsSelect = createSearchableSelect("Network Tunnel Groups (Machine Tunnel)", "Search tunnel group by name...", "psc-src-tunnel-groups", maps.sourceTunnelGroups);
-    tunnelGroupsSelect.input.disabled = false;
-    const networkObjectsSelect = createSearchableSelect("Network Objects", "Catalog unavailable — no HAR-observed source condition", "psc-src-network-objects", {}, "unavailable");
-    networkObjectsSelect.input.disabled = true;
-    const networkObjectGroupsSelect = createSearchableSelect("Network Object Groups", "Catalog unavailable — no HAR-observed source condition", "psc-src-network-object-groups", {}, "unavailable");
-    networkObjectGroupsSelect.input.disabled = true;
-    const networkDevicesSelect = createSearchableSelect("Network Devices", "No devices configured in this organization", "psc-src-network-devices", maps.sourceNetworkDevices || {});
-    networkDevicesSelect.input.disabled = false;
-    const mobileDevicesSelect = createSearchableSelect("Mobile Devices", "Search mobile device by name...", "psc-src-mobile-devices", maps.sourceMobileDevices || {});
-    mobileDevicesSelect.input.disabled = false;
-    const chromebooksSelect = createSearchableSelect("Chromebooks", "Search Chromebook by name...", "psc-src-chromebooks", maps.sourceChromebooks || {});
-    chromebooksSelect.input.disabled = false;
-    const ztnaClientsSelect = createSearchableSelect("ZTNA Clients", "Search ZTNA client by name...", "psc-src-ztna-clients", maps.sourceZtnaClients || {});
-    ztnaClientsSelect.input.disabled = false;
+    // Named catalog items, nested like Cisco's source picker. A named AD User
+    // still satisfies a policy whose source is "Any AD User"; the matcher uses
+    // the catalog type map to do that. Only HAR-backed catalogs appear here.
+    const sourceEnabled = {};
+    const sourcePicker = createNestedCatalogPicker({
+      idPrefix: "psc-src-np",
+      rootLabel: "Sources",
+      getFieldState: (fieldKey) => ({ enabled: sourceEnabled[fieldKey] !== false }),
+      tree: [
+        {
+          label: "Users and Groups",
+          children: [
+            { label: "AD Users", fieldKey: "users", inputId: "psc-src-users", items: maps.sourceUsers, badge: "AD User" },
+            { label: "AD Groups", fieldKey: "groups", inputId: "psc-src-groups", items: maps.sourceGroups, badge: "AD Group" },
+          ],
+        },
+        {
+          label: "Networks",
+          children: [
+            { label: "Internal Networks", fieldKey: "networks", inputId: "psc-src-networks", items: maps.sourceNetworks, badge: "Network" },
+            { label: "Network Tunnels", fieldKey: "tunnelGroups", inputId: "psc-src-tunnel-groups", items: maps.sourceTunnelGroups, badge: "Network Tunnel" },
+            { label: "Sites", fieldKey: "sites", inputId: "psc-src-sites", items: maps.sourceSites, badge: "Site" },
+            { label: "Network Objects", fieldKey: "networkObjects", inputId: "psc-src-network-objects", items: {}, status: "unavailable", emptyText: "Catalog unavailable — no HAR-observed source condition", badge: "Network Object" },
+            { label: "Network Object Groups", fieldKey: "networkObjectGroups", inputId: "psc-src-network-object-groups", items: {}, status: "unavailable", emptyText: "Catalog unavailable — no HAR-observed source condition", badge: "Network Object Group" },
+          ],
+        },
+        {
+          label: "Devices",
+          children: [
+            { label: "AD Computers", fieldKey: "endpointDevices", inputId: "psc-src-endpoints", items: maps.sourceEndpointDevices, badge: "AD Computer" },
+            { label: "Roaming Computers", fieldKey: "roaming", inputId: "psc-src-roaming", items: maps.sourceRoaming, badge: "Roaming Computer" },
+            { label: "Network Devices", fieldKey: "networkDevices", inputId: "psc-src-network-devices", items: maps.sourceNetworkDevices || {}, badge: "Network Device" },
+            { label: "Mobile Devices", fieldKey: "mobileDevices", inputId: "psc-src-mobile-devices", items: maps.sourceMobileDevices || {}, badge: "Mobile Device" },
+            { label: "Chromebooks", fieldKey: "chromebooks", inputId: "psc-src-chromebooks", items: maps.sourceChromebooks || {}, badge: "Chromebook" },
+            { label: "ZTNA Clients", fieldKey: "ztnaClients", inputId: "psc-src-ztna-clients", items: maps.sourceZtnaClients || {}, badge: "ZTNA Client" },
+          ],
+        },
+        {
+          label: "Other",
+          children: [
+            { label: "Security Group Tags", fieldKey: "sgt", inputId: "psc-src-sgt", items: maps.sourceSecurityGroupTags, badge: "SGT" },
+            { label: "Catalyst SD-WAN Service VPN IDs", fieldKey: "catalystSdwan", inputId: "psc-src-catalyst-sdwan", items: maps.sourceCatalystSdwan, badge: "SD-WAN VPN" },
+          ],
+        },
+      ],
+    });
+    const usersSelect = sourcePicker.facades.users;
+    const roamingSelect = sourcePicker.facades.roaming;
+    const groupsSelect = sourcePicker.facades.groups;
+    const endpointDevicesSelect = sourcePicker.facades.endpointDevices;
+    const networksSelect = sourcePicker.facades.networks;
+    const sitesSelect = sourcePicker.facades.sites;
+    const sgtSelect = sourcePicker.facades.sgt;
+    const catalystSdwanSelect = sourcePicker.facades.catalystSdwan;
+    const tunnelGroupsSelect = sourcePicker.facades.tunnelGroups;
+    const networkObjectsSelect = sourcePicker.facades.networkObjects;
+    const networkObjectGroupsSelect = sourcePicker.facades.networkObjectGroups;
+    const networkDevicesSelect = sourcePicker.facades.networkDevices;
+    const mobileDevicesSelect = sourcePicker.facades.mobileDevices;
+    const chromebooksSelect = sourcePicker.facades.chromebooks;
+    const ztnaClientsSelect = sourcePicker.facades.ztnaClients;
+    const sourceInputMap = sourcePicker.facades;
 
-    const sourceInputMap = {
-      users: usersSelect,
-      roaming: roamingSelect,
-      groups: groupsSelect,
-      endpointDevices: endpointDevicesSelect,
-      networks: networksSelect,
-      sites: sitesSelect,
-      sgt: sgtSelect,
-      catalystSdwan: catalystSdwanSelect,
-      tunnelGroups: tunnelGroupsSelect,
-      networkObjects: networkObjectsSelect,
-      networkObjectGroups: networkObjectGroupsSelect,
-      networkDevices: networkDevicesSelect,
-      mobileDevices: mobileDevicesSelect,
-      chromebooks: chromebooksSelect,
-      ztnaClients: ztnaClientsSelect,
-    };
-
-    const sourceSettingsToggles = {
-      users: { label: "AD Users", enabled: savedEnabled("source", "users", true) },
-      roaming: { label: "Roaming Computers", enabled: savedEnabled("source", "roaming", false) },
-      groups: { label: "AD Groups", enabled: savedEnabled("source", "groups", false) },
-      endpointDevices: { label: "AD Computers", enabled: savedEnabled("source", "endpointDevices", false) },
-      networks: { label: "Networks", enabled: savedEnabled("source", "networks", false) },
-      sites: { label: "Sites", enabled: savedEnabled("source", "sites", false) },
-      sgt: { label: "Security Group Tags", enabled: savedEnabled("source", "sgt", false) },
-      catalystSdwan: { label: "Catalyst SD-WAN Service VPN IDs", enabled: savedEnabled("source", "catalystSdwan", false) },
-      tunnelGroups: { label: "Network Tunnel Groups (Machine Tunnel)", enabled: savedEnabled("source", "tunnelGroups", false) },
-      // These are intentionally visible as unavailable rather than silently
-      // removed: the supplied capture has no source-object condition to match.
-      networkObjects: { label: "Network Objects — unavailable for source tests", enabled: savedEnabled("source", "networkObjects", false) },
-      networkObjectGroups: { label: "Network Object Groups — unavailable for source tests", enabled: savedEnabled("source", "networkObjectGroups", false) },
-      networkDevices: { label: "Network Devices", enabled: savedEnabled("source", "networkDevices", false) },
-      mobileDevices: { label: "Mobile Devices", enabled: savedEnabled("source", "mobileDevices", false) },
-      chromebooks: { label: "Chromebooks", enabled: savedEnabled("source", "chromebooks", false) },
-      ztnaClients: { label: "ZTNA Clients", enabled: savedEnabled("source", "ztnaClients", false) },
-    };
-
-    // Source Section Box
     const srcBox = el("div", { class: "psc-section-box", id: "psc-src-box" });
-    const srcSettingsToggle = el("button", { type: "button", class: "psc-section-toggle", id: "psc-src-settings-toggle" }, [
-      el("span", {}, ["⚙ Fields"]),
-      el("span", { class: "psc-settings-arrow" }, ["▼"])
-    ]);
-    const srcSettingsPopover = el("div", { class: "psc-section-popover", id: "psc-src-popover" });
-    const srcEnabledContainer = el("div", { class: "psc-section-fields", id: "psc-src-enabled-fields" });
-
-    function renderSourceFields() {
-      srcEnabledContainer.innerHTML = "";
-      Object.entries(sourceSettingsToggles).forEach(([key, cfg]) => {
-        if (cfg.enabled) {
-          const sel = sourceInputMap[key];
-          if (sel && sel.element) srcEnabledContainer.appendChild(sel.element);
-        }
-      });
-    }
-
-    Object.entries(sourceSettingsToggles).forEach(([key, cfg]) => {
-      const toggle = el("div", { class: "psc-setting-toggle" + (cfg.enabled ? " active" : ""), "data-setting": key });
-      toggle.addEventListener("click", () => {
-        toggle.classList.toggle("active");
-        const isActive = toggle.classList.contains("active");
-        cfg.enabled = isActive;
-        savedFieldSettings.source = { ...(savedFieldSettings.source || {}), [key]: isActive };
-        try { sessionStorage.setItem(fieldSettingsKey, JSON.stringify(savedFieldSettings)); } catch (_) {}
-        if (sourceInputMap[key] && sourceInputMap[key].input) {
-          sourceInputMap[key].input.disabled = !isActive;
-        }
-        renderSourceFields();
-        recomputeEnabledFields();
-      });
-      srcSettingsPopover.appendChild(el("div", { class: "psc-setting-row" }, [
-        el("label", { class: "psc-setting-label" }, [cfg.label]),
-        toggle
-      ]));
-    });
-
-    srcSettingsToggle.addEventListener("click", (e) => {
-      e.stopPropagation();
-      dstSettingsPopover.classList.remove("open");
-      srcSettingsPopover.classList.toggle("open");
-    });
-
-    const srcHeader = el("div", { class: "psc-section-header" }, [
+    srcBox.appendChild(el("div", { class: "psc-section-header" }, [
       el("span", { class: "psc-section-title" }, ["Source"]),
-      srcSettingsToggle
-    ]);
-
-    srcBox.appendChild(srcHeader);
-    srcBox.appendChild(srcSettingsPopover);
+    ]));
     srcBox.appendChild(el("p", { class: "psc-tester-guide" }, [
       el("strong", {}, ["Choose a named source. "]),
-      "A named AD user, group, roaming computer, tunnel group, or other catalog item can satisfy a policy such as “Any AD User” or “Any Network Tunnel.” Type-only policy labels without a named catalog item — such as Posture, OS, or Endpoint Requirements — remain visible on the policy but cannot be independently simulated."
+      "Open a category, then check the catalog item. A named AD user, group, roaming computer, or tunnel can satisfy a policy such as “Any AD User” or “Any Network Tunnel.” Type-only labels such as Posture, OS, or Endpoint Requirements cannot be independently simulated."
     ]));
     srcBox.appendChild(srcIpField.element);
-    srcBox.appendChild(srcEnabledContainer);
+    srcBox.appendChild(sourcePicker.element);
 
     // =========================================================================
     // 2. DESTINATION SECTION COMPONENTS
@@ -1355,147 +1645,63 @@
     });
     const dstIpField = createFieldGroup("Destination IP / Domain / Port", destInput);
 
-    const destScopeSelect = createSearchableSelect("Destination Scope", "Search destination scope by name...", "psc-dst-scope", maps.destinationScopes || {});
-    destScopeSelect.input.disabled = false;
-    const privResSelect = createSearchableSelect("Private Resources", "Search private resources by name...", "psc-privres", maps.privateResources || {});
-    privResSelect.input.disabled = false;
-    const privResGroupSelect = createSearchableSelect("Private Resource Groups", "Search resource groups by name...", "psc-privresgrp", maps.privateResourceGroups || {});
-    privResGroupSelect.input.disabled = false;
-    const destListSelect = createSearchableSelect("Destination Lists", "Search destination lists by name...", "psc-destlist", maps.destinationLists || {});
-    destListSelect.input.disabled = false;
-    const netObjSelect = createSearchableSelect("Network Objects", "Search network objects by name...", "psc-netobj", maps.networkObjects || {});
-    netObjSelect.input.disabled = false;
-    const svcObjSelect = createSearchableSelect("Service Object Groups", "Search service groups by name...", "psc-svcobj", maps.serviceObjectGroups || {});
-    svcObjSelect.input.disabled = false;
-    const appSelect = createSearchableSelect("Internet Applications", "Search internet applications by name...", "psc-app", maps.internetApplications || maps.applications || {});
-    appSelect.input.disabled = false;
-    const protocolSelect = createSearchableSelect("Application Protocols", "Search protocol signatures by name...", "psc-protocol", maps.applicationProtocols || {});
-    protocolSelect.input.disabled = false;
-    const enterpriseAppSelect = createSearchableSelect("Enterprise Applications", "Search enterprise applications by name...", "psc-enterprise-app", maps.enterpriseApplications || {});
-    enterpriseAppSelect.input.disabled = false;
-    const appListSelect = createSearchableSelect("Application Lists", "Search application lists by name...", "psc-applist", maps.applicationLists || {});
-    appListSelect.input.disabled = false;
-    const appCatSelect = createSearchableSelect("Application Categories", "Search application categories by name...", "psc-appcat", maps.applicationCategories || {});
-    appCatSelect.input.disabled = false;
-    const contentCatSelect = createSearchableSelect("Content Categories", "Search content categories by name...", "psc-content-cat", maps.contentCategories || {});
-    contentCatSelect.input.disabled = false;
-    const catListSelect = createSearchableSelect("Category Lists", "Search category lists by name...", "psc-catlist", maps.categoryLists || {});
-    catListSelect.input.disabled = false;
-    const geolocationSelect = createSearchableSelect("Geolocations", "Search country by name or code...", "psc-geolocation", maps.geolocations || {});
-    geolocationSelect.input.disabled = false;
-    const privateResourceTypeSelect = createSearchableSelect("Private Resource Kind", "Applications or networks...", "psc-privres-type", { apps: "Applications", networks: "Networks" });
-    privateResourceTypeSelect.input.disabled = false;
-    const appRiskProfileSelect = createSearchableSelect("App Risk Profile", "Search app risk profile...", "psc-app-risk", maps.appRiskProfiles || {});
-    appRiskProfileSelect.input.disabled = false;
+    const destEnabled = {};
+    const destPicker = createNestedCatalogPicker({
+      idPrefix: "psc-dst-np",
+      rootLabel: "Destinations",
+      getFieldState: (fieldKey) => ({ enabled: destEnabled[fieldKey] !== false }),
+      tree: [
+        { label: "Destination Lists", fieldKey: "destinationList", inputId: "psc-destlist", items: maps.destinationLists || {}, badge: "Destination List" },
+        {
+          label: "Applications",
+          children: [
+            { label: "Internet Applications", fieldKey: "application", inputId: "psc-app", items: maps.internetApplications || maps.applications || {}, badge: "Application" },
+            { label: "Application Protocols", fieldKey: "protocol", inputId: "psc-protocol", items: maps.applicationProtocols || {}, badge: "Protocol" },
+            { label: "Enterprise Applications", fieldKey: "enterpriseApplication", inputId: "psc-enterprise-app", items: maps.enterpriseApplications || {}, badge: "Enterprise App" },
+          ],
+        },
+        { label: "Application Lists", fieldKey: "appList", inputId: "psc-applist", items: maps.applicationLists || {}, badge: "Application List" },
+        { label: "Application Categories", fieldKey: "appCategory", inputId: "psc-appcat", items: maps.applicationCategories || {}, badge: "App Category" },
+        { label: "Content Categories", fieldKey: "contentCategory", inputId: "psc-content-cat", items: maps.contentCategories || {}, badge: "Content Category" },
+        { label: "Category Lists", fieldKey: "catList", inputId: "psc-catlist", items: maps.categoryLists || {}, badge: "Category List" },
+        { label: "Private Resources", fieldKey: "privateResource", inputId: "psc-privres", items: maps.privateResources || {}, badge: "Private Resource" },
+        { label: "Private Resource Groups", fieldKey: "privateResourceGroup", inputId: "psc-privresgrp", items: maps.privateResourceGroups || {}, badge: "Private Resource Group" },
+        { label: "Private Resource Kind", fieldKey: "privateResourceType", inputId: "psc-privres-type", items: { apps: "Applications", networks: "Networks" }, badge: "Resource Kind", single: true },
+        { label: "Network Objects", fieldKey: "netObject", inputId: "psc-netobj", items: maps.networkObjects || {}, badge: "Network Object" },
+        { label: "Service Object Groups", fieldKey: "serviceObject", inputId: "psc-svcobj", items: maps.serviceObjectGroups || {}, badge: "Service Object Group" },
+        { label: "Geolocations", fieldKey: "geolocation", inputId: "psc-geolocation", items: maps.geolocations || {}, badge: "Geolocation" },
+        { label: "App Risk Profile", fieldKey: "appRiskProfile", inputId: "psc-app-risk", items: maps.appRiskProfiles || {}, badge: "App Risk" },
+        { label: "Destination Scope", fieldKey: "destScope", inputId: "psc-dst-scope", items: maps.destinationScopes || { public_internet: "Internet", private_network: "Private Access" }, badge: "Scope", single: true },
+      ],
+    });
+    const destScopeSelect = destPicker.facades.destScope;
+    const privResSelect = destPicker.facades.privateResource;
+    const privResGroupSelect = destPicker.facades.privateResourceGroup;
+    const destListSelect = destPicker.facades.destinationList;
+    const netObjSelect = destPicker.facades.netObject;
+    const svcObjSelect = destPicker.facades.serviceObject;
+    const appSelect = destPicker.facades.application;
+    const protocolSelect = destPicker.facades.protocol;
+    const enterpriseAppSelect = destPicker.facades.enterpriseApplication;
+    const appListSelect = destPicker.facades.appList;
+    const appCatSelect = destPicker.facades.appCategory;
+    const contentCatSelect = destPicker.facades.contentCategory;
+    const catListSelect = destPicker.facades.catList;
+    const geolocationSelect = destPicker.facades.geolocation;
+    const privateResourceTypeSelect = destPicker.facades.privateResourceType;
+    const appRiskProfileSelect = destPicker.facades.appRiskProfile;
+    const destInputMap = destPicker.facades;
 
-    const destInputMap = {
-      destScope: destScopeSelect,
-      privateResource: privResSelect,
-      privateResourceGroup: privResGroupSelect,
-      destinationList: destListSelect,
-      netObject: netObjSelect,
-      serviceObject: svcObjSelect,
-      application: appSelect,
-      protocol: protocolSelect,
-      enterpriseApplication: enterpriseAppSelect,
-      appList: appListSelect,
-      appCategory: appCatSelect,
-      contentCategory: contentCatSelect,
-      catList: catListSelect,
-      geolocation: geolocationSelect,
-      privateResourceType: privateResourceTypeSelect,
-      appRiskProfile: appRiskProfileSelect,
-    };
-
-    const destSettingsToggles = {
-      destScope: { label: "Destination Scope", enabled: savedEnabled("destination", "destScope", true) },
-      privateResource: { label: "Private Resources", enabled: savedEnabled("destination", "privateResource", false) },
-      privateResourceGroup: { label: "Private Resource Groups", enabled: savedEnabled("destination", "privateResourceGroup", false) },
-      destinationList: { label: "Destination Lists", enabled: savedEnabled("destination", "destinationList", false) },
-      netObject: { label: "Network Objects", enabled: savedEnabled("destination", "netObject", false) },
-      serviceObject: { label: "Service Object Groups", enabled: savedEnabled("destination", "serviceObject", false) },
-      application: { label: "Internet Applications", enabled: savedEnabled("destination", "application", false) },
-      protocol: { label: "Application Protocols", enabled: savedEnabled("destination", "protocol", false) },
-      enterpriseApplication: { label: "Enterprise Applications", enabled: savedEnabled("destination", "enterpriseApplication", false) },
-      appList: { label: "Application Lists", enabled: savedEnabled("destination", "appList", false) },
-      appCategory: { label: "Application Categories", enabled: savedEnabled("destination", "appCategory", false) },
-      contentCategory: { label: "Content Categories", enabled: savedEnabled("destination", "contentCategory", false) },
-      catList: { label: "Category Lists", enabled: savedEnabled("destination", "catList", false) },
-      geolocation: { label: "Geolocations", enabled: savedEnabled("destination", "geolocation", false) },
-      privateResourceType: { label: "Private Resource Kind (rule classifier)", enabled: savedEnabled("destination", "privateResourceType", false) },
-      appRiskProfile: { label: "App Risk Profile", enabled: savedEnabled("destination", "appRiskProfile", false) },
-    };
-
-    // Destination Section Box
     const dstBox = el("div", { class: "psc-section-box", id: "psc-dst-box" });
-    const dstSettingsToggle = el("button", { type: "button", class: "psc-section-toggle", id: "psc-dst-settings-toggle" }, [
-      el("span", {}, ["⚙ Fields"]),
-      el("span", { class: "psc-settings-arrow" }, ["▼"])
-    ]);
-    const dstSettingsPopover = el("div", { class: "psc-section-popover", id: "psc-dst-popover" });
-    const dstEnabledContainer = el("div", { class: "psc-section-fields", id: "psc-dst-enabled-fields" });
-
-    function renderDestFields() {
-      dstEnabledContainer.innerHTML = "";
-      Object.entries(destSettingsToggles).forEach(([key, cfg]) => {
-        if (cfg.enabled) {
-          const sel = destInputMap[key];
-          if (sel && sel.element) dstEnabledContainer.appendChild(sel.element);
-        }
-      });
-    }
-
-    Object.entries(destSettingsToggles).forEach(([key, cfg]) => {
-      const toggle = el("div", { class: "psc-setting-toggle" + (cfg.enabled ? " active" : ""), "data-setting": key });
-      toggle.addEventListener("click", () => {
-        toggle.classList.toggle("active");
-        const isActive = toggle.classList.contains("active");
-        cfg.enabled = isActive;
-        savedFieldSettings.destination = { ...(savedFieldSettings.destination || {}), [key]: isActive };
-        try { sessionStorage.setItem(fieldSettingsKey, JSON.stringify(savedFieldSettings)); } catch (_) {}
-        if (destInputMap[key] && destInputMap[key].input) {
-          destInputMap[key].input.disabled = !isActive;
-        }
-        renderDestFields();
-        recomputeEnabledFields();
-      });
-      dstSettingsPopover.appendChild(el("div", { class: "psc-setting-row" }, [
-        el("label", { class: "psc-setting-label" }, [cfg.label]),
-        toggle
-      ]));
-    });
-
-    dstSettingsToggle.addEventListener("click", (e) => {
-      e.stopPropagation();
-      srcSettingsPopover.classList.remove("open");
-      dstSettingsPopover.classList.toggle("open");
-    });
-
-    const dstHeader = el("div", { class: "psc-section-header" }, [
+    dstBox.appendChild(el("div", { class: "psc-section-header" }, [
       el("span", { class: "psc-section-title" }, ["Destination"]),
-      dstSettingsToggle
-    ]);
-
-    dstBox.appendChild(dstHeader);
-    dstBox.appendChild(dstSettingsPopover);
+    ]));
     dstBox.appendChild(el("p", { class: "psc-tester-guide" }, [
       el("strong", {}, ["Pick the destination being reached. "]),
-      "Private Resources are the configured intranet apps, networks, or websites. Destination Scope distinguishes Internet from Private Access. Resource Type is only a rule classifier; use a named private resource or group whenever one is configured."
+      "Open a category, then check catalog items. Destination Scope distinguishes Internet from Private Access. Resource Kind is only a rule classifier; use a named private resource or group whenever one is configured."
     ]));
     dstBox.appendChild(dstIpField.element);
-    dstBox.appendChild(dstEnabledContainer);
-
-    // Close field-settings menus whenever the press starts outside their menu
-    // and trigger. Capture phase makes this independent of stopped bubble
-    // events inside searchable selects and dynamically moved field controls.
-    document.addEventListener("pointerdown", (e) => {
-      if (!srcSettingsPopover.contains(e.target) && !srcSettingsToggle.contains(e.target)) {
-        srcSettingsPopover.classList.remove("open");
-      }
-      if (!dstSettingsPopover.contains(e.target) && !dstSettingsToggle.contains(e.target)) {
-        dstSettingsPopover.classList.remove("open");
-      }
-    }, true);
+    dstBox.appendChild(destPicker.element);
 
     // Grid row containing SOURCE on left, DESTINATION on right
     const criteriaGrid = el("div", { class: "psc-criteria-grid" }, [
@@ -1505,9 +1711,6 @@
 
     formRow.appendChild(criteriaGrid);
     body.appendChild(formRow);
-
-    renderSourceFields();
-    renderDestFields();
 
     // ---------------------------------------------------------------------
     // Dynamic gating: keep source/destination fields consistent with the
@@ -1542,21 +1745,22 @@
 
       const allowedSrc = (fam && FIELD_COMBINATIONS[fam]) ? FIELD_COMBINATIONS[fam] : null;
       for (const [key, sel] of Object.entries(sourceInputMap)) {
-        const userEnabled = sourceSettingsToggles[key].enabled;
-        const comboOk = !allowedSrc || allowedSrc.has(key);
-        const ok = userEnabled && comboOk;
-        sel.input.disabled = !ok;
+        const ok = !allowedSrc || allowedSrc.has(key);
+        sourceEnabled[key] = ok;
         // Drop a stale value when gating removes this source for the family.
         if (!ok && sel.getValue()) sel.reset();
       }
       for (const [key, sel] of Object.entries(destInputMap)) {
         const f = DEST_FAMILY[key];
-        if (f === "scope") continue;
-        if (fam && f !== fam) {
-          sel.input.disabled = true;
-          if (sel.getValue()) sel.reset();
+        if (f === "scope") {
+          destEnabled[key] = true;
+          continue;
         }
+        destEnabled[key] = !fam || f === fam;
+        if (!destEnabled[key] && sel.getValue()) sel.reset();
       }
+      sourcePicker.refresh();
+      destPicker.refresh();
     }
 
     panel.addEventListener("change", recomputeEnabledFields);
@@ -1586,6 +1790,8 @@
     panel.appendChild(body);
     container.appendChild(panel);
     restoreDraft();
+    sourcePicker.ingestDraft();
+    destPicker.ingestDraft();
     // Draft restore can pre-fill a destination that implies a scope family,
     // so re-run gating now that values are present.
     recomputeEnabledFields();
@@ -1816,39 +2022,10 @@
 
     resetBtn.addEventListener("click", () => {
       sourceInput.value = "";
-      try { sessionStorage.removeItem(draftStorageKey); } catch (_) {}
-      usersSelect.reset();
-      roamingSelect.reset();
-      groupsSelect.reset();
-      endpointDevicesSelect.reset();
-      networksSelect.reset();
-      sitesSelect.reset();
-      sgtSelect.reset();
-      catalystSdwanSelect.reset();
-      tunnelGroupsSelect.reset();
-      networkObjectsSelect.reset();
-      networkObjectGroupsSelect.reset();
-      networkDevicesSelect.reset();
-      mobileDevicesSelect.reset();
-      chromebooksSelect.reset();
-      ztnaClientsSelect.reset();
-      destScopeSelect.reset();
-      privResSelect.reset();
-      privResGroupSelect.reset();
-      destListSelect.reset();
-      netObjSelect.reset();
-      svcObjSelect.reset();
-      appSelect.reset();
-      protocolSelect.reset();
-      enterpriseAppSelect.reset();
-      appListSelect.reset();
-      appCatSelect.reset();
-      contentCatSelect.reset();
-      catListSelect.reset();
-      geolocationSelect.reset();
-      privateResourceTypeSelect.reset();
-      appRiskProfileSelect.reset();
       destInput.value = "";
+      try { sessionStorage.removeItem(draftStorageKey); } catch (_) {}
+      sourcePicker.resetAll();
+      destPicker.resetAll();
       errorLine.textContent = "";
       onReset();
     });
