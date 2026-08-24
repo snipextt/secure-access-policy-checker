@@ -422,6 +422,38 @@
     return "Configured Destination";
   }
 
+  // Same-field Cisco chips are OR: one or more IPs/FQDNs in From/To.
+  function parseAddressList(value) {
+    if (value == null || value === "") return [];
+    if (Array.isArray(value)) {
+      return value.flatMap(item => parseAddressList(item));
+    }
+    return String(value).split(/[\n,]+/).map(part => part.trim()).filter(Boolean);
+  }
+
+  function parseAddressToken(raw) {
+    const value = String(raw || "").trim();
+    if (!value) return { ipCidr: "", port: null };
+    const portMatch = value.match(/:(\d+)$/);
+    if (!portMatch) return { ipCidr: value, port: null };
+    return {
+      ipCidr: value.substring(0, value.length - portMatch[0].length),
+      port: portMatch[1],
+    };
+  }
+
+  function matchAnyAddress(raw, fallbackPort, matchOne) {
+    const tokens = parseAddressList(raw);
+    if (!tokens.length) return matchOne("", fallbackPort);
+    let last = null;
+    for (const token of tokens) {
+      const parsed = parseAddressToken(token);
+      last = matchOne(parsed.ipCidr, parsed.port || fallbackPort);
+      if (last && last.matched) return last;
+    }
+    return last;
+  }
+
   // Nested picker checkboxes can send one id or an array of ids per field.
   function flattenSelectedIds(values) {
     const out = [];
@@ -1053,7 +1085,9 @@
       } else {
         const displays = [];
         for (const cond of srcConds) {
-          const result = matchConditionValue(cond, "source", source, sourcePort, lookups, testInput);
+          const result = matchAnyAddress(source, sourcePort, (addr, port) => (
+            matchConditionValue(cond, "source", addr, port, lookups, testInput)
+          ));
           if (!result.matched) return {
             matched: false,
             matchedConditions: [...matchedConditions, result.note || `Source condition ${cond.attributeName} did not match`],
@@ -1085,7 +1119,9 @@
       } else {
         const displays = [];
         for (const cond of dstConds) {
-          const result = matchConditionValue(cond, "destination", destination, destinationPort, lookups, testInput);
+          const result = matchAnyAddress(destination, destinationPort, (addr, port) => (
+            matchConditionValue(cond, "destination", addr, port, lookups, testInput)
+          ));
           if (!result.matched) return {
             matched: false,
             matchedConditions: [...matchedConditions, result.note || `Destination condition ${cond.attributeName} did not match`],

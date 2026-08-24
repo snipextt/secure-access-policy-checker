@@ -286,6 +286,20 @@ console.log("\n=== Group 2: CIDR/IP matching ===");
     "Multi-CIDR: no range → no match");
 }
 
+{
+  const rule = makeRule(5, "Same-field OR chips", "allow", [
+    sourceAll(),
+    destCompositeIP([{ ip: ["192.168.1.10/32"], port: ["0-65535"], protocol: "ANY" }]),
+  ]);
+
+  assertMatch(rule, { source: "10.0.0.1", destination: "8.8.8.8\n192.168.1.10" }, true,
+    "Same-field OR: newline list matches if any destination hits");
+  assertMatch(rule, { source: "10.0.0.1", destination: "8.8.8.8,192.168.1.10" }, true,
+    "Same-field OR: comma list matches if any destination hits");
+  assertMatch(rule, { source: "10.0.0.1", destination: "8.8.8.8\n1.1.1.1" }, false,
+    "Same-field OR: no listed destination hits → no match");
+}
+
 // ---------------------------------------------------------------------------
 // TEST GROUP 3: FQDN matching
 // ---------------------------------------------------------------------------
