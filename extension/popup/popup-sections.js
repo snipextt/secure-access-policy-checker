@@ -544,13 +544,20 @@
         text-align: center;
         font-weight: 700;
       }
+      .psc-and-slot {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-width: 0;
+      }
       .psc-and-wrap {
         display: flex;
         flex-direction: column;
         gap: 8px;
         min-width: 0;
       }
-      .psc-and-btn {
+      .psc-and-wrap[hidden] { display: none !important; }
+      .psc-and-toggle {
         align-self: flex-start;
         background: none;
         border: none;
@@ -561,20 +568,9 @@
         font-weight: 600;
         cursor: pointer;
       }
-      .psc-and-btn:hover { text-decoration: underline; }
+      .psc-and-toggle[hidden] { display: none !important; }
+      .psc-and-toggle:hover { text-decoration: underline; }
       .psc-and-label {
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        color: #64748b;
-      }
-      .psc-and-slot {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        min-width: 0;
-      }
-      .psc-np-name {
         flex: 1;
         min-width: 0;
         overflow: hidden;
@@ -1530,14 +1526,19 @@
       wrap.classList.toggle("is-open", on);
       if (on) {
         renderList();
-        search.focus();
+        requestAnimationFrame(() => search.focus());
       }
     }
 
-    trigger.addEventListener("click", (evt) => {
+    trigger.addEventListener("mousedown", (evt) => {
+      evt.preventDefault();
       evt.stopPropagation();
       if (evt.target.closest("button")) return;
       setOpen(!wrap.classList.contains("is-open"));
+    });
+    trigger.addEventListener("click", (evt) => {
+      evt.preventDefault();
+      evt.stopPropagation();
     });
     flyout.addEventListener("mousedown", (evt) => evt.stopPropagation());
     flyout.addEventListener("click", (evt) => evt.stopPropagation());
@@ -2072,10 +2073,28 @@
       getDisabledReason: (fieldKey) => destAndEnabled[fieldKey] === false ? AND_UNSUPPORTED : "",
       tree: clonePickerTree(destTree, "and"),
     });
+    let sourceAndWanted = false;
+    let destAndWanted = false;
     const sourceAndWrap = el("div", { class: "psc-and-wrap" }, [sourceAndPicker.element]);
     const destAndWrap = el("div", { class: "psc-and-wrap" }, [destAndPicker.element]);
+    const sourceAndToggle = el("button", { type: "button", class: "psc-and-toggle" }, ["+ AND"]);
+    const destAndToggle = el("button", { type: "button", class: "psc-and-toggle" }, ["+ AND"]);
     sourceAndWrap.hidden = true;
     destAndWrap.hidden = true;
+    sourceAndToggle.hidden = true;
+    destAndToggle.hidden = true;
+    sourceAndToggle.addEventListener("click", (evt) => {
+      evt.preventDefault();
+      evt.stopPropagation();
+      sourceAndWanted = true;
+      recomputeEnabledFields();
+    });
+    destAndToggle.addEventListener("click", (evt) => {
+      evt.preventDefault();
+      evt.stopPropagation();
+      destAndWanted = true;
+      recomputeEnabledFields();
+    });
 
     const actionInput = el("input", {
       id: "psc-preferred-action",
@@ -2107,8 +2126,8 @@
     formRow.appendChild(actionRow);
     formRow.appendChild(actionInput);
     formRow.appendChild(el("div", { class: "psc-criteria-grid" }, [
-      el("div", { class: "psc-and-slot" }, [sourcePicker.element, sourceAndWrap]),
-      el("div", { class: "psc-and-slot" }, [destPicker.element, destAndWrap]),
+      el("div", { class: "psc-and-slot" }, [sourcePicker.element, sourceAndToggle, sourceAndWrap]),
+      el("div", { class: "psc-and-slot" }, [destPicker.element, destAndToggle, destAndWrap]),
     ]));
     body.appendChild(formRow);
 
@@ -2162,8 +2181,14 @@
 
       const sourceKeys = sourcePicker.selectedFieldKeys();
       const destKeys = destPicker.selectedFieldKeys();
-      const sourceAndOn = firstSourceFamily(sourceKeys) === "identity";
-      const destAndOn = firstDestFamily(destKeys) === "destList";
+      const sourceAndAllowed = firstSourceFamily(sourceKeys) === "identity";
+      const destAndAllowed = firstDestFamily(destKeys) === "destList";
+      if (!sourceAndAllowed) sourceAndWanted = false;
+      if (!destAndAllowed) destAndWanted = false;
+      const sourceAndOn = sourceAndAllowed && sourceAndWanted;
+      const destAndOn = destAndAllowed && destAndWanted;
+      sourceAndToggle.hidden = !sourceAndAllowed || sourceAndWanted;
+      destAndToggle.hidden = !destAndAllowed || destAndWanted;
       sourceAndWrap.hidden = !sourceAndOn;
       destAndWrap.hidden = !destAndOn;
       if (!sourceAndOn) sourceAndPicker.resetAll();
@@ -2478,8 +2503,12 @@
       destPicker.resetAll();
       sourceAndPicker.resetAll();
       destAndPicker.resetAll();
+      sourceAndWanted = false;
+      destAndWanted = false;
       sourceAndWrap.hidden = true;
       destAndWrap.hidden = true;
+      sourceAndToggle.hidden = true;
+      destAndToggle.hidden = true;
       errorLine.textContent = "";
       onReset();
     });
