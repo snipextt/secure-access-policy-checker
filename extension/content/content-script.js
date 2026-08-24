@@ -563,6 +563,8 @@ function lookupName(map, id) {
 // when a name exists somewhere we already fetched.
 function resolveMemberLabel(member, memberMaps, lookups) {
   if (member && member.value !== undefined && member.value !== "") return String(member.value);
+  if (member && member.name) return String(member.name);
+  if (member && member.label) return String(member.label);
   const id = member && member.id !== undefined ? String(member.id) : "";
   if (!id) return "";
   const maps = memberMaps || {};

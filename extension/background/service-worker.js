@@ -1882,7 +1882,22 @@ function normalizeMemberEntry(entry, fallbackName) {
   const name = entry.name || fallbackName || "";
   const members = Array.isArray(entry.members)
     ? entry.members
-        .map((m) => (m && m.id !== undefined ? { id: String(m.id), kind: m.kind } : (m && m.value !== undefined ? { value: m.value, kind: m.kind } : null)))
+        .map((m) => {
+          if (!m) return null;
+          if (m.id !== undefined) {
+            const next = { id: String(m.id), kind: m.kind };
+            const name = m.name || m.label || "";
+            if (name) next.name = String(name);
+            return next;
+          }
+          if (m.value !== undefined) {
+            const next = { value: m.value, kind: m.kind };
+            const name = m.name || m.label || "";
+            if (name) next.name = String(name);
+            return next;
+          }
+          return null;
+        })
         .filter(Boolean)
     : [];
   // Collection endpoints for dest lists / AD groups / networks have no
@@ -2053,11 +2068,16 @@ function _classifyMember(m, key) {
             : (m.applicationId !== undefined ? m.applicationId
               : (m.categoryId !== undefined ? m.categoryId : undefined)))));
     if (id === undefined) return null;
+    const name = m.label || m.name || m.displayName || "";
     // Nested group detection: any member that carries its own children or is
     // typed as a group is itself recursively expandable.
-    if (Array.isArray(m.children) && m.children.length) return { id: String(id), kind: key };
-    if (m.type && /group/i.test(String(m.type))) return { id: String(id), kind: key };
-    return { id: String(id), kind: leafKind };
+    const classified = Array.isArray(m.children) && m.children.length
+      ? { id: String(id), kind: key }
+      : (m.type && /group/i.test(String(m.type))
+        ? { id: String(id), kind: key }
+        : { id: String(id), kind: leafKind });
+    if (name) classified.name = String(name);
+    return classified;
   }
   return null;
 }

@@ -112,7 +112,7 @@ console.log("\n=== Group 2: _classifyMember (leaf vs nested-group) ===");
      { id: "5", kind: "networkObjectGroups" }, "member typed group → group kind");
   // Plain leaf object.
   eq(M._classifyMember({ id: 8, name: "Obj8" }, "networkObjectGroups"),
-     { id: "8", kind: "networkObject" }, "plain leaf → leafKind");
+     { id: "8", kind: "networkObject", name: "Obj8" }, "plain leaf keeps name");
   // Numeric id → string.
   eq(M._classifyMember(42, "serviceObjectGroups"), { id: "42", kind: "serviceObject" }, "numeric id → leafKind");
   // Null / unresolvable → null.
@@ -197,6 +197,38 @@ console.log("\n=== Group 5c: per-id dest-list destinations stay unresolved until
   const staleEmpty = { name: "Social Media", members: [], resolved: true };
   assert(M.getCachedMembers({ destinationLists: { "18147945": staleEmpty } }, "destinationLists", "18147945") === null,
     "stale empty dest-list cache is ignored so per-id fetch can run");
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n=== Group 5d: AD group children keep HAR labels ===");
+{
+  const user = M.classifyPerIdMember("identityGroups", {
+    type: "directory_user",
+    id: 1353332001,
+    label: "William Chang",
+    typeId: 7,
+    childCount: 0,
+  });
+  eq(user, { id: "1353332001", kind: "identity", name: "William Chang" }, "AD user child keeps label");
+
+  const nested = M.classifyPerIdMember("identityGroups", {
+    type: "directory_group",
+    id: 1353331193,
+    label: "Domain Computers (d1.pseudoco.org\\\\Domain Computers)",
+    typeId: 3,
+    childCount: 3,
+    children: "https://management.api.umbrella.com/identity/v2/organizations/8176184/directory_group/1353331193/children",
+  });
+  eq(nested.id, "1353331193", "nested group id");
+  eq(nested.kind, "identityGroups", "nested group stays expandable");
+  eq(nested.name, "Domain Computers (d1.pseudoco.org\\\\Domain Computers)", "nested group keeps label");
+
+  const persisted = M.normalizeMemberEntry({
+    name: "Finance",
+    resolved: true,
+    members: [user, nested],
+  }, "Finance");
+  eq(persisted.members.map(m => m.name), [user.name, nested.name], "persist keeps child names");
 }
 
 // ---------------------------------------------------------------------------
