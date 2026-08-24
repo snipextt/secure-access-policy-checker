@@ -575,7 +575,7 @@ function resolveMemberLabel(member, memberMaps, lookups) {
     || lookupName(om.privateResourceGroups, id)
     || lookupName(lu.apps, id)
     || lookupName(lu.categories, id)
-    || id;
+    || "";
 }
 
 function isExpandableKind(kind) {
@@ -615,7 +615,8 @@ function renderMemberPopover(headerTitle, members, memberMaps, lookups, loading)
       const nested = Boolean(isExpandableKind(m.kind) || (childEntry && childEntry.members && childEntry.members.length));
       const chip = document.createElement("div");
       chip.className = "sec-mp-chip" + (nested ? " sec-mp-expandable" : "");
-      chip.textContent = resolveMemberLabel(m, memberMaps, lookups) + (nested ? "  ›" : "");
+      const label = resolveMemberLabel(m, memberMaps, lookups) || "Unnamed member";
+      chip.textContent = label + (nested ? "  ›" : "");
       if (nested) {
         chip.addEventListener("click", (event) => {
           event.preventDefault();
@@ -652,41 +653,21 @@ function openMemberPopover(anchorEl, title, kind, id, memberMaps, lookups) {
   }
   memberOpenKey = key;
   const cached = memberMaps[kind] && memberMaps[kind][String(id)];
-  renderMemberPopover(title, cached && cached.members, memberMaps, lookups, !(cached && cached.members));
+  const header = title || (cached && cached.name) || "Group members";
+  renderMemberPopover(header, cached && cached.members, memberMaps, lookups, !(cached && cached.members));
   showMemberPopover(anchorEl);
   const seq = ++memberRequestSeq;
   requestMembers(kind, id, (response) => {
     if (seq !== memberRequestSeq || memberOpenKey !== key) return;
     const members = (response && response.members) || [];
-    const name = (response && response.name) || title;
+    const resolvedName = resolveMemberLabel({ id, kind }, memberMaps, lookups);
+    const name = title || resolvedName || (response && response.name) || header;
     if (!memberMaps[kind]) memberMaps[kind] = {};
     memberMaps[kind][String(id)] = { name, members };
     currentMemberMaps = memberMaps;
     renderMemberPopover(name, members, memberMaps, lookups, false);
     showMemberPopover(anchorEl);
   });
-}
-
-// Expandable source/destination condition chips. Click opens a member
-// popover and resolves members on demand.
-function appendExpandableMemberChips(chipsWrap, items, memberMaps, lookups) {
-  for (const cs of items) {
-    const members = expansionForCondition(cs, memberMaps, lookups);
-    if (!members) continue;
-    for (const m of members) {
-      const chip = document.createElement("span");
-      chip.className = "sec-hp-chip sec-hp-expandable";
-      chip.textContent = m.label + "  ▾";
-      chip.title = "Click to expand members";
-      chip.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        clearTimeout(hoverHideTimer);
-        openMemberPopover(chip, m.label, m.kind, m.id, memberMaps, lookups);
-      });
-      chipsWrap.appendChild(chip);
-    }
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1349,16 +1330,28 @@ function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSumma
     const chipsWrap = document.createElement("div");
     chipsWrap.className = "sec-hp-chips sec-hp-condition-list";
     for (const cs of items) {
-      for (const line of conditionDisplayLines(cs)) {
+      const expandable = expansionForCondition(cs, currentMemberMaps, currentLookups) || [];
+      const lines = conditionDisplayLines(cs);
+      const count = Math.max(lines.length, expandable.length);
+      for (let i = 0; i < count; i++) {
+        const item = expandable[i];
+        const line = lines[i] || (item && item.label);
+        if (!line) continue;
         const chip = document.createElement("span");
-        chip.className = "sec-hp-chip";
-        chip.textContent = line;
+        chip.className = "sec-hp-chip" + (item ? " sec-hp-expandable" : "");
+        chip.textContent = line + (item ? "  ▾" : "");
+        if (item) {
+          chip.title = "Click to expand members";
+          chip.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            clearTimeout(hoverHideTimer);
+            openMemberPopover(chip, line, item.kind, item.id, currentMemberMaps, currentLookups);
+          });
+        }
         chipsWrap.appendChild(chip);
       }
     }
-    // Recursive expand: any group/list condition with stored membership gets
-    // its own expandable chip that drills into members (and nested groups).
-    appendExpandableMemberChips(chipsWrap, items, currentMemberMaps, currentLookups);
     body.appendChild(chipsWrap);
   };
   renderConditionGroup("Source", sourceConditions);
