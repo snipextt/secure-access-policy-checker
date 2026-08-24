@@ -1886,29 +1886,80 @@ function initEmbeddedPopup() {
 // Run on page load & watch SPA route re-hydration
 // ---------------------------------------------------------------------------
 
-function setupPersistence() {
+function isSecurePolicyPage(url) {
+  try {
+    const parsed = new URL(url || window.location.href);
+    if (parsed.hostname.toLowerCase() !== "dashboard.sse.cisco.com") return false;
+    return /\/secure\/policy(?:\/|$|\?|#)/.test(parsed.pathname);
+  } catch (_) {
+    return false;
+  }
+}
+
+function teardownPolicyCheckerUi() {
+  hideMemberPopover();
+  hideHoverPopover();
+  const toggleBtn = document.getElementById("sec-embed-toggle");
+  if (toggleBtn) toggleBtn.remove();
+  const panel = document.getElementById("sec-embed-panel");
+  if (panel) panel.remove();
+}
+
+function syncPolicyCheckerUi() {
+  if (!isSecurePolicyPage()) {
+    teardownPolicyCheckerUi();
+    return;
+  }
   initHoverPopover();
-  initEmbeddedPopup();
+  if (!document.getElementById("sec-embed-toggle") || !document.getElementById("sec-embed-panel")) {
+    initEmbeddedPopup();
+  }
+}
+
+function setupPersistence() {
+  syncPolicyCheckerUi();
 
   // Listen for messages from the popup (toolbar or embedded panel).
   // The popup sends HIGHLIGHT_RULE via chrome.tabs.sendMessage() after a
   // successful "Run Simulation" — this listener routes it to highlightRule().
-  if (!api || !api.runtime || !api.runtime.id) return;
-  api.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (msg && msg.type === "HIGHLIGHT_RULE") {
-      highlightRule(msg.ruleName, msg.matchedConditions);
-      sendResponse({ ok: true });
-    }
-  });
-
-  // Re-check on DOM mutations in case Cisco Angular SPA replaces body children
-  if (window.MutationObserver && document.body) {
-    const observer = new MutationObserver(() => {
-      if (!document.getElementById("sec-embed-toggle") && document.body) {
-        initEmbeddedPopup();
+  if (api && api.runtime && api.runtime.id && !window.__secPolicyCheckerMessages) {
+    window.__secPolicyCheckerMessages = true;
+    api.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+      if (msg && msg.type === "HIGHLIGHT_RULE") {
+        if (!isSecurePolicyPage()) {
+          sendResponse({ ok: false, reason: "not-policy-page" });
+          return;
+        }
+        highlightRule(msg.ruleName, msg.matchedConditions);
+        sendResponse({ ok: true });
       }
     });
-    observer.observe(document.body, { childList: true, subtree: false });
+  }
+
+  // Cisco's dashboard is an SPA. Re-check when the route or body children
+  // change so the checker appears only on /secure/policy and is torn down
+  // everywhere else.
+  if (!window.__secPolicyCheckerRouteWatch) {
+    window.__secPolicyCheckerRouteWatch = true;
+    window.addEventListener("popstate", syncPolicyCheckerUi);
+    window.addEventListener("hashchange", syncPolicyCheckerUi);
+    ["pushState", "replaceState"].forEach((method) => {
+      const original = history[method];
+      if (typeof original !== "function") return;
+      history[method] = function () {
+        const result = original.apply(this, arguments);
+        queueMicrotask(syncPolicyCheckerUi);
+        return result;
+      };
+    });
+    if (window.MutationObserver && document.documentElement) {
+      let debounceTimer = null;
+      const observer = new MutationObserver(() => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(syncPolicyCheckerUi, 150);
+      });
+      observer.observe(document.documentElement, { childList: true, subtree: true });
+    }
   }
 }
 

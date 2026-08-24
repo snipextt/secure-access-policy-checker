@@ -30,9 +30,32 @@ api.runtime.onStartup.addListener(() => {
   api.storage.session.get("__sw_keepalive").catch(() => {});
 });
 
+function isSecurePolicyUrl(rawUrl) {
+  try {
+    const parsed = new URL(rawUrl);
+    return parsed.hostname.toLowerCase() === "dashboard.sse.cisco.com"
+      && /\/secure\/policy(?:\/|$|\?|#)/.test(parsed.pathname);
+  } catch (_) {
+    return false;
+  }
+}
+
+async function syncToolbarPopup(tabId, rawUrl) {
+  if (!api.action || !tabId) return;
+  try {
+    if (isSecurePolicyUrl(rawUrl)) {
+      await api.action.setPopup({ tabId, popup: "popup/popup.html" });
+    } else {
+      await api.action.setPopup({ tabId, popup: "" });
+    }
+  } catch (_) {}
+}
+
 // Auto-inject only into a valid HTTPS Cisco dashboard URL. onUpdated also
 // fires for transient chrome:// and extension URLs; passing those to scripting
 // can produce an uncaught "Invalid URL" error during an extension reload.
+// Token sniffing stays on all dashboard routes so prefetch can start before
+// /secure/policy. The visible checker UI is gated in content-script.js.
 api.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   const rawUrl = tab.url || changeInfo.url;
   if (!rawUrl) return;
@@ -40,6 +63,7 @@ api.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   try { parsed = new URL(rawUrl); } catch { return; }
   const host = parsed.hostname.toLowerCase();
   if (parsed.protocol !== "https:" || !(host === "cisco.com" || host.endsWith(".cisco.com"))) return;
+  syncToolbarPopup(tabId, rawUrl);
   try {
     Promise.resolve(api.scripting.executeScript({
       target: { tabId },
@@ -49,6 +73,15 @@ api.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     // Chromium can synchronously reject an already-closed tab during reload.
   }
 });
+
+if (api.tabs && api.tabs.onActivated) {
+  api.tabs.onActivated.addListener(async (activeInfo) => {
+    try {
+      const tab = await api.tabs.get(activeInfo.tabId);
+      syncToolbarPopup(activeInfo.tabId, tab && tab.url);
+    } catch (_) {}
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Token storage
