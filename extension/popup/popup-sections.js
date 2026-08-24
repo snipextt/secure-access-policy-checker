@@ -544,10 +544,18 @@
         flex-shrink: 0;
       }
       .psc-np-chevron {
-        color: #94a3b8;
-        font-size: 16px;
-        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 12px;
+        height: 12px;
         flex-shrink: 0;
+        color: #94a3b8;
+      }
+      .psc-np-chevron svg {
+        display: block;
+        width: 8px;
+        height: 12px;
       }
       .psc-np-badge {
         flex-shrink: 0;
@@ -1132,6 +1140,12 @@
     return element;
   }
 
+  function chevronEl() {
+    const wrap = el("span", { class: "psc-np-chevron", "aria-hidden": "true" });
+    wrap.innerHTML = '<svg viewBox="0 0 8 12" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 1.5L6.5 6L2 10.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    return wrap;
+  }
+
   function showTooltip(evt, content) {
     let t = document.getElementById("psc-tooltip");
     if (!t) {
@@ -1553,7 +1567,7 @@
       row.appendChild(text);
       if (hasKids) {
         row.appendChild(el("span", { class: "psc-np-count" }, [String(nodeCount(node))]));
-        row.appendChild(el("span", { class: "psc-np-chevron" }, [">"]));
+        row.appendChild(chevronEl());
         if (enabled) {
           row.addEventListener("click", (evt) => {
             if (evt.target.closest("input[type=checkbox]")) return;
