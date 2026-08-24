@@ -874,9 +874,12 @@ function conditionKindFor(attributeName) {
 }
 
 function isIdentityGroupId(id, lookups) {
-  const typeId = lookups && lookups.sourceIdentityTypeIds && lookups.sourceIdentityTypeIds[String(id)];
-  if (typeId === undefined || typeId === null) return false;
-  return Boolean(IDENTITY_GROUP_TYPE_IDS[String(typeId)]);
+  const sid = String(id);
+  const typeId = lookups && lookups.sourceIdentityTypeIds && lookups.sourceIdentityTypeIds[sid];
+  if (typeId !== undefined && typeId !== null) return Boolean(IDENTITY_GROUP_TYPE_IDS[String(typeId)]);
+  // Fail closed: a named AD user / roaming computer / device is a leaf.
+  // Only expand when we know this id is a group type.
+  return false;
 }
 
 // Returns expandable member descriptors for a condition, or null if the
@@ -887,15 +890,15 @@ function expansionForCondition(cond, memberMaps, lookups) {
   const key = conditionKindFor(cond.raw.attributeName);
   if (!key) return null;
   const av = Array.isArray(cond.raw.attributeValue) ? cond.raw.attributeValue : [cond.raw.attributeValue];
-  const members = [];
+  const byId = {};
   for (const id of av) {
     if (id === undefined || id === null || id === "*" || String(id).toLowerCase() === "any") continue;
     const sid = String(id);
     if (key === "identityGroups" && !isIdentityGroupId(sid, lookups)) continue;
     const label = resolveMemberLabel({ id: sid, kind: key }, memberMaps || {}, lookups || {});
-    members.push({ id: sid, kind: key, label });
+    byId[sid] = { id: sid, kind: key, label };
   }
-  return members.length ? members : null;
+  return Object.keys(byId).length ? byId : null;
 }
 
 function summarizeConditions(rule, lookups) {
@@ -1388,11 +1391,14 @@ function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSumma
     const chipsWrap = document.createElement("div");
     chipsWrap.className = "sec-hp-chips sec-hp-condition-list";
     for (const cs of items) {
-      const expandable = expansionForCondition(cs, currentMemberMaps, currentLookups) || [];
+      const expandableById = expansionForCondition(cs, currentMemberMaps, currentLookups) || {};
       const lines = conditionDisplayLines(cs);
-      const count = Math.max(lines.length, expandable.length);
+      const ids = Array.isArray(cs.raw && cs.raw.attributeValue)
+        ? cs.raw.attributeValue.map(String)
+        : (cs.raw && cs.raw.attributeValue !== undefined ? [String(cs.raw.attributeValue)] : []);
+      const count = Math.max(lines.length, ids.length);
       for (let i = 0; i < count; i++) {
-        const item = expandable[i];
+        const item = expandableById[ids[i]] || null;
         const line = lines[i] || (item && item.label);
         if (!line) continue;
         const chip = document.createElement("span");

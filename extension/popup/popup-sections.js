@@ -1414,12 +1414,16 @@
       if (!input) return;
       const ids = collectTypeIds();
       const labels = [];
+      const keys = [];
       walk(tree, node => {
         if (!node.typeIds || !typeChecked[typeNodeKey(node)]) return;
         labels.push(node.label);
+        keys.push(typeNodeKey(node));
       });
       if (ids.length) input.dataset.selectedValue = ids.join(",");
       else delete input.dataset.selectedValue;
+      if (keys.length) input.dataset.selectedTypeKeys = keys.join(",");
+      else delete input.dataset.selectedTypeKeys;
       input.value = labels.join(", ");
     }
 
@@ -1786,18 +1790,50 @@
       return ids.slice();
     }
 
-    function restoreTypes(selected) {
-      const wanted = new Set(parseSelectedIds(selected || ""));
+    function restoreTypes(selected, labels, typeKeys) {
+      const wantedKeys = new Set(parseSelectedIds(typeKeys || ""));
+      const wantedLabels = new Set(parseSelectedIds(labels || "").map(part => part.toLowerCase()));
+      const wantedIds = new Set(parseSelectedIds(selected || ""));
+      const typeOnlyNodes = [];
+      const leafNodes = [];
       walk(tree, node => {
         if (!node.typeIds || !node.typeIds.length) return;
-        typeChecked[typeNodeKey(node)] = node.typeIds.some(id => wanted.has(String(id)));
+        typeChecked[typeNodeKey(node)] = false;
+        if (node.typeOnly) typeOnlyNodes.push(node);
+        else leafNodes.push(node);
       });
+      const preferKeys = wantedKeys.size > 0;
+      const preferLabels = !preferKeys && wantedLabels.size > 0;
+      const mark = (nodes) => {
+        nodes.forEach(node => {
+          const key = typeNodeKey(node);
+          if (preferKeys) typeChecked[key] = wantedKeys.has(key);
+          else if (preferLabels) typeChecked[key] = wantedLabels.has(String(node.label || "").toLowerCase());
+        });
+      };
+      if (preferKeys || preferLabels) {
+        mark(typeOnlyNodes.concat(leafNodes));
+      } else {
+        // Legacy drafts only stored type IDs. Prefer the Any-* parent so
+        // shared IDs do not also light up every sibling catalog.
+        typeOnlyNodes.forEach(node => {
+          typeChecked[typeNodeKey(node)] = node.typeIds.every(id => wantedIds.has(String(id)));
+        });
+        const covered = new Set();
+        typeOnlyNodes.forEach(node => {
+          if (!typeChecked[typeNodeKey(node)]) return;
+          node.typeIds.forEach(id => covered.add(String(id)));
+        });
+        leafNodes.forEach(node => {
+          typeChecked[typeNodeKey(node)] = node.typeIds.some(id => wantedIds.has(String(id)) && !covered.has(String(id)));
+        });
+      }
       syncTypeHidden();
     }
 
     function restore(fieldKey, value, selected) {
       if (fieldKey === "identityTypes") {
-        restoreTypes(selected);
+        restoreTypes(selected, value, hiddenInputs.identityTypes && hiddenInputs.identityTypes.dataset.selectedTypeKeys);
         renderChips();
         return;
       }
@@ -1951,7 +1987,11 @@
       const next = {};
       for (const field of fields) {
         if (!field.id) continue;
-        next[field.id] = { value: field.value || "", selected: field.dataset && field.dataset.selectedValue || "" };
+        next[field.id] = {
+          value: field.value || "",
+          selected: field.dataset && field.dataset.selectedValue || "",
+          typeKeys: field.dataset && field.dataset.selectedTypeKeys || "",
+        };
       }
       try { sessionStorage.setItem(draftStorageKey, JSON.stringify(next)); } catch (_) {}
     };
@@ -1965,6 +2005,9 @@
         if (!field) continue;
         field.value = saved && saved.value || "";
         if (saved && saved.selected) field.dataset.selectedValue = saved.selected;
+        else delete field.dataset.selectedValue;
+        if (saved && saved.typeKeys) field.dataset.selectedTypeKeys = saved.typeKeys;
+        else delete field.dataset.selectedTypeKeys;
       }
     };
     panel.addEventListener("input", persistDraft);
