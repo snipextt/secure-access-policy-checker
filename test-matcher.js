@@ -378,6 +378,10 @@ console.log("\n=== Group 5: Identity TYPE matching ===");
     "Any AD User: matching selected user → match", lookups);
   assertMatch(rule, { source: "10.0.0.1", destination: "any.com", sourceUserId: "other-user" }, false,
     "Any AD User: selected roaming computer → no match", lookups);
+  assertMatch(rule, { source: "10.0.0.1", destination: "any.com", identityTypeIds: [7] }, true,
+    "Any User checkbox: type 7 matches identity_type_ids", lookups);
+  assertMatch(rule, { source: "10.0.0.1", destination: "any.com", identityTypeIds: [43] }, false,
+    "Any User checkbox: unmatched type 43 does not match", lookups);
 }
 
 // ---------------------------------------------------------------------------
@@ -551,6 +555,16 @@ console.log("\n=== Group 8: First-match-wins (matchPolicy) ===");
     source: "10.0.0.1", destination: "any.com", applicationId: 500, preferredAction: "isolate",
   });
   assert(isolateOnly && isolateOnly.noMatch, "preferredAction isolate: no isolate rule means no match");
+
+  const warnRules = [
+    makeRule(3, "Warn destinations", "warn", [sourceAll(), destAll()], { priority: 1 }),
+    makeRule(4, "Allow leftover", "allow", [sourceAll(), destAll()], { priority: 2 }),
+  ];
+  const warnViaIsolate = Matcher.matchPolicy(warnRules, {
+    source: "10.0.0.1", destination: "any.com", preferredAction: "isolate",
+  });
+  assert(warnViaIsolate && warnViaIsolate.rule.ruleName === "Warn destinations",
+    "preferredAction isolate: Cisco Warn Isolate card also matches warn");
 }
 
 {

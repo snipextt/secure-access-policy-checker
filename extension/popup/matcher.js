@@ -442,18 +442,21 @@
     let selected;
     if (an === "umbrella.source.identity_type_ids") {
       const typeMap = lookups.sourceIdentityTypeIds || {};
-      selected = flattenSelectedIds([
-        testInput.sourceUserId, testInput.sourceRoamingId, testInput.sourceGroupId,
+      const fromCatalogs = flattenSelectedIds([
+        testInput.sourceUserId, testInput.sourceGsuiteUserId, testInput.sourceGsuiteOuId,
+        testInput.sourceRoamingId, testInput.sourceGroupId,
         testInput.sourceEndpointDeviceId, testInput.sourceNetworkId, testInput.sourceSiteId,
         testInput.sourceSecurityGroupTagId, testInput.sourceCatalystSdwanId,
         testInput.sourceMobileDeviceId, testInput.sourceChromebookId,
         testInput.sourceZtnaClientId, testInput.sourceTunnelGroupId,
         testInput.sourceNetworkDeviceId,
       ]).map(id => id && typeMap[String(id)]).filter(Boolean);
+      selected = fromCatalogs.concat(flattenSelectedIds(testInput.identityTypeIds));
     } else {
       selected =
         an === "umbrella.source.identity_ids" ? flattenSelectedIds([
-          testInput.sourceUserId, testInput.sourceRoamingId, testInput.sourceGroupId,
+          testInput.sourceUserId, testInput.sourceGsuiteUserId, testInput.sourceGsuiteOuId,
+          testInput.sourceRoamingId, testInput.sourceGroupId,
           testInput.sourceEndpointDeviceId, testInput.sourceNetworkId, testInput.sourceSiteId,
           testInput.sourceSecurityGroupTagId, testInput.sourceCatalystSdwanId,
           testInput.sourceTunnelGroupId, testInput.sourceMobileDeviceId,
@@ -464,8 +467,10 @@
         an.includes("private_resource_types") ? flattenSelectedIds(testInput.privateResourceType) :
         an.includes("private_resource") ? flattenSelectedIds(testInput.privateResourceId) :
         an.includes("destination_list") ? flattenSelectedIds(testInput.destinationListId) :
-        an.includes("networkobject") ? flattenSelectedIds(testInput.networkObjectId) :
+        an.includes("networkobjectgroup") ? flattenSelectedIds([testInput.networkObjectGroupId, testInput.sourceNetworkObjectGroupId]) :
+        an.includes("networkobject") ? flattenSelectedIds([testInput.networkObjectId, testInput.sourceNetworkObjectId]) :
         an.includes("serviceobjectgroup") ? flattenSelectedIds(testInput.serviceObjectGroupId) :
+        an.includes("serviceobject") ? flattenSelectedIds(testInput.serviceObjectId) :
         an.includes("application_list") ? flattenSelectedIds(testInput.applicationListId) :
         an.includes("category_list") ? flattenSelectedIds(testInput.categoryListId) :
         an.includes("application_category") ? flattenSelectedIds(testInput.applicationCategoryId) :
@@ -777,9 +782,10 @@
         const typeVal = (testInput && testInput.identityTypeId !== undefined && testInput.identityTypeId !== null)
           ? testInput.identityTypeId
           : (tvObj && tvObj.identityTypeId);
-        if (typeVal !== null && typeVal !== undefined && typeVal !== "") {
-          testIds.push(parseInt(typeVal, 10));
-        }
+        flattenSelectedIds([typeVal, testInput && testInput.identityTypeIds]).forEach(id => {
+          const parsed = parseInt(id, 10);
+          if (!Number.isNaN(parsed)) testIds.push(parsed);
+        });
       } else if (an.includes("private_resource")) {
         const prVal = (testInput && testInput.privateResourceId) !== undefined ? testInput.privateResourceId : privateResourceId;
         if (prVal !== null && prVal !== undefined && prVal !== "") {
@@ -955,6 +961,9 @@
       source = "", 
       sourcePort = null,
       sourceUserId = null,
+      identityTypeIds = null,
+      sourceGsuiteUserId = null,
+      sourceGsuiteOuId = null,
       sourceRoamingId = null,
       sourceGroupId = null,
       sourceEndpointDeviceId = null,
@@ -974,6 +983,8 @@
       privateResourceGroupId = null,
       destinationListId = null,
       networkObjectId = null,
+      networkObjectGroupId = null,
+      serviceObjectId = null,
       serviceObjectGroupId = null,
       applicationId = null,
       protocolId = null,
@@ -990,7 +1001,7 @@
     } = testInput;
     const hasSelected = (value) => flattenSelectedIds(value).length > 0;
     const hasSource = source.trim() !== "" || [
-      sourceUserId, sourceRoamingId, sourceGroupId, sourceEndpointDeviceId,
+      sourceUserId, identityTypeIds, sourceGsuiteUserId, sourceGsuiteOuId, sourceRoamingId, sourceGroupId, sourceEndpointDeviceId,
       sourceNetworkId, sourceSiteId, sourceSecurityGroupTagId,
       sourceCatalystSdwanId, sourceTunnelGroupId,
       sourceNetworkObjectId, sourceNetworkObjectGroupId,
@@ -999,7 +1010,7 @@
     ].some(hasSelected);
     const hasDestination = destination.trim() !== "" || [
       destinationScope, privateResourceId, privateResourceGroupId,
-      destinationListId, networkObjectId, serviceObjectGroupId, applicationId,
+      destinationListId, networkObjectId, networkObjectGroupId, serviceObjectId, serviceObjectGroupId, applicationId,
       protocolId, enterpriseApplicationId, applicationListId, applicationCategoryId, contentCategoryId, categoryListId, geolocation,
       appRiskProfileId, privateResourceType,
     ].some(hasSelected);
@@ -1150,13 +1161,20 @@
       return pa - pb;
     });
 
+    // Cisco's "Warn Isolate" card covers both isolate and warn rule actions
+    // observed in org 8176184 (isolate + one warn). Allow/block stay exact.
+    function actionsMatch(preferred, actual) {
+      if (preferred === actual) return true;
+      return preferred === "isolate" && (actual === "isolate" || actual === "warn");
+    }
+
     const preferredAction = String(testInput.preferredAction || "").trim().toLowerCase();
     const rejected = [];
     for (const rule of sorted) {
       const result = matchesRule(rule, testInput, lookups);
       if (result.matched) {
         const ruleAction = String(rule.ruleAction || rule.action || "").toLowerCase();
-        if (preferredAction && ruleAction && ruleAction !== preferredAction) {
+        if (preferredAction && ruleAction && !actionsMatch(preferredAction, ruleAction)) {
           rejected.push({
             ruleId: rule.ruleId !== undefined ? rule.ruleId : rule.id,
             ruleName: rule.ruleName || rule.name || "Unnamed Rule",

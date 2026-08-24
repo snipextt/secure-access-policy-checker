@@ -263,6 +263,7 @@ document.addEventListener("DOMContentLoaded", () => {
       "sourceUsers", "sourceRoaming", "sourceGroups", "sourceEndpointDevices",
       "sourceNetworks", "sourceSites", "sourceSecurityGroupTags", "sourceCatalystSdwan",
       "sourceTunnelGroups", "sourceNetworkDevices", "sourceMobileDevices", "sourceChromebooks", "sourceZtnaClients",
+      "sourceGsuiteUsers", "sourceGsuiteOus",
       "destinationScopes",
     ];
     // Render immediately with available maps. Individual selectors convey

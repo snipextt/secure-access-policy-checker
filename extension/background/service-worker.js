@@ -1801,6 +1801,8 @@ const FULL_CATALOGS = [
   { key: "sourceMobileDevices", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/mobile_device", dataKey: "data", idKey: "id", labelKey: "label", paged: true, sourcePolicyTypeId: 36 },
   { key: "sourceChromebooks", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/chromebook_user", dataKey: "data", idKey: "id", labelKey: "label", paged: true, sourcePolicyTypeId: 38 },
   { key: "sourceZtnaClients", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/ztna_client", dataKey: "data", idKey: "id", labelKey: "label", paged: true, sourcePolicyTypeId: 57 },
+  { key: "sourceGsuiteUsers", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/gsuite_user", dataKey: "data", idKey: "id", labelKey: "label", paged: true, sourcePolicyTypeId: 43 },
+  { key: "sourceGsuiteOus", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/gsuite_group", dataKey: "data", idKey: "id", labelKey: "label", paged: true, sourcePolicyTypeId: 45 },
   { key: "applications", tokenKey: "opendns_token", path: "v3/organizations/{orgId}/applications?outputFormat=jsonHttpStatusOverride", dataKey: "data", idKey: "id", labelKey: "name" },
   { key: "enterpriseApplications", tokenKey: "opendns_token", path: "v3/organizations/{orgId}/enterpriseapplications", dataKey: "data", idKey: "id", labelKey: "name" },
   { key: "applicationCategories", tokenKey: "opendns_token", path: "v3/organizations/{orgId}/applicationcategories?optionalFields=%5B%22applicationsCount%22%5D&outputFormat=jsonHttpStatusOverride", dataKey: "data", idKey: "id", labelKey: "name" },
