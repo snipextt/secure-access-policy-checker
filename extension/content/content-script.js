@@ -1227,7 +1227,23 @@ function appendMatchReasonSection(body, reasons) {
   body.appendChild(wrap);
 }
 
-function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSummary, testMatchReasons) {
+function hoverSideForAnchor(anchorEl) {
+  if (!anchorEl || !anchorEl.closest) return "all";
+  if (anchorEl.closest('[data-testid="policy-source-column"]')) return "source";
+  if (anchorEl.closest('[data-testid="policy-destination-item"]')) return "destination";
+  const cell = anchorEl.closest("td");
+  const row = anchorEl.closest("tr");
+  const table = row && row.closest("table");
+  if (!cell || !row || !table) return "all";
+  const headers = Array.from(table.querySelectorAll("thead th, thead [role='columnheader']"));
+  const index = Array.from(row.children).indexOf(cell);
+  const headerText = ((headers[index] && (headers[index].innerText || headers[index].textContent)) || "").trim().toLowerCase();
+  if (/^source/.test(headerText) || index === 2) return "source";
+  if (/^dest/.test(headerText) || index === 3) return "destination";
+  return "all";
+}
+
+function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSummary, testMatchReasons, hoverSide) {
   hideMemberPopover();
   popover.innerHTML = "";
 
@@ -1394,9 +1410,10 @@ function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSumma
     }
     body.appendChild(chipsWrap);
   };
-  renderConditionGroup("Source", sourceConditions);
-  renderConditionGroup("Destination", destinationConditions);
-  renderConditionGroup("Posture / Security Profile", postureConditions);
+  const side = hoverSide === "source" || hoverSide === "destination" ? hoverSide : "all";
+  if (side !== "destination") renderConditionGroup("Source", sourceConditions);
+  if (side !== "source") renderConditionGroup("Destination", destinationConditions);
+  if (side === "all") renderConditionGroup("Posture / Security Profile", postureConditions);
 
   // --- Security profile chips (IPS, AMP, TLS, DLP) ---
   if (rule.security_profiles) {
@@ -1460,6 +1477,7 @@ function showPopoverForRule(anchorEl, ruleName, testMatchReasons, autoHideMs) {
   const anchorRect = anchorEl.getBoundingClientRect();
   const popover = getHoverPopoverEl();
   const isTriggered = Array.isArray(testMatchReasons) && testMatchReasons.length > 0;
+  const hoverSide = isTriggered ? "all" : hoverSideForAnchor(anchorEl);
 
   // Clean up any previous triggered-dismiss listener
   if (triggeredDismissListener) {
@@ -1519,7 +1537,7 @@ function showPopoverForRule(anchorEl, ruleName, testMatchReasons, autoHideMs) {
   // For triggered (simulation) popovers: show immediately with match reasons,
   // then enrich with rules/findings data if it arrives in time.
   if (isTriggered) {
-    renderHoverPopoverContent(popover, ruleName, null, null, null, testMatchReasons);
+    renderHoverPopoverContent(popover, ruleName, null, null, null, testMatchReasons, hoverSide);
     reveal();
   } else {
     renderHoverSkeleton();
@@ -1533,7 +1551,7 @@ function showPopoverForRule(anchorEl, ruleName, testMatchReasons, autoHideMs) {
     const ruleFindings = findings.filter(f => f.ruleName.trim().toLowerCase() === lowerName);
 
     if (rule || ruleFindings.length > 0) {
-      renderHoverPopoverContent(popover, ruleName, rule, ruleFindings, null, testMatchReasons);
+      renderHoverPopoverContent(popover, ruleName, rule, ruleFindings, null, testMatchReasons, hoverSide);
       // Keep the native cursor beside the card rather than anchoring to the
       // complete table-row rectangle, which can be far from where the user is
       // reading. Triggered popovers still use their highlight row rectangle.
@@ -1546,13 +1564,13 @@ function showPopoverForRule(anchorEl, ruleName, testMatchReasons, autoHideMs) {
     if (!isTriggered) {
       // Hover-only: only show after data loads
       if (rules.length === 0 && findings.length === 0) {
-        renderHoverPopoverContent(popover, ruleName, null, null, null, testMatchReasons);
+        renderHoverPopoverContent(popover, ruleName, null, null, null, testMatchReasons, hoverSide);
         reveal();
         return;
       }
 
       if (!rule) {
-        renderHoverPopoverContent(popover, ruleName, null, ruleFindings, null, testMatchReasons);
+        renderHoverPopoverContent(popover, ruleName, null, ruleFindings, null, testMatchReasons, hoverSide);
         reveal();
         return;
       }
@@ -1579,7 +1597,7 @@ function showPopoverForRule(anchorEl, ruleName, testMatchReasons, autoHideMs) {
       currentMemberMaps = memberMaps || {};
       currentLookups = lookups;
       const matchSummary = summarizeConditions(rule, lookups);
-      renderHoverPopoverContent(popover, ruleName, rule, ruleFindings, matchSummary, testMatchReasons);
+      renderHoverPopoverContent(popover, ruleName, rule, ruleFindings, matchSummary, testMatchReasons, hoverSide);
       reveal();
     });
   });
@@ -1609,20 +1627,6 @@ function policyConditionCells() {
     }
   }
   return cells;
-}
-
-function handlePolicyColumnMouseEnter(event) {
-  const cell = event.currentTarget;
-  clearTimeout(hoverHideTimer);
-  hoverPointer = { x: event.clientX, y: event.clientY };
-  const row = cell.closest("tr");
-  if (!row) return;
-  const ruleName = getRuleName(row);
-  if (ruleName && ruleName !== "unknown") showPopoverForRule(cell, ruleName, null, undefined);
-}
-
-function handlePolicyColumnMouseLeave() {
-  scheduleHideHoverPopover();
 }
 
 function handlePolicyColumnMouseEnter(event) {

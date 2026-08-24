@@ -1852,7 +1852,11 @@ function normalizeMemberEntry(entry, fallbackName) {
         .map((m) => (m && m.id !== undefined ? { id: String(m.id), kind: m.kind } : (m && m.value !== undefined ? { value: m.value, kind: m.kind } : null)))
         .filter(Boolean)
     : [];
-  return { name, members, resolved: entry.resolved !== false };
+  // Collection endpoints for dest lists / AD groups / networks have no
+  // members. Keep those as unresolved names so click-to-expand still hits
+  // the HAR per-id destinations/children URLs.
+  const resolved = entry.resolved === true || (entry.resolved !== false && members.length > 0);
+  return { name, members, resolved };
 }
 
 function getCachedMembers(maps, kind, id) {
@@ -2032,6 +2036,33 @@ function parseMembership(json, key) {
   }).filter(Boolean);
 }
 
+function classifyPerIdMember(kind, row) {
+  if (kind === "destinationLists") {
+    const value = typeof row === "string" ? row : (row && (row.destination || row.domain || row.value || row.name));
+    return value ? { value: String(value), kind: "fqdn" } : null;
+  }
+  if (!row || row.id === undefined) return null;
+  const nested = row.type === "directory_group" || Number(row.childCount) > 0 || (typeof row.children === "string" && /\/children/.test(row.children));
+  return {
+    id: String(row.id),
+    kind: nested ? "identityGroups" : "identity",
+    name: row.label || row.name || String(row.id),
+  };
+}
+
+function perIdMemberUrl(kind, orgId, id, page) {
+  if (kind === "destinationLists") {
+    return `https://api.opendns.com/v3/organizations/${orgId}/destinationlists/${id}/destinations?page=${page}&outputFormat=jsonHttpStatusOverride&optionalFields={meta:%27meta%27}`;
+  }
+  if (kind === "identityGroups") {
+    return `https://management.api.umbrella.com/identity/v2/organizations/${orgId}/directory_group/${id}/children?offset=${(page - 1) * 100}&limit=100`;
+  }
+  if (kind === "sourceNetworks") {
+    return `https://management.api.umbrella.com/identity/v2/organizations/${orgId}/network/${id}/children?offset=${(page - 1) * 100}&limit=100`;
+  }
+  return null;
+}
+
 // HAR-backed per-id member fetch. Destination lists do not include members
 // on the collection endpoint; Cisco loads
 // /destinationlists/{id}/destinations. AD groups expose a children URL, not
@@ -2041,43 +2072,35 @@ async function fetchMembersById(kind, id, orgId, tabId, existing) {
     kind === "destinationLists" ? "opendns_token" :
     (kind === "identityGroups" || kind === "sourceNetworks") ? "mgmt_authz_token" :
     null;
-  if (!tokenKey) return existing || { name: String(id), members: [], resolved: true };
+  if (!tokenKey) return existing || { name: String(id), members: [], resolved: false };
   const tokenObj = await getFreshToken(tokenKey, tabId);
-  if (!tokenObj) return existing || { name: String(id), members: [], resolved: true };
+  if (!tokenObj) return existing || { name: String(id), members: [], resolved: false };
 
-  let url = null;
-  if (kind === "destinationLists") {
-    url = `https://api.opendns.com/v3/organizations/${orgId}/destinationlists/${id}/destinations?page=1&outputFormat=jsonHttpStatusOverride&optionalFields={meta:%27meta%27}`;
-  } else if (kind === "identityGroups") {
-    url = `https://management.api.umbrella.com/identity/v2/organizations/${orgId}/directory_group/${id}/children?offset=0&limit=100`;
-  } else if (kind === "sourceNetworks") {
-    url = `https://management.api.umbrella.com/identity/v2/organizations/${orgId}/network/${id}/children?offset=0&limit=100`;
-  }
-  if (!url) return existing || { name: String(id), members: [], resolved: true };
-
-  const response = await fetch(url, { headers: membershipAuthHeaders(tokenObj.token) });
-  if (!response.ok) {
-    logEvent("membership", "per-id non-OK", { kind, id, status: response.status });
-    return existing || { name: String(id), members: [], resolved: true };
-  }
-  const json = await response.json();
-  const rows = Array.isArray(json) ? json : (json.data || json.items || json.results || []);
-  let members = [];
-  if (kind === "destinationLists") {
-    members = rows.map((row) => {
-      const value = typeof row === "string" ? row : (row && (row.destination || row.domain || row.value || row.name));
-      return value ? { value: String(value), kind: "fqdn" } : null;
-    }).filter(Boolean);
-  } else {
-    members = rows.map((row) => {
-      if (!row || row.id === undefined) return null;
-      const nested = row.type === "directory_group" || Number(row.childCount) > 0 || (typeof row.children === "string" && /\/children/.test(row.children));
-      return {
-        id: String(row.id),
-        kind: nested ? "identityGroups" : "identity",
-        name: row.label || row.name || String(row.id),
-      };
-    }).filter(Boolean);
+  const members = [];
+  let page = 1;
+  const maxPages = 40;
+  while (page <= maxPages) {
+    const url = perIdMemberUrl(kind, orgId, id, page);
+    if (!url) return existing || { name: String(id), members: [], resolved: false };
+    const response = await fetch(url, { headers: membershipAuthHeaders(tokenObj.token) });
+    if (!response.ok) {
+      logEvent("membership", "per-id non-OK", { kind, id, status: response.status, page });
+      if (page === 1) return existing || { name: String(id), members: [], resolved: false };
+      break;
+    }
+    const json = await response.json();
+    const rows = Array.isArray(json) ? json : (json.data || json.items || json.results || []);
+    rows.forEach((row) => {
+      const member = classifyPerIdMember(kind, row);
+      if (member) members.push(member);
+    });
+    const meta = json && json.meta;
+    const total = meta && Number(meta.total);
+    const limit = (meta && Number(meta.limit)) || (kind === "destinationLists" ? 25 : 100);
+    if (!rows.length) break;
+    if (Number.isFinite(total) && members.length >= total) break;
+    if (rows.length < limit) break;
+    page += 1;
   }
   return {
     name: (existing && existing.name) || String(id),
@@ -2127,7 +2150,7 @@ async function resolveOneMembership(kind, id, orgId, tabId) {
       maps[kind] = kindMap;
       entry = getCachedMembers(maps, kind, id);
     }
-    if (!entry) entry = { name: String(id), members: [], resolved: true };
+    if (!entry) entry = { name: String(id), members: [], resolved: false };
     if (!maps[kind]) maps[kind] = {};
     maps[kind][String(id)] = entry;
     await persistMemberMaps({ [kind]: { [String(id)]: entry } });
@@ -2162,6 +2185,14 @@ async function resolveMembership(orgId, tabId, rules) {
     frontier = [];
     await Promise.all(Object.keys(byKind).map(async (key) => {
       try {
+        if (key === "destinationLists" || key === "identityGroups" || key === "sourceNetworks") {
+          for (const id of byKind[key]) {
+            const entry = await fetchMembersById(key, id, orgId, tabId, memberMaps[key] && memberMaps[key][String(id)]);
+            if (!memberMaps[key]) memberMaps[key] = {};
+            memberMaps[key][String(id)] = entry;
+          }
+          return;
+        }
         const kindMap = await fetchMembershipKind(key, orgId, tabId, memberMaps);
         memberMaps[key] = Object.assign({}, memberMaps[key] || {}, kindMap);
         for (const id of byKind[key]) {

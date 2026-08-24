@@ -53,6 +53,10 @@ global.__membership = {
   _classifyMember,
   _extractMemberList,
   parseMembership,
+  classifyPerIdMember,
+  perIdMemberUrl,
+  normalizeMemberEntry,
+  getCachedMembers,
 };
 `;
 // The helpers are declared with `function`/`const` at top level, so they're
@@ -171,6 +175,24 @@ console.log("\n=== Group 5b: HAR destination object members ===");
 {
   const classified = M._classifyMember({ id: "36", destination: "ebay.com", type: "domain" }, "destinationLists");
   eq(classified, { value: "ebay.com", kind: "fqdn" }, "HAR destination object → fqdn value");
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n=== Group 5c: per-id dest-list destinations stay unresolved until fetched ===");
+{
+  const emptyCollection = M.normalizeMemberEntry({ id: "18147945", name: "Social Media", members: [] }, "18147945");
+  eq(emptyCollection.resolved, false, "collection dest-list with no members is unresolved");
+  assert(M.getCachedMembers({ destinationLists: { "18147945": emptyCollection } }, "destinationLists", "18147945") === null,
+    "unresolved dest-list is not treated as cached members");
+
+  const fromHar = M.classifyPerIdMember("destinationLists", { id: "34", destination: "facebook.com", type: "domain" });
+  eq(fromHar, { value: "facebook.com", kind: "fqdn" }, "per-id dest row → fqdn value");
+  const url = M.perIdMemberUrl("destinationLists", "8176184", "18147945", 1);
+  assert(/destinationlists\/18147945\/destinations\?page=1/.test(url), "per-id dest-list URL matches HAR");
+
+  const resolved = M.normalizeMemberEntry({ name: "Social Media", members: [fromHar], resolved: true }, "18147945");
+  eq(resolved.resolved, true, "per-id dest-list with members is resolved");
+  eq(resolved.members.map(m => m.value), ["facebook.com"], "resolved dest-list keeps fqdn members");
 }
 
 // ---------------------------------------------------------------------------
