@@ -384,14 +384,141 @@
       }
       .psc-dropdown-list li:hover { background: #f1f5f9; color: #0f172a; }
 
-      /* Cisco-style nested catalog picker */
-      .psc-np {
+      .psc-action-row {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        width: 100%;
+      }
+      .psc-action-card {
+        border: 1px solid #cbd5e1;
+        background: #ffffff;
+        color: #0f172a;
+        padding: 14px 10px;
+        font-size: 13px;
+        font-weight: 600;
+        font-family: var(--hbr-font-family);
+        cursor: pointer;
+        text-align: center;
+      }
+      .psc-action-card:hover { background: #f8fafc; }
+      .psc-action-card.is-selected {
+        border-color: #0f172a;
+        box-shadow: inset 0 0 0 1px #0f172a;
+        background: #f8fafc;
+      }
+      .psc-cb {
         display: flex;
         flex-direction: column;
+        gap: 6px;
+        position: relative;
+        min-width: 0;
+      }
+      .psc-cb-label {
+        font-size: 12px;
+        font-weight: 600;
+        color: #0f172a;
+        font-family: var(--hbr-font-family);
+      }
+      .psc-cb-trigger {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 36px;
+        padding: 5px 8px;
         border: 1px solid #cbd5e1;
+        background: #ffffff;
+        cursor: text;
+        width: 100%;
+      }
+      .psc-cb.is-open .psc-cb-trigger {
+        border-color: #0f172a;
+        box-shadow: 0 0 0 1px #0f172a;
+      }
+      .psc-cb-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        flex: 1;
+        min-width: 0;
+        align-items: center;
+      }
+      .psc-cb-placeholder {
+        color: #94a3b8;
+        font-size: 12px;
+      }
+      .psc-cb-caret {
+        color: #64748b;
+        font-size: 10px;
+        flex-shrink: 0;
+      }
+      .psc-cb-flyout {
+        display: none;
+        position: absolute;
+        top: calc(100% + 2px);
+        left: 0;
+        right: 0;
+        z-index: 40;
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+      }
+      .psc-cb.is-open .psc-cb-flyout { display: block; }
+      .psc-cb-tabs {
+        display: flex;
+        border-bottom: 1px solid #e2e8f0;
+      }
+      .psc-cb-tab {
+        flex: 1;
+        background: none;
+        border: none;
+        border-bottom: 2px solid transparent;
+        padding: 10px 8px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #64748b;
+        cursor: pointer;
+        font-family: var(--hbr-font-family);
+      }
+      .psc-cb-tab.is-active {
+        color: #0f172a;
+        border-bottom-color: #0f172a;
+      }
+      .psc-cb-add {
+        display: none;
+        padding: 10px;
+        gap: 8px;
+      }
+      .psc-cb-add.is-active { display: flex; }
+      .psc-cb-add input {
+        flex: 1;
+        min-width: 0;
+        padding: 7px 10px;
+        border: 1px solid #cbd5e1;
+        font-size: 12px;
+        font-family: var(--hbr-font-family);
+        color: #0f172a;
+        background: #ffffff;
+      }
+      .psc-cb-add button {
+        background: #0f172a;
+        color: #ffffff;
+        border: none;
+        padding: 7px 12px;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+        font-family: var(--hbr-font-family);
+      }
+
+      /* Cisco-style nested catalog picker */
+      .psc-np {
+        display: none;
+        flex-direction: column;
         background: #ffffff;
         min-width: 0;
       }
+      .psc-np.is-active { display: flex; }
       .psc-np-search {
         padding: 8px;
         border-bottom: 1px solid #e2e8f0;
@@ -1082,10 +1209,20 @@
     return String(raw).split(",").map(s => s.trim()).filter(Boolean);
   }
 
-  // In-place Cisco drill-down: search, breadcrumb, category counts/chevrons,
-  // checkbox leaves, type badges. Each leaf writes the same hidden field ids
-  // the matcher already consumes (psc-src-users, psc-destlist, …).
-  function createNestedCatalogPicker({ idPrefix, rootLabel, tree, getFieldState }) {
+  // Cisco From/To combobox: chips in one field, flyout with Select / Add tabs,
+  // category counts, chevrons, checkbox leaves. Hidden field ids stay the
+  // same ones the matcher already consumes (psc-src-users, psc-destlist, …).
+  function createNestedCatalogPicker({
+    idPrefix,
+    rootLabel,
+    tree,
+    getFieldState,
+    addressInputId,
+    addressPlaceholder,
+    selectTabLabel,
+    addTabLabel,
+    addPlaceholder,
+  }) {
     const selectedByField = {};
     const hiddenInputs = {};
     const facades = {};
@@ -1112,9 +1249,20 @@
       hiddenInputs[node.fieldKey] = input;
     });
 
-    const wrap = el("div", { class: "psc-np-wrap" });
-    const chips = el("div", { class: "psc-np-chips" });
-    const panel = el("div", { class: "psc-np" });
+    const wrap = el("div", { class: "psc-cb", id: idPrefix + "-cb" });
+    const trigger = el("div", { class: "psc-cb-trigger" });
+    const chips = el("div", { class: "psc-cb-chips" });
+    const placeholder = el("span", { class: "psc-cb-placeholder" }, [addressPlaceholder || "Select or add"]);
+    const caret = el("span", { class: "psc-cb-caret" }, ["▾"]);
+    trigger.appendChild(chips);
+    trigger.appendChild(caret);
+
+    const flyout = el("div", { class: "psc-cb-flyout" });
+    const selectTab = el("button", { type: "button", class: "psc-cb-tab is-active" }, [selectTabLabel || "Select"]);
+    const addTab = el("button", { type: "button", class: "psc-cb-tab" }, [addTabLabel || "Add"]);
+    flyout.appendChild(el("div", { class: "psc-cb-tabs" }, [selectTab, addTab]));
+
+    const panel = el("div", { class: "psc-np is-active" });
     const search = el("input", {
       id: idPrefix + "-search",
       type: "text",
@@ -1126,10 +1274,23 @@
     panel.appendChild(el("div", { class: "psc-np-search" }, [search]));
     panel.appendChild(crumb);
     panel.appendChild(list);
+
+    const addressInput = el("input", {
+      id: addressInputId,
+      type: "text",
+      placeholder: addPlaceholder || addressPlaceholder || "",
+      autocomplete: "off",
+    });
+    const addBtn = el("button", { type: "button" }, ["Add"]);
+    const addPane = el("div", { class: "psc-cb-add" }, [addressInput, addBtn]);
+
+    flyout.appendChild(panel);
+    flyout.appendChild(addPane);
     const hiddenBox = el("div", { class: "psc-np-hidden" });
     Object.values(hiddenInputs).forEach(input => hiddenBox.appendChild(input));
-    wrap.appendChild(chips);
-    wrap.appendChild(panel);
+    wrap.appendChild(el("label", { class: "psc-cb-label" }, [rootLabel]));
+    wrap.appendChild(trigger);
+    wrap.appendChild(flyout);
     wrap.appendChild(hiddenBox);
 
     let path = [];
@@ -1175,6 +1336,11 @@
       wrap.dispatchEvent(new Event("change", { bubbles: true }));
     }
 
+    function hasAnySelection() {
+      if (addressInput.value.trim()) return true;
+      return Object.keys(selectedByField).some(key => selectedIds(key).length > 0);
+    }
+
     function renderChips() {
       chips.innerHTML = "";
       walk(tree, node => {
@@ -1194,7 +1360,62 @@
           chips.appendChild(chip);
         });
       });
+      const addressVal = addressInput.value.trim();
+      if (addressVal) {
+        const chip = el("span", { class: "psc-np-chip" }, [
+          el("span", { class: "psc-np-chip-label" }, [addressVal]),
+        ]);
+        const remove = el("button", { type: "button", title: "Remove" }, ["×"]);
+        remove.addEventListener("click", (evt) => {
+          evt.preventDefault();
+          evt.stopPropagation();
+          addressInput.value = "";
+          renderChips();
+          dispatchChange();
+        });
+        chip.appendChild(remove);
+        chips.appendChild(chip);
+      }
+      if (!hasAnySelection()) chips.appendChild(placeholder);
     }
+
+    function setOpen(on) {
+      wrap.classList.toggle("is-open", on);
+      if (on) {
+        renderList();
+        search.focus();
+      }
+    }
+
+    function setTab(which) {
+      const selectOn = which === "select";
+      selectTab.classList.toggle("is-active", selectOn);
+      addTab.classList.toggle("is-active", !selectOn);
+      panel.classList.toggle("is-active", selectOn);
+      addPane.classList.toggle("is-active", !selectOn);
+      if (!selectOn) addressInput.focus();
+    }
+
+    trigger.addEventListener("click", (evt) => {
+      if (evt.target.closest("button")) return;
+      setOpen(!wrap.classList.contains("is-open"));
+    });
+    selectTab.addEventListener("click", () => setTab("select"));
+    addTab.addEventListener("click", () => setTab("add"));
+    addBtn.addEventListener("click", () => {
+      if (!addressInput.value.trim()) return;
+      renderChips();
+      dispatchChange();
+      setTab("select");
+    });
+    addressInput.addEventListener("keydown", (evt) => {
+      if (evt.key !== "Enter") return;
+      evt.preventDefault();
+      addBtn.click();
+    });
+    document.addEventListener("click", (evt) => {
+      if (!wrap.contains(evt.target)) setOpen(false);
+    });
 
     function setSelected(fieldKey, id, label, badge, on) {
       const node = fieldNodes[fieldKey];
@@ -1367,6 +1588,7 @@
         const input = hiddenInputs[fieldKey];
         restore(fieldKey, input.value, input.dataset.selectedValue || "");
       });
+      renderChips();
       renderList();
     }
 
@@ -1390,12 +1612,16 @@
 
     return {
       element: wrap,
+      addressInput,
       facades,
       refresh: renderList,
       resetAll() {
         Object.keys(selectedByField).forEach(resetField);
+        addressInput.value = "";
         path = [];
         search.value = "";
+        setOpen(false);
+        setTab("select");
         renderList();
         renderChips();
       },
@@ -1523,38 +1749,18 @@
     const body = el("div", { id: "psc-panel-body" });
     const formRow = el("div", { id: "psc-form-row" });
 
-    // Helper: wrap a plain input in a field group component object
-    function createFieldGroup(labelStr, input) {
-      const element = el("div", { class: "psc-field-group" }, [
-        el("label", { class: "psc-field-label", htmlFor: input.id }, [labelStr]),
-        input
-      ]);
-      return {
-        element,
-        input,
-        getValue: () => input.value.trim(),
-        reset: () => { input.value = ""; }
-      };
-    }
-
     // =========================================================================
-    // 1. SOURCE SECTION COMPONENTS
+    // 1. SOURCE / DESTINATION COMBOBOXES
     // =========================================================================
-    const sourceInput = el("input", {
-      id: "psc-src",
-      type: "text",
-      placeholder: "192.168.1.50:443 or CIDR (e.g. 10.0.0.0/16)",
-      autocomplete: "off",
-    });
-    const srcIpField = createFieldGroup("Source IP / CIDR / Port", sourceInput);
-
-    // Named catalog items, nested like Cisco's source picker. A named AD User
-    // still satisfies a policy whose source is "Any AD User"; the matcher uses
-    // the catalog type map to do that. Only HAR-backed catalogs appear here.
     const sourceEnabled = {};
     const sourcePicker = createNestedCatalogPicker({
       idPrefix: "psc-src-np",
-      rootLabel: "Sources",
+      rootLabel: "From",
+      addressInputId: "psc-src",
+      addressPlaceholder: "Select sources",
+      selectTabLabel: "Select sources",
+      addTabLabel: "Add a source",
+      addPlaceholder: "192.168.1.50:443 or CIDR (e.g. 10.0.0.0/16)",
       getFieldState: (fieldKey) => ({ enabled: sourceEnabled[fieldKey] !== false }),
       tree: [
         {
@@ -1610,29 +1816,17 @@
     const chromebooksSelect = sourcePicker.facades.chromebooks;
     const ztnaClientsSelect = sourcePicker.facades.ztnaClients;
     const sourceInputMap = sourcePicker.facades;
-
-    const srcBox = el("div", { class: "psc-section-box", id: "psc-src-box" });
-    srcBox.appendChild(el("div", { class: "psc-section-header" }, [
-      el("span", { class: "psc-section-title" }, ["Source"]),
-    ]));
-    srcBox.appendChild(srcIpField.element);
-    srcBox.appendChild(sourcePicker.element);
-
-    // =========================================================================
-    // 2. DESTINATION SECTION COMPONENTS
-    // =========================================================================
-    const destInput = el("input", {
-      id: "psc-dest",
-      type: "text",
-      placeholder: "10.0.0.1:80 or Domain (e.g. cisco.com:443)",
-      autocomplete: "off",
-    });
-    const dstIpField = createFieldGroup("Destination IP / Domain / Port", destInput);
+    const sourceInput = sourcePicker.addressInput;
 
     const destEnabled = {};
     const destPicker = createNestedCatalogPicker({
       idPrefix: "psc-dst-np",
-      rootLabel: "Destinations",
+      rootLabel: "To",
+      addressInputId: "psc-dest",
+      addressPlaceholder: "Select destinations",
+      selectTabLabel: "Select destinations",
+      addTabLabel: "Add a destination",
+      addPlaceholder: "10.0.0.1:80 or Domain (e.g. cisco.com:443)",
       getFieldState: (fieldKey) => ({ enabled: destEnabled[fieldKey] !== false }),
       tree: [
         { label: "Destination Lists", fieldKey: "destinationList", inputId: "psc-destlist", items: maps.destinationLists || {}, badge: "Destination List" },
@@ -1675,21 +1869,41 @@
     const privateResourceTypeSelect = destPicker.facades.privateResourceType;
     const appRiskProfileSelect = destPicker.facades.appRiskProfile;
     const destInputMap = destPicker.facades;
+    const destInput = destPicker.addressInput;
 
-    const dstBox = el("div", { class: "psc-section-box", id: "psc-dst-box" });
-    dstBox.appendChild(el("div", { class: "psc-section-header" }, [
-      el("span", { class: "psc-section-title" }, ["Destination"]),
+    const actionInput = el("input", {
+      id: "psc-preferred-action",
+      type: "text",
+      class: "psc-np-hidden",
+      tabindex: "-1",
+      "aria-hidden": "true",
+      autocomplete: "off",
+    });
+    const actionCards = [
+      { value: "allow", label: "Allow" },
+      { value: "isolate", label: "Warn Isolate" },
+      { value: "block", label: "Block" },
+    ].map(opt => {
+      const btn = el("button", { type: "button", class: "psc-action-card", "data-action": opt.value }, [opt.label]);
+      btn.addEventListener("click", () => {
+        const next = actionInput.value === opt.value ? "" : opt.value;
+        actionInput.value = next;
+        if (next) actionInput.dataset.selectedValue = next;
+        else delete actionInput.dataset.selectedValue;
+        actionCards.forEach(card => card.classList.toggle("is-selected", card.dataset.action === next));
+        recomputeEnabledFields();
+        persistDraft();
+      });
+      return btn;
+    });
+    const actionRow = el("div", { class: "psc-action-row" }, actionCards);
+
+    formRow.appendChild(actionRow);
+    formRow.appendChild(actionInput);
+    formRow.appendChild(el("div", { class: "psc-criteria-grid" }, [
+      sourcePicker.element,
+      destPicker.element,
     ]));
-    dstBox.appendChild(dstIpField.element);
-    dstBox.appendChild(destPicker.element);
-
-    // Grid row containing SOURCE on left, DESTINATION on right
-    const criteriaGrid = el("div", { class: "psc-criteria-grid" }, [
-      srcBox,
-      dstBox
-    ]);
-
-    formRow.appendChild(criteriaGrid);
     body.appendChild(formRow);
 
     // ---------------------------------------------------------------------
@@ -1737,6 +1951,7 @@
           continue;
         }
         destEnabled[key] = !fam || f === fam;
+        if (key === "destinationList" && actionInput.value !== "block") destEnabled[key] = false;
         if (!destEnabled[key] && sel.getValue()) sel.reset();
       }
       sourcePicker.refresh();
@@ -1772,6 +1987,12 @@
     restoreDraft();
     sourcePicker.ingestDraft();
     destPicker.ingestDraft();
+    const savedAction = (actionInput.dataset.selectedValue || actionInput.value || "").toLowerCase();
+    if (savedAction === "allow" || savedAction === "block" || savedAction === "isolate") {
+      actionInput.value = savedAction;
+      actionInput.dataset.selectedValue = savedAction;
+      actionCards.forEach(card => card.classList.toggle("is-selected", card.dataset.action === savedAction));
+    }
     // Draft restore can pre-fill a destination that implies a scope family,
     // so re-run gating now that values are present.
     recomputeEnabledFields();
@@ -1990,6 +2211,7 @@
         appRiskProfileId,
         destination:               destParsed.ipCidr,
         destinationPort:           destParsed.port,
+        preferredAction:           actionInput.value || "",
       };
 
       setTimeout(() => {
@@ -2003,6 +2225,9 @@
     resetBtn.addEventListener("click", () => {
       sourceInput.value = "";
       destInput.value = "";
+      actionInput.value = "";
+      delete actionInput.dataset.selectedValue;
+      actionCards.forEach(card => card.classList.remove("is-selected"));
       try { sessionStorage.removeItem(draftStorageKey); } catch (_) {}
       sourcePicker.resetAll();
       destPicker.resetAll();

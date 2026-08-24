@@ -1150,10 +1150,21 @@
       return pa - pb;
     });
 
+    const preferredAction = String(testInput.preferredAction || "").trim().toLowerCase();
     const rejected = [];
     for (const rule of sorted) {
       const result = matchesRule(rule, testInput, lookups);
       if (result.matched) {
+        const ruleAction = String(rule.ruleAction || rule.action || "").toLowerCase();
+        if (preferredAction && ruleAction && ruleAction !== preferredAction) {
+          rejected.push({
+            ruleId: rule.ruleId !== undefined ? rule.ruleId : rule.id,
+            ruleName: rule.ruleName || rule.name || "Unnamed Rule",
+            scope: rule.trafficScope || rule.ruleAccess || (rule.raw && rule.raw.ruleAccess) || null,
+            reason: `rule action ${ruleAction} does not match requested ${preferredAction}`,
+          });
+          continue;
+        }
         return { rule, matchedConditions: result.matchedConditions, matchFields: result.matchFields };
       }
       rejected.push({

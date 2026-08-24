@@ -540,6 +540,17 @@ console.log("\n=== Group 8: First-match-wins (matchPolicy) ===");
   });
   assert(result2 !== null, "matchPolicy: should fall through to second rule");
   assert(result2.rule.ruleName === "Allow everything", "matchPolicy: fallthrough to allow");
+
+  const allowOnly = Matcher.matchPolicy(rules, {
+    source: "10.0.0.1", destination: "any.com", applicationId: 500, preferredAction: "allow",
+  });
+  assert(allowOnly !== null && !allowOnly.noMatch, "preferredAction allow: skip the block rule");
+  assert(allowOnly.rule.ruleName === "Allow everything", "preferredAction allow: next matching allow wins");
+
+  const isolateOnly = Matcher.matchPolicy(rules, {
+    source: "10.0.0.1", destination: "any.com", applicationId: 500, preferredAction: "isolate",
+  });
+  assert(isolateOnly && isolateOnly.noMatch, "preferredAction isolate: no isolate rule means no match");
 }
 
 {
