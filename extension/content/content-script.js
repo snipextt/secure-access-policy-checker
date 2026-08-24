@@ -319,6 +319,9 @@ var memberHoverTimer = null;
 var memberDismissListener = null;
 var memberOpenKey = null;
 var memberRequestSeq = 0;
+var memberNavStack = [];
+var memberRootAnchor = null;
+var memberIgnoreDismissUntil = 0;
 
 // Cisco Hummingbird (hbr) token VALUES duplicated here as literals — this
 // stylesheet is injected into the live dashboard's own document (a separate
@@ -432,7 +435,14 @@ function ensureHoverPopoverStyle() {
     #sec-member-popover .sec-mp-header {
       background: linear-gradient(135deg, #eff6ff, #dbeafe); color: #0f172a; font-weight: 700;
       font-size: 13px; padding: 10px 12px; border-bottom: 1px solid #dbe5f0; word-break: break-word;
+      display: flex; align-items: center; gap: 8px;
     }
+    #sec-member-popover .sec-mp-back {
+      flex-shrink: 0; border: 0; background: transparent; color: #1e40af; cursor: pointer;
+      font: inherit; font-weight: 700; font-size: 12px; padding: 0 2px 0 0;
+    }
+    #sec-member-popover .sec-mp-back:hover { text-decoration: underline; }
+    #sec-member-popover .sec-mp-title { min-width: 0; }
     #sec-member-popover .sec-mp-list { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 12px; }
     #sec-member-popover .sec-mp-chip {
       background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0; padding: 6px 9px;
@@ -478,6 +488,7 @@ function getHoverPopoverEl() {
     hoverPopoverEl.addEventListener("mouseenter", () => clearTimeout(hoverHideTimer));
     hoverPopoverEl.addEventListener("mouseleave", (event) => {
       const next = event.relatedTarget;
+      if (!next && memberPopoverEl && memberPopoverEl.classList.contains("sec-member-visible")) return;
       if (memberPopoverEl && next && memberPopoverEl.contains(next)) return;
       scheduleHideHoverPopover();
     });
@@ -529,6 +540,8 @@ function positionHoverPopover(popover, anchor) {
 function hideMemberPopover() {
   if (memberPopoverEl) memberPopoverEl.classList.remove("sec-member-visible");
   memberOpenKey = null;
+  memberNavStack = [];
+  memberRootAnchor = null;
   if (memberDismissListener) {
     document.removeEventListener("mousedown", memberDismissListener, true);
     memberDismissListener = null;
@@ -543,7 +556,11 @@ function getMemberPopoverEl() {
     memberPopoverEl.addEventListener("mouseenter", () => clearTimeout(hoverHideTimer));
     memberPopoverEl.addEventListener("mouseleave", (event) => {
       const next = event.relatedTarget;
-      if (hoverPopoverEl && next && hoverPopoverEl.contains(next)) return;
+      // innerHTML rebuild detaches the hovered chip and fires mouseleave with
+      // no relatedTarget — that must not close the just-opened nested view.
+      if (!next) return;
+      if (hoverPopoverEl && hoverPopoverEl.contains(next)) return;
+      if (memberPopoverEl.contains(next)) return;
       scheduleHideHoverPopover();
     });
   }
@@ -645,12 +662,51 @@ function requestMembers(kind, id, callback) {
   });
 }
 
+function memberFrameKey(depth, kind, id) {
+  return `${depth}:${kind}:${id}`;
+}
+
+function persistMemberFrame(kind, id, title, members, memberMaps) {
+  if (!memberMaps[kind]) memberMaps[kind] = {};
+  memberMaps[kind][String(id)] = { name: title, members: members || [] };
+  currentMemberMaps = memberMaps;
+}
+
+function popMemberNav() {
+  if (memberNavStack.length <= 1) {
+    hideMemberPopover();
+    return;
+  }
+  memberNavStack.pop();
+  const frame = memberNavStack[memberNavStack.length - 1];
+  memberOpenKey = memberFrameKey(memberNavStack.length, frame.kind, frame.id);
+  memberRequestSeq += 1;
+  renderMemberPopover(frame.title, frame.members, frame.memberMaps, frame.lookups, false);
+  showMemberPopover(memberRootAnchor);
+}
+
 function renderMemberPopover(headerTitle, members, memberMaps, lookups, loading) {
   const pop = getMemberPopoverEl();
   pop.innerHTML = "";
   const header = document.createElement("div");
   header.className = "sec-mp-header";
-  header.textContent = headerTitle;
+  if (memberNavStack.length > 1) {
+    const back = document.createElement("button");
+    back.type = "button";
+    back.className = "sec-mp-back";
+    back.textContent = "‹ Back";
+    back.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      clearTimeout(hoverHideTimer);
+      popMemberNav();
+    });
+    header.appendChild(back);
+  }
+  const titleEl = document.createElement("span");
+  titleEl.className = "sec-mp-title";
+  titleEl.textContent = headerTitle;
+  header.appendChild(titleEl);
   pop.appendChild(header);
 
   const list = document.createElement("div");
@@ -679,7 +735,8 @@ function renderMemberPopover(headerTitle, members, memberMaps, lookups, loading)
         chip.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
-          openMemberPopover(chip, resolveMemberLabel(m, memberMaps, lookups), m.kind, m.id, memberMaps, lookups);
+          clearTimeout(hoverHideTimer);
+          openMemberPopover(memberRootAnchor || chip, resolveMemberLabel(m, memberMaps, lookups), m.kind, m.id, memberMaps, lookups, { nested: true });
         });
       }
       list.appendChild(chip);
@@ -690,43 +747,68 @@ function renderMemberPopover(headerTitle, members, memberMaps, lookups, loading)
 
 function showMemberPopover(anchorEl) {
   const pop = getMemberPopoverEl();
-  const rect = anchorEl.getBoundingClientRect();
+  const pin = (memberRootAnchor && memberRootAnchor.isConnected ? memberRootAnchor : null) || anchorEl;
+  if (pin && pin.isConnected) memberRootAnchor = pin;
+  const rect = memberRootAnchor && memberRootAnchor.isConnected
+    ? memberRootAnchor.getBoundingClientRect()
+    : { right: 16, top: 16 };
   pop.classList.add("sec-member-visible");
   positionHoverPopover(pop, { x: rect.right, y: rect.top });
   if (!memberDismissListener) {
     memberDismissListener = (event) => {
-      if (memberPopoverEl && memberPopoverEl.contains(event.target)) return;
-      if (event.target && event.target.closest && event.target.closest(".sec-hp-expandable, .sec-mp-expandable")) return;
+      if (Date.now() < memberIgnoreDismissUntil) return;
+      const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+      const hit = (el) => el && (el === memberPopoverEl || el === hoverPopoverEl
+        || (el.classList && (el.classList.contains("sec-hp-expandable") || el.classList.contains("sec-mp-expandable") || el.classList.contains("sec-mp-back")))
+        || (memberPopoverEl && memberPopoverEl.contains(el))
+        || (hoverPopoverEl && hoverPopoverEl.contains(el)));
+      if (path.some(hit) || hit(event.target)) return;
       hideMemberPopover();
     };
     document.addEventListener("mousedown", memberDismissListener, true);
   }
 }
 
-function openMemberPopover(anchorEl, title, kind, id, memberMaps, lookups) {
-  const key = `${kind}:${id}`;
-  if (memberOpenKey === key && memberPopoverEl && memberPopoverEl.classList.contains("sec-member-visible")) {
+function openMemberPopover(anchorEl, title, kind, id, memberMaps, lookups, opts) {
+  const nested = Boolean(opts && opts.nested);
+  const visible = Boolean(memberPopoverEl && memberPopoverEl.classList.contains("sec-member-visible") && memberNavStack.length);
+  const nextDepth = nested && visible ? memberNavStack.length + 1 : 1;
+  const key = memberFrameKey(nextDepth, kind, id);
+  if (!nested && visible && memberOpenKey === key) {
     hideMemberPopover();
     return;
   }
-  memberOpenKey = key;
+  if (nested && visible && memberOpenKey === key) return;
+  clearTimeout(hoverHideTimer);
+  memberIgnoreDismissUntil = Date.now() + 400;
+  if (!nested || !visible) {
+    memberNavStack = [];
+    if (anchorEl && anchorEl.isConnected) memberRootAnchor = anchorEl;
+  }
   const cached = memberMaps[kind] && memberMaps[kind][String(id)];
   const header = title || (cached && cached.name) || "Group members";
   const alreadyResolved = hasCachedMembers(memberMaps, kind, id);
-  renderMemberPopover(header, cached && cached.members, memberMaps, lookups, !alreadyResolved);
-  showMemberPopover(anchorEl);
+  const members = alreadyResolved ? cached.members : (cached && cached.members) || [];
+  memberNavStack.push({ kind, id, title: header, members, memberMaps, lookups });
+  memberOpenKey = memberFrameKey(memberNavStack.length, kind, id);
+  renderMemberPopover(header, members, memberMaps, lookups, !alreadyResolved);
+  showMemberPopover(memberRootAnchor || anchorEl);
   if (alreadyResolved) return;
   const seq = ++memberRequestSeq;
+  const openKey = memberOpenKey;
   requestMembers(kind, id, (response) => {
-    if (seq !== memberRequestSeq || memberOpenKey !== key) return;
-    const members = (response && response.members) || [];
+    if (seq !== memberRequestSeq || memberOpenKey !== openKey) return;
+    const resolved = (response && response.members) || [];
     const resolvedName = resolveMemberLabel({ id, kind }, memberMaps, lookups);
     const name = title || resolvedName || (response && response.name) || header;
-    if (!memberMaps[kind]) memberMaps[kind] = {};
-    memberMaps[kind][String(id)] = { name, members };
-    currentMemberMaps = memberMaps;
-    renderMemberPopover(name, members, memberMaps, lookups, false);
-    showMemberPopover(anchorEl);
+    persistMemberFrame(kind, id, name, resolved, memberMaps);
+    const frame = memberNavStack[memberNavStack.length - 1];
+    if (frame && String(frame.id) === String(id) && frame.kind === kind) {
+      frame.title = name;
+      frame.members = resolved;
+    }
+    renderMemberPopover(name, resolved, memberMaps, lookups, false);
+    showMemberPopover(memberRootAnchor || anchorEl);
   });
 }
 
