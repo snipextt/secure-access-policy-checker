@@ -574,8 +574,10 @@ function resolveMemberLabel(member, memberMaps, lookups) {
     identityGroups: maps.identityGroups,
     identity: lu.identities,
     networkObjectGroups: maps.networkObjectGroups || om.networkObjectGroups,
+    networkObjects: maps.networkObjects || om.networkObjects,
     networkObject: om.networkObjects,
     serviceObjectGroups: maps.serviceObjectGroups || om.serviceObjectGroups,
+    serviceObjects: maps.serviceObjects || om.serviceObjects,
     serviceObject: om.serviceObjects,
     destinationLists: maps.destinationLists || om.destinationLists,
     applicationLists: maps.applicationLists || om.applicationLists,
@@ -583,6 +585,7 @@ function resolveMemberLabel(member, memberMaps, lookups) {
     categoryLists: maps.categoryLists || om.categoryLists,
     category: lu.categories,
     privateResourceGroups: maps.privateResourceGroups || om.privateResourceGroups,
+    privateResources: maps.privateResources || om.privateResources,
     privateResource: om.privateResources,
   };
   const fromKind = lookupName(kindMaps[member.kind], id);
@@ -854,22 +857,30 @@ function loadMemberMaps() {
 var MEMBER_CONDITION_KIND = {
   identityGroups: true,
   networkObjectGroups: true,
+  networkObjects: true,
   serviceObjectGroups: true,
+  serviceObjects: true,
   destinationLists: true,
   applicationLists: true,
   categoryLists: true,
   privateResourceGroups: true,
+  privateResources: true,
 };
 
 var MEMBER_CONDITION_MAP = {
   "umbrella.source.networkobjectgroupids": "networkObjectGroups",
   "umbrella.source.networkobjectgroupids_shared": "networkObjectGroups",
+  "umbrella.source.networkobjectids": "networkObjects",
+  "umbrella.source.networkobjectids_shared": "networkObjects",
   "umbrella.destination.networkobjectgroupids": "networkObjectGroups",
+  "umbrella.destination.networkobjectids": "networkObjects",
   "umbrella.destination.serviceobjectgroupids": "serviceObjectGroups",
+  "umbrella.destination.serviceobjectids": "serviceObjects",
   "umbrella.destination.destination_list_ids": "destinationLists",
   "umbrella.destination.application_list_ids": "applicationLists",
   "umbrella.destination.category_list_ids": "categoryLists",
   "umbrella.destination.private_resource_group_ids": "privateResourceGroups",
+  "umbrella.destination.private_resource_ids": "privateResources",
   "umbrella.source.identity_ids": "identityGroups",
   "umbrella.source.identity_ids_shared": "identityGroups",
 };
@@ -882,8 +893,11 @@ function conditionKindFor(attributeName) {
   const attr = String(attributeName || "").toLowerCase();
   if (MEMBER_CONDITION_MAP[attr]) return MEMBER_CONDITION_MAP[attr];
   if (attr.includes("private_resource_group")) return "privateResourceGroups";
+  if (attr.includes("private_resource")) return "privateResources";
   if (attr.includes("networkobjectgroup")) return "networkObjectGroups";
+  if (attr.includes("networkobject")) return "networkObjects";
   if (attr.includes("serviceobjectgroup")) return "serviceObjectGroups";
+  if (attr.includes("serviceobject")) return "serviceObjects";
   if (attr.includes("destination_list")) return "destinationLists";
   if (attr.includes("application_list")) return "applicationLists";
   if (attr.includes("category_list")) return "categoryLists";

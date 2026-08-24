@@ -65,6 +65,7 @@ document.addEventListener("DOMContentLoaded", () => {
     appRiskProfiles: {},
   };
   let currentIdentityTypeMap = {};
+  let currentMemberMaps = {};
   let currentRuleFetchStatus = {};
   let deferredStorageRender = false;
   let deferredRenderTimer = null;
@@ -144,6 +145,7 @@ document.addEventListener("DOMContentLoaded", () => {
         lookups.geolocations      = (currentObjectMaps && currentObjectMaps.geolocations) || {};
         lookups.applicationCategories = (currentObjectMaps && currentObjectMaps.applicationCategories) || {};
         lookups.enterpriseApplications = (currentObjectMaps && currentObjectMaps.enterpriseApplications) || {};
+        lookups.memberMaps = currentMemberMaps || {};
         const result = window.Matcher.matchPolicy(currentRules, testInput, lookups);
         if (testerHandle) {
           if (result && result.noMatch) {
@@ -238,7 +240,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ---------------------------------------------------------------------------
   async function loadAndRender() {
     const cached = await api.storage.local.get([
-      "sse_rules", "sse_findings", "sse_identity_map", "sse_identity_type_map", "sse_object_maps", "sse_rule_fetch_status"
+      "sse_rules", "sse_findings", "sse_identity_map", "sse_identity_type_map", "sse_object_maps", "sse_member_maps", "sse_rule_fetch_status"
     ]);
 
     if (!cached.sse_rules || cached.sse_rules.length === 0) {
@@ -256,6 +258,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const om = cached.sse_object_maps || {};
     currentObjectMaps = om;
     currentObjectMap = om.privateResources || {};
+    currentMemberMaps = cached.sse_member_maps || {};
 
     // A partial object map must not suppress catalog loading. Source and
     // destination selectors are ready only after their own catalog keys exist.
@@ -341,7 +344,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // an input event destroys the focused element and its unsaved draft.
   api.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
-    if (changes.sse_rules || changes.sse_identity_map || changes.sse_object_maps || changes.sse_identity_type_map || changes.sse_rule_fetch_status) {
+    if (changes.sse_rules || changes.sse_identity_map || changes.sse_object_maps || changes.sse_identity_type_map || changes.sse_member_maps || changes.sse_rule_fetch_status) {
       if (editorIsActive()) {
         deferredStorageRender = true;
         return;

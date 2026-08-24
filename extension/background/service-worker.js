@@ -1867,8 +1867,10 @@ const FULL_CATALOGS = [
 
 function emptyMemberMaps() {
   return {
-    networkObjectGroups: {}, serviceObjectGroups: {}, destinationLists: {},
-    applicationLists: {}, categoryLists: {}, privateResourceGroups: {},
+    networkObjectGroups: {}, networkObjects: {},
+    serviceObjectGroups: {}, serviceObjects: {},
+    destinationLists: {}, applicationLists: {}, categoryLists: {},
+    privateResourceGroups: {}, privateResources: {},
     identityGroups: {},
   };
 }
@@ -1966,11 +1968,14 @@ async function persistMemberMaps(extra) {
 function collectGroupIds(rules) {
   const result = {
     networkObjectGroups: new Set(),
+    networkObjects: new Set(),
     serviceObjectGroups: new Set(),
+    serviceObjects: new Set(),
     destinationLists: new Set(),
     applicationLists: new Set(),
     categoryLists: new Set(),
     privateResourceGroups: new Set(),
+    privateResources: new Set(),
     identityGroups: new Set(),
   };
   for (const rule of rules || []) {
@@ -1983,14 +1988,14 @@ function collectGroupIds(rules) {
         if (v && v !== "*" && String(v).toLowerCase() !== "any") result[key].add(String(v));
       });
       if (name.includes("networkobjectgroup")) add("networkObjectGroups");
+      else if (name.includes("networkobject")) add("networkObjects");
       else if (name.includes("serviceobjectgroup")) add("serviceObjectGroups");
+      else if (name.includes("serviceobject")) add("serviceObjects");
       else if (name.includes("destination_list")) add("destinationLists");
       else if (name.includes("application_list")) add("applicationLists");
       else if (name.includes("category_list")) add("categoryLists");
       else if (name.includes("private_resource_group")) add("privateResourceGroups");
-      // Source identity conditions (AD groups, SGT groups, etc.) resolve to
-      // members via directory_group; non-group identity IDs simply won't
-      // appear in that by-id map and stay non-expandable.
+      else if (name.includes("private_resource")) add("privateResources");
       else if (name.includes("identity_ids") || name.includes("identity_group")) add("identityGroups");
     }
   }
@@ -2004,16 +2009,30 @@ function collectGroupIds(rules) {
 // in order. UNVERIFIED member-field names — adjust against a live capture.
 const MEMBERSHIP_CONFIG = {
   networkObjectGroups: {
-    tokenKey: "sse_token", leafKind: "networkObject",
+    tokenKey: "sse_token", leafKind: "networkObjects",
     wrapper: ["data", "items", "results"], idField: "id", nameField: ["name", "label"],
     memberFields: ["objects", "objectIds", "networkObjectIds"],
+    groupFields: ["groups"],
     url: (o) => `https://api.sse.cisco.com/policies/v2/objects/networkObjectGroups?offset=0&limit=100`,
   },
+  networkObjects: {
+    tokenKey: "sse_token", leafKind: "address",
+    wrapper: ["data", "items", "results"], idField: "id", nameField: ["name", "label"],
+    memberFields: [],
+    url: (o) => `https://api.sse.cisco.com/policies/v2/objects/networkObjects?offset=0&limit=100`,
+  },
   serviceObjectGroups: {
-    tokenKey: "sse_token", leafKind: "serviceObject",
+    tokenKey: "sse_token", leafKind: "serviceObjects",
     wrapper: ["data", "items", "results"], idField: "id", nameField: ["name", "label"],
     memberFields: ["objects", "serviceObjects", "serviceObjectIds"],
+    groupFields: ["groups"],
     url: (o) => `https://api.sse.cisco.com/policies/v2/objects/serviceObjectGroups?offset=0&limit=100`,
+  },
+  serviceObjects: {
+    tokenKey: "sse_token", leafKind: "service",
+    wrapper: ["data", "items", "results"], idField: "id", nameField: ["name", "label"],
+    memberFields: [],
+    url: (o) => `https://api.sse.cisco.com/policies/v2/objects/serviceObjects?offset=0&limit=100`,
   },
   destinationLists: {
     tokenKey: "opendns_token", leafKind: "fqdn",
@@ -2036,10 +2055,16 @@ const MEMBERSHIP_CONFIG = {
     url: (o) => `https://api.opendns.com/v3/organizations/${o}/categorysettings?outputFormat=jsonHttpStatusOverride&filters=%7B%7D`,
   },
   privateResourceGroups: {
-    tokenKey: "sse_token", leafKind: "privateResource",
+    tokenKey: "sse_token", leafKind: "privateResources",
     wrapper: ["items", "data", "results"], idField: "resourceGroupId", nameField: ["name", "label"],
     memberFields: ["resourceIds", "resources", "members"],
     url: (o) => `https://api.umbrella.com/v1/organizations/${o}/private_resource_groups?offset=0&limit=1000&sortBy=name&sortOrder=asc`,
+  },
+  privateResources: {
+    tokenKey: "sse_token", leafKind: "address",
+    wrapper: ["items", "data", "results"], idField: "resourceId", nameField: ["name", "friendlyName", "label"],
+    memberFields: [],
+    url: (o) => `https://api.umbrella.com/v1/organizations/${o}/private_resources?offset=0&limit=1000&sortBy=name&sortOrder=asc`,
   },
   identityGroups: {
     tokenKey: "mgmt_authz_token", leafKind: "identity",
@@ -2056,6 +2081,58 @@ function membershipAuthHeaders(token) {
     Origin: "https://dashboard.sse.cisco.com",
     Referer: "https://dashboard.sse.cisco.com/",
   };
+}
+
+function classifyAddressValue(value) {
+  const v = String(value || "").trim();
+  if (!v) return null;
+  return { value: v, kind: "address" };
+}
+
+// HAR: private_resources[].resourceAddresses[].destinationAddr[] plus
+// accessTypes[].reachableAddresses[] / externalFQDN hostnames.
+function extractPrivateResourceAddresses(item) {
+  const out = [];
+  const seen = new Set();
+  const add = (value) => {
+    const classified = classifyAddressValue(value);
+    if (!classified || seen.has(classified.value)) return;
+    seen.add(classified.value);
+    out.push(classified);
+  };
+  for (const addr of item && Array.isArray(item.resourceAddresses) ? item.resourceAddresses : []) {
+    for (const dest of (addr && addr.destinationAddr) || []) add(dest);
+    for (const id of (addr && addr.networkObjectIds) || []) {
+      if (id === undefined || id === null || id === "") continue;
+      out.push({ id: String(id), kind: "networkObjects" });
+    }
+  }
+  for (const access of item && Array.isArray(item.accessTypes) ? item.accessTypes : []) {
+    for (const dest of (access && access.reachableAddresses) || []) add(dest);
+    if (access && access.externalFQDN) {
+      const raw = String(access.externalFQDN).trim();
+      const host = raw.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").split("/")[0].split(":")[0];
+      add(host || raw);
+    }
+  }
+  return out;
+}
+
+// HAR: networkObjects[].value.addresses is a string[] of hosts/CIDRs.
+function extractNetworkObjectAddresses(item) {
+  const value = item && item.value;
+  const addresses = value && Array.isArray(value.addresses) ? value.addresses : [];
+  return addresses.map(classifyAddressValue).filter(Boolean);
+}
+
+// HAR: serviceObjects[].value = { protocol, ports: string[] }.
+function extractServiceObjectLeaves(item) {
+  const value = item && item.value;
+  if (!value || typeof value !== "object") return [];
+  const protocol = value.protocol ? String(value.protocol) : "";
+  const ports = Array.isArray(value.ports) ? value.ports.filter(Boolean) : [];
+  const label = [protocol, ports.join(",")].filter(Boolean).join(" ");
+  return label ? [{ value: label, kind: "service" }] : [];
 }
 
 function _classifyMember(m, key) {
@@ -2091,14 +2168,37 @@ function _classifyMember(m, key) {
 }
 
 function _extractMemberList(item, key) {
+  if (key === "privateResources") return extractPrivateResourceAddresses(item);
+  if (key === "networkObjects") return extractNetworkObjectAddresses(item);
+  if (key === "serviceObjects") return extractServiceObjectLeaves(item);
   const cfg = MEMBERSHIP_CONFIG[key];
   if (!cfg) return [];
-  let raw = null;
-  for (const f of cfg.memberFields) {
-    if (Array.isArray(item[f]) && item[f].length) { raw = item[f]; break; }
+  const members = [];
+  const seen = new Set();
+  const push = (classified) => {
+    if (!classified) return;
+    const token = classified.id !== undefined
+      ? `${classified.kind}:${classified.id}`
+      : `${classified.kind}:${classified.value}`;
+    if (seen.has(token)) return;
+    seen.add(token);
+    members.push(classified);
+  };
+  for (const f of cfg.memberFields || []) {
+    if (Array.isArray(item[f]) && item[f].length) {
+      item[f].forEach((m) => push(_classifyMember(m, key)));
+    }
   }
-  if (!raw) return [];
-  return raw.map((m) => _classifyMember(m, key)).filter(Boolean);
+  for (const f of cfg.groupFields || []) {
+    if (Array.isArray(item[f]) && item[f].length) {
+      item[f].forEach((m) => {
+        const classified = _classifyMember(m, key);
+        if (classified && classified.id !== undefined) classified.kind = key;
+        push(classified);
+      });
+    }
+  }
+  return members;
 }
 
 function parseMembership(json, key) {

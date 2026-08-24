@@ -906,6 +906,69 @@ console.log("\n=== Group 20: Priority sorting ===");
 }
 
 // ---------------------------------------------------------------------------
+// TEST GROUP 21: Nested object/resource address matching
+// ---------------------------------------------------------------------------
+console.log("\n=== Group 21: Nested member address matching ===");
+
+{
+  const lookups = {
+    memberMaps: {
+      privateResources: {
+        "8627": {
+          name: "File Server",
+          resolved: true,
+          members: [{ value: "smb.d1.pseudoco.org", kind: "address" }],
+        },
+      },
+      networkObjectGroups: {
+        "500001148": {
+          name: "Secure Access DNS",
+          resolved: true,
+          members: [
+            { id: "500029741", kind: "networkObjects", name: "Secure Access Secondary DNS" },
+          ],
+        },
+      },
+      networkObjects: {
+        "500029741": {
+          name: "Secure Access Secondary DNS",
+          resolved: true,
+          members: [{ value: "208.67.220.220", kind: "address" }],
+        },
+      },
+    },
+  };
+
+  const privateRule = makeRule(21, "File Server", "allow", [
+    sourceAll(),
+    destPrivateResourceIds([8627]),
+  ]);
+  assertMatch(privateRule, {
+    source: "10.0.0.1",
+    destination: "smb.d1.pseudoco.org",
+    destinationScope: "private_network",
+  }, true, "Private resource: typed FQDN matches nested destinationAddr", lookups);
+  assertMatch(privateRule, {
+    source: "10.0.0.1",
+    destination: "other.example.com",
+    destinationScope: "private_network",
+  }, false, "Private resource: unrelated FQDN does not match", lookups);
+
+  const dnsRule = makeRule(22, "Secure Access DNS", "allow", [
+    sourceAll(),
+    cond("umbrella.destination.networkObjectGroupIds", "INTERSECT", [500001148]),
+  ]);
+  assertMatch(dnsRule, {
+    source: "10.0.0.1",
+    destination: "208.67.220.220",
+  }, true, "Network object group: typed IP matches nested object address", lookups);
+  assertMatch(dnsRule, {
+    source: "10.0.0.1",
+    destination: "1.1.1.1",
+  }, false, "Network object group: unrelated IP does not match", lookups);
+}
+
+// ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
 console.log(`\n${"=".repeat(60)}`);

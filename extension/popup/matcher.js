@@ -202,8 +202,8 @@
       an.includes("destination_list") ||
       an.includes("geo") ||
       an.includes("private_resource") ||
-      an.includes("networkobjectids") ||
-      an.includes("serviceobjectgroupids")
+      an.includes("networkobject") ||
+      an.includes("serviceobject")
     ) return "destination";
 
     console.warn("[matcher] Unrecognised attributeName pattern:", attributeName);
@@ -520,6 +520,62 @@
     return { matched: true, note: `${cond.attributeName}: '${hit}' matched`, display: String(hit) };
   }
 
+  function memberKindForAttribute(an) {
+    if (an.includes("private_resource_group")) return "privateResourceGroups";
+    if (an.includes("private_resource_types")) return null;
+    if (an.includes("private_resource")) return "privateResources";
+    if (an.includes("destination_list")) return "destinationLists";
+    if (an.includes("networkobjectgroup")) return "networkObjectGroups";
+    if (an.includes("networkobject")) return "networkObjects";
+    if (an.includes("serviceobjectgroup")) return "serviceObjectGroups";
+    if (an.includes("serviceobject")) return "serviceObjects";
+    if (an.includes("application_list")) return "applicationLists";
+    if (an.includes("category_list")) return "categoryLists";
+    return null;
+  }
+
+  function collectMemberAddresses(kind, id, memberMaps, seen) {
+    const out = [];
+    if (!kind || id === undefined || id === null) return out;
+    const key = `${kind}:${id}`;
+    if (seen.has(key)) return out;
+    seen.add(key);
+    const entry = memberMaps && memberMaps[kind] && memberMaps[kind][String(id)];
+    for (const member of (entry && entry.members) || []) {
+      if (member && member.value) out.push(String(member.value));
+      if (member && member.id !== undefined && member.kind && memberMaps[member.kind]) {
+        collectMemberAddresses(member.kind, member.id, memberMaps, seen).forEach((v) => out.push(v));
+      }
+    }
+    return out;
+  }
+
+  function addressMatchesToken(testValue, token) {
+    if (!testValue || !token) return false;
+    return cidrMatch(testValue, token) || fqdnMatch(token, testValue);
+  }
+
+  function matchNestedMemberAddress(cond, testValue, lookups) {
+    const an = (cond.attributeName || "").toLowerCase();
+    const kind = memberKindForAttribute(an);
+    if (!kind || !testValue) return null;
+    const memberMaps = lookups.memberMaps || {};
+    const values = Array.isArray(cond.attributeValue) ? cond.attributeValue : [cond.attributeValue];
+    for (const id of values) {
+      if (id === undefined || id === null || id === "*" || String(id).toLowerCase() === "any") continue;
+      const tokens = collectMemberAddresses(kind, id, memberMaps, new Set());
+      const hit = tokens.find((token) => addressMatchesToken(testValue, token));
+      if (hit) {
+        return {
+          matched: true,
+          note: `${cond.attributeName}: '${testValue}' matched member ${hit}`,
+          display: hit,
+        };
+      }
+    }
+    return null;
+  }
+
   function matchConditionValue(cond, dimension, testValue, testPort = null, lookups = {}, testInput = {}) {
     const { attributeName, attributeOperator, attributeValue } = cond;
     const tvObj = typeof testValue === "object" && testValue !== null ? testValue : null;
@@ -531,6 +587,9 @@
     // Do this before legacy generic operator paths, which are intentionally
     // not allowed to infer catalog membership from free-form text.
     const catalogResult = matchCatalogCondition(cond, testInput, lookups);
+    if (catalogResult && catalogResult.matched) return catalogResult;
+    const nestedAddress = matchNestedMemberAddress(cond, tv, lookups);
+    if (nestedAddress) return nestedAddress;
     if (catalogResult) return catalogResult;
 
     // Extract all destination object IDs from testInput
@@ -1319,5 +1378,7 @@
     matchPolicy,
     getCleanRules,
     getIdentityOptions,
+    collectMemberAddresses,
+    memberKindForAttribute,
   };
 })(window);

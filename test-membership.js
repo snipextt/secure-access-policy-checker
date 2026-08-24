@@ -88,6 +88,8 @@ console.log("\n=== Group 1: collectGroupIds (rule condition → group IDs) ===")
       { attributeName: "umbrella.destination.application_list_ids", attributeValue: [300] },
       { attributeName: "umbrella.destination.category_list_ids", attributeValue: [400] },
       { attributeName: "umbrella.destination.private_resource_group_ids", attributeValue: [500] },
+      { attributeName: "umbrella.destination.private_resource_ids", attributeValue: [8627] },
+      { attributeName: "umbrella.destination.networkObjectIds", attributeValue: [500029741] },
       { attributeName: "umbrella.source.identity_ids", attributeValue: [7] },
       { attributeName: "umbrella.destination.application_ids", attributeValue: [123] },
     ]},
@@ -99,6 +101,8 @@ console.log("\n=== Group 1: collectGroupIds (rule condition → group IDs) ===")
   eq(ids.applicationLists, ["300"], "applicationLists");
   eq(ids.categoryLists, ["400"], "categoryLists");
   eq(ids.privateResourceGroups, ["500"], "privateResourceGroups");
+  eq(ids.privateResources, ["8627"], "privateResources");
+  eq(ids.networkObjects, ["500029741"], "networkObjects");
   eq(ids.identityGroups, ["7"], "identityGroups");
 }
 
@@ -113,9 +117,9 @@ console.log("\n=== Group 2: _classifyMember (leaf vs nested-group) ===");
      { id: "5", kind: "networkObjectGroups" }, "member typed group → group kind");
   // Plain leaf object.
   eq(M._classifyMember({ id: 8, name: "Obj8" }, "networkObjectGroups"),
-     { id: "8", kind: "networkObject", name: "Obj8" }, "plain leaf keeps name");
+     { id: "8", kind: "networkObjects", name: "Obj8" }, "plain leaf keeps name");
   // Numeric id → string.
-  eq(M._classifyMember(42, "serviceObjectGroups"), { id: "42", kind: "serviceObject" }, "numeric id → leafKind");
+  eq(M._classifyMember(42, "serviceObjectGroups"), { id: "42", kind: "serviceObjects" }, "numeric id → leafKind");
   // Null / unresolvable → null.
   assert(M._classifyMember(null, "networkObjectGroups") === null, "null member → null");
   assert(M._classifyMember({}, "networkObjectGroups") === null, "member with no id → null");
@@ -159,7 +163,7 @@ console.log("\n=== Group 4: parseMembership (shape + recursive nesting) ===");
   const nested = parsed[0].members.find(m => m.id === "G2");
   assert(nested.kind === "networkObjectGroups", "nested member keeps group kind → recursive expand");
   const leaf = parsed[0].members.find(m => m.id === "100");
-  assert(leaf.kind === "networkObject", "leaf member is leaf kind (not expandable)");
+  assert(leaf.kind === "networkObjects", "leaf member is leaf kind (expandable to addresses)");
 }
 
 // ---------------------------------------------------------------------------
@@ -238,6 +242,47 @@ console.log("\n=== Group 5d: AD group children keep HAR labels ===");
 }
 
 // ---------------------------------------------------------------------------
+console.log("\n=== Group 5e: HAR private resources + network objects expand to addresses ===");
+{
+  const pr = M._extractMemberList({
+    resourceId: 8627,
+    name: "File Server",
+    resourceAddresses: [{
+      destinationAddr: ["smb.d1.pseudoco.org"],
+      networkObjectIds: [],
+      protocolPorts: [{ protocol: "any", ports: "1-65535" }],
+    }],
+    accessTypes: [
+      { type: "network" },
+      { type: "client", reachableAddresses: ["smb.d1.pseudoco.org"] },
+      { type: "browser", externalFQDN: "https://intranet-8176184.ztna.sse.cisco.io" },
+    ],
+  }, "privateResources");
+  eq(pr.map(m => m.value).sort(), ["intranet-8176184.ztna.sse.cisco.io", "smb.d1.pseudoco.org"],
+    "private resource expands to destination + ZTNA host");
+
+  const no = M._extractMemberList({
+    id: 500029741,
+    name: "Secure Access Secondary DNS",
+    value: { type: "host", addresses: ["208.67.220.220"] },
+  }, "networkObjects");
+  eq(no, [{ value: "208.67.220.220", kind: "address" }], "network object expands to host address");
+
+  const sog = M.parseMembership({
+    results: [{
+      id: 500001148,
+      name: "Secure Access DNS",
+      objects: [
+        { id: 500029741, name: "Secure Access Secondary DNS" },
+        { id: 500029742, name: "Secure Access Primary DNS" },
+      ],
+    }],
+  }, "networkObjectGroups");
+  eq(sog[0].members.map(m => m.id), ["500029741", "500029742"], "network object group members keep ids");
+  assert(sog[0].members.every(m => m.kind === "networkObjects"), "group members are expandable network objects");
+}
+
+// ---------------------------------------------------------------------------
 console.log("\n=== Group 6: parseMembership — unknown wrapper degrades to [] ===");
 {
   eq(M.parseMembership({}, "networkObjectGroups"), [], "empty object → no items → []");
@@ -249,8 +294,8 @@ console.log("\n=== Group 7: MEMBERSHIP_CONFIG keys are expandable kinds ===");
 {
   const keys = Object.keys(M.MEMBERSHIP_CONFIG);
   eq(keys.sort(),
-     ["applicationLists", "categoryLists", "destinationLists", "identityGroups", "networkObjectGroups", "privateResourceGroups", "serviceObjectGroups"].sort(),
-     "configured group/list kinds include identityGroups");
+     ["applicationLists", "categoryLists", "destinationLists", "identityGroups", "networkObjectGroups", "networkObjects", "privateResourceGroups", "privateResources", "serviceObjectGroups", "serviceObjects"].sort(),
+     "configured group/list kinds include identityGroups and object leaves");
   for (const k of keys) {
     assert(M.MEMBERSHIP_CONFIG[k] && M.MEMBERSHIP_CONFIG[k].tokenKey, `config ${k} has tokenKey`);
   }
