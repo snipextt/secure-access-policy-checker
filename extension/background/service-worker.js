@@ -1911,6 +1911,11 @@ function needsPerIdMembers(kind) {
   return kind === "destinationLists" || kind === "identityGroups" || kind === "sourceNetworks";
 }
 
+function membersNeedNames(kind, members) {
+  if (kind !== "identityGroups" && kind !== "sourceNetworks") return false;
+  return (members || []).some((m) => m && m.id !== undefined && !m.name && !m.label && m.value === undefined);
+}
+
 function getCachedMembers(maps, kind, id) {
   const entry = maps && maps[kind] && maps[kind][String(id)];
   if (!entry || !entry.resolved) return null;
@@ -1918,6 +1923,9 @@ function getCachedMembers(maps, kind, id) {
   // as resolved with zero members. That is never a real answer — Cisco only
   // puts those entries on the per-id destinations/children URLs.
   if (needsPerIdMembers(kind) && (!entry.members || !entry.members.length)) return null;
+  // Nameless AD/network children were persisted before we kept `label`.
+  // Treat them as stale so expand hits /children again.
+  if (membersNeedNames(kind, entry.members)) return null;
   return entry;
 }
 
@@ -2150,9 +2158,10 @@ async function fetchMembersById(kind, id, orgId, tabId, existing) {
     null;
   if (!tokenKey) return existing || { name: String(id), members: [], resolved: false };
   const tokenObj = await getFreshToken(tokenKey, tabId);
-  if (!tokenObj) return existing || { name: String(id), members: [], resolved: false };
+  if (!tokenObj) return existing || { name: String(id), members: [], resolved: false, debug: { kind, id, error: "no token", tokenKey } };
 
   const members = [];
+  const pages = [];
   let page = 1;
   const maxPages = 40;
   while (page <= maxPages) {
@@ -2161,14 +2170,30 @@ async function fetchMembersById(kind, id, orgId, tabId, existing) {
     const response = await fetch(url, { headers: membershipAuthHeaders(tokenObj.token) });
     if (!response.ok) {
       logEvent("membership", "per-id non-OK", { kind, id, status: response.status, page });
-      if (page === 1) return existing || { name: String(id), members: [], resolved: false };
+      pages.push({ url, status: response.status, ok: false });
+      if (page === 1) {
+        return existing || { name: String(id), members: [], resolved: false, debug: { kind, id, pages } };
+      }
       break;
     }
     const json = await response.json();
     const rows = Array.isArray(json) ? json : (json.data || json.items || json.results || []);
+    const classified = [];
     rows.forEach((row) => {
       const member = classifyPerIdMember(kind, row);
-      if (member) members.push(member);
+      if (member) {
+        members.push(member);
+        classified.push(member);
+      }
+    });
+    pages.push({
+      url,
+      status: response.status,
+      ok: true,
+      rowCount: rows.length,
+      keys: json && !Array.isArray(json) ? Object.keys(json) : ["<array>"],
+      raw: rows.slice(0, 20),
+      classified: classified.slice(0, 20),
     });
     const meta = json && json.meta;
     const total = meta && Number(meta.total);
@@ -2182,6 +2207,7 @@ async function fetchMembersById(kind, id, orgId, tabId, existing) {
     name: (existing && existing.name) || String(id),
     members,
     resolved: true,
+    debug: { kind, id, orgId, pages, memberCount: members.length },
   };
 }
 
@@ -2462,17 +2488,29 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const maps = stored.sse_member_maps || {};
         const cached = getCachedMembers(maps, kind, id);
         if (cached) {
-          sendResponse({ ok: true, name: cached.name || id, members: cached.members, cached: true });
+          sendResponse({
+            ok: true,
+            name: cached.name || id,
+            members: cached.members,
+            cached: true,
+            debug: { kind, id, source: "cache", memberCount: (cached.members || []).length, members: cached.members },
+          });
           return;
         }
         const orgId = stored.cached_org_id || await getActiveOrgId().catch(() => null);
         if (!orgId) {
-          sendResponse({ ok: false, error: "no org", name: id, members: [] });
+          sendResponse({ ok: false, error: "no org", name: id, members: [], debug: { kind, id, error: "no org" } });
           return;
         }
         const tabId = await getMembershipTabId(msg.tabId || (sender && sender.tab && sender.tab.id));
         const fresh = await resolveOneMembership(kind, id, orgId, tabId);
-        sendResponse({ ok: true, name: fresh.name || id, members: fresh.members || [], cached: false });
+        sendResponse({
+          ok: true,
+          name: fresh.name || id,
+          members: fresh.members || [],
+          cached: false,
+          debug: fresh.debug || { kind, id, source: "fetch", members: fresh.members },
+        });
       } catch (err) {
         sendResponse({ ok: false, error: err.message, members: [], name: id });
       }

@@ -57,6 +57,7 @@ global.__membership = {
   perIdMemberUrl,
   normalizeMemberEntry,
   getCachedMembers,
+  membersNeedNames,
 };
 `;
 // The helpers are declared with `function`/`const` at top level, so they're
@@ -229,6 +230,11 @@ console.log("\n=== Group 5d: AD group children keep HAR labels ===");
     members: [user, nested],
   }, "Finance");
   eq(persisted.members.map(m => m.name), [user.name, nested.name], "persist keeps child names");
+
+  const nameless = { name: "Finance", resolved: true, members: [{ id: "1", kind: "identity" }] };
+  assert(M.membersNeedNames("identityGroups", nameless.members), "nameless AD children need names");
+  assert(M.getCachedMembers({ identityGroups: { "99": nameless } }, "identityGroups", "99") === null,
+    "nameless AD children are not treated as cached");
 }
 
 // ---------------------------------------------------------------------------

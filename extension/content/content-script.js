@@ -608,21 +608,37 @@ function isExpandableKind(kind) {
   return Boolean(kind && MEMBER_CONDITION_KIND[kind]);
 }
 
+function membersNeedNames(kind, members) {
+  if (kind !== "identityGroups" && kind !== "sourceNetworks") return false;
+  return (members || []).some((m) => m && m.id !== undefined && !m.name && !m.label && m.value === undefined);
+}
+
 function hasCachedMembers(memberMaps, kind, id) {
   const entry = memberMaps && memberMaps[kind] && memberMaps[kind][String(id)];
   if (!entry || !Array.isArray(entry.members) || entry.resolved === false) return false;
   if ((kind === "destinationLists" || kind === "identityGroups" || kind === "sourceNetworks") && !entry.members.length) return false;
+  if (membersNeedNames(kind, entry.members)) return false;
   return true;
+}
+
+function logMembershipDebug(payload) {
+  try {
+    console.log("[policy-checker membership]", payload);
+  } catch (_) {}
 }
 
 function requestMembers(kind, id, callback) {
   if (hasCachedMembers(currentMemberMaps, kind, id)) {
     const cached = currentMemberMaps[kind][String(id)];
-    callback({ ok: true, name: cached.name, members: cached.members, cached: true });
+    const response = { ok: true, name: cached.name, members: cached.members, cached: true, debug: { kind, id, source: "page-cache", members: cached.members } };
+    logMembershipDebug(response.debug);
+    callback(response);
     return;
   }
   safeRuntimeMessage({ type: "RESOLVE_MEMBERS", kind, id: String(id) }, (response) => {
-    callback(response || { ok: false, members: [], name: String(id) });
+    const next = response || { ok: false, members: [], name: String(id) };
+    logMembershipDebug(next.debug || { kind, id, error: next.error || "no response", members: next.members });
+    callback(next);
   });
 }
 
