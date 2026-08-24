@@ -581,7 +581,17 @@ function isExpandableKind(kind) {
   return Boolean(kind && MEMBER_CONDITION_KIND[kind]);
 }
 
+function hasCachedMembers(memberMaps, kind, id) {
+  const entry = memberMaps && memberMaps[kind] && memberMaps[kind][String(id)];
+  return Boolean(entry && Array.isArray(entry.members) && entry.resolved !== false);
+}
+
 function requestMembers(kind, id, callback) {
+  if (hasCachedMembers(currentMemberMaps, kind, id)) {
+    const cached = currentMemberMaps[kind][String(id)];
+    callback({ ok: true, name: cached.name, members: cached.members, cached: true });
+    return;
+  }
   safeRuntimeMessage({ type: "RESOLVE_MEMBERS", kind, id: String(id) }, (response) => {
     callback(response || { ok: false, members: [], name: String(id) });
   });
@@ -653,8 +663,10 @@ function openMemberPopover(anchorEl, title, kind, id, memberMaps, lookups) {
   memberOpenKey = key;
   const cached = memberMaps[kind] && memberMaps[kind][String(id)];
   const header = title || (cached && cached.name) || "Group members";
-  renderMemberPopover(header, cached && cached.members, memberMaps, lookups, !(cached && cached.members));
+  const alreadyResolved = hasCachedMembers(memberMaps, kind, id);
+  renderMemberPopover(header, cached && cached.members, memberMaps, lookups, !alreadyResolved);
   showMemberPopover(anchorEl);
+  if (alreadyResolved) return;
   const seq = ++memberRequestSeq;
   requestMembers(kind, id, (response) => {
     if (seq !== memberRequestSeq || memberOpenKey !== key) return;

@@ -319,14 +319,7 @@ async function fetchAllData(explicitOrgId) {
     //    non-expandable rather than sinking the scan.
     try {
       const memberMaps = await resolveMembership(orgId, tabId, rules);
-      const prevM = await api.storage.local.get("sse_member_maps");
-      const prevMaps = (prevM && prevM.sse_member_maps) || {};
-      for (const [key, map] of Object.entries(memberMaps)) {
-        if (Object.keys(map).length === 0 && prevMaps[key] && Object.keys(prevMaps[key]).length > 0) {
-          memberMaps[key] = prevMaps[key];
-        }
-      }
-      await api.storage.local.set({ sse_member_maps: { ...prevMaps, ...memberMaps } });
+      await persistMemberMaps(memberMaps);
       logEvent("auto-fetch", "Membership resolved", {
         total: Object.values(memberMaps).reduce((s, m) => s + Object.keys(m).length, 0),
       });
@@ -1836,6 +1829,54 @@ const FULL_CATALOGS = [
 // just leaves that group un-expandable, exactly like an unresolved name.
 // ---------------------------------------------------------------------------
 
+function emptyMemberMaps() {
+  return {
+    networkObjectGroups: {}, serviceObjectGroups: {}, destinationLists: {},
+    applicationLists: {}, categoryLists: {}, privateResourceGroups: {},
+    identityGroups: {},
+  };
+}
+
+function memberCacheKey(kind, id) {
+  return `${kind}:${String(id)}`;
+}
+
+function normalizeMemberEntry(entry, fallbackName) {
+  if (!entry || typeof entry !== "object") return null;
+  const name = entry.name || fallbackName || "";
+  const members = Array.isArray(entry.members)
+    ? entry.members
+        .map((m) => (m && m.id !== undefined ? { id: String(m.id), kind: m.kind } : (m && m.value !== undefined ? { value: m.value, kind: m.kind } : null)))
+        .filter(Boolean)
+    : [];
+  return { name, members, resolved: entry.resolved !== false };
+}
+
+function getCachedMembers(maps, kind, id) {
+  const entry = maps && maps[kind] && maps[kind][String(id)];
+  return entry && entry.resolved ? entry : null;
+}
+
+var _memberInflight = {};
+
+function mergeMemberMaps(base, extra) {
+  const out = emptyMemberMaps();
+  for (const source of [base, extra]) {
+    if (!source) continue;
+    for (const key of Object.keys(out)) {
+      out[key] = Object.assign(out[key], source[key] || {});
+    }
+  }
+  return out;
+}
+
+async function persistMemberMaps(extra) {
+  const stored = await api.storage.local.get("sse_member_maps");
+  const merged = mergeMemberMaps(stored.sse_member_maps || {}, extra || {});
+  await api.storage.local.set({ sse_member_maps: merged });
+  return merged;
+}
+
 function collectGroupIds(rules) {
   const result = {
     networkObjectGroups: new Set(),
@@ -1983,58 +2024,79 @@ function parseMembership(json, key) {
 // its kind; any member that is itself a known group type is pushed onto the
 // next frontier so the popover can drill arbitrarily deep. `visited` prevents
 // cycles / re-fetches; MAX_DEPTH is a safety bound.
+async function fetchMembershipKind(kind, orgId, tabId, existingMaps) {
+  const cfg = MEMBERSHIP_CONFIG[kind];
+  if (!cfg) return existingMaps[kind] || {};
+  const tokenObj = await getFreshToken(cfg.tokenKey, tabId);
+  if (!tokenObj) { logEvent("membership", "no token", { kind }); return existingMaps[kind] || {}; }
+  const response = await fetch(cfg.url(orgId), {
+    headers: { Authorization: `Bearer ${tokenObj.token}`, Accept: "application/json" },
+  });
+  if (!response.ok) { logEvent("membership", "non-OK", { kind, status: response.status }); return existingMaps[kind] || {}; }
+  const json = await response.json();
+  const entries = parseMembership(json, kind);
+  const next = Object.assign({}, existingMaps[kind] || {});
+  for (const e of entries) {
+    if (!e || e.id === undefined) continue;
+    const normalized = normalizeMemberEntry(e, String(e.id));
+    if (normalized) next[String(e.id)] = normalized;
+  }
+  logEvent("membership", "resolved", { kind, count: entries.length });
+  return next;
+}
+
+async function resolveOneMembership(kind, id, orgId, tabId) {
+  const cacheId = memberCacheKey(kind, id);
+  if (_memberInflight[cacheId]) return _memberInflight[cacheId];
+  _memberInflight[cacheId] = (async () => {
+    const stored = await api.storage.local.get("sse_member_maps");
+    const maps = stored.sse_member_maps || emptyMemberMaps();
+    const cached = getCachedMembers(maps, kind, id);
+    if (cached) return cached;
+    const kindMap = await fetchMembershipKind(kind, orgId, tabId, maps);
+    maps[kind] = kindMap;
+    await persistMemberMaps({ [kind]: kindMap });
+    return getCachedMembers(maps, kind, id) || { name: String(id), members: [], resolved: true };
+  })().finally(() => { delete _memberInflight[cacheId]; });
+  return _memberInflight[cacheId];
+}
+
 async function resolveMembership(orgId, tabId, rules) {
+  const stored = await api.storage.local.get("sse_member_maps");
+  const memberMaps = mergeMemberMaps(stored.sse_member_maps || {}, {});
   const initialIds = collectGroupIds(rules);
-  const memberMaps = {
-    networkObjectGroups: {}, serviceObjectGroups: {}, destinationLists: {},
-    applicationLists: {}, categoryLists: {}, privateResourceGroups: {},
-    identityGroups: {},
-  };
   const visited = new Set();
   let frontier = [];
   for (const key of Object.keys(initialIds)) {
-    if (initialIds[key].length) frontier.push({ key, ids: initialIds[key] });
+    for (const id of initialIds[key]) {
+      if (getCachedMembers(memberMaps, key, id)) continue;
+      frontier.push({ key, ids: [id] });
+    }
   }
   const MAX_DEPTH = 12;
   let depth = 0;
   while (frontier.length && depth < MAX_DEPTH) {
     depth++;
-    const batch = frontier;
+    const byKind = {};
+    for (const item of frontier) {
+      const todo = (item.ids || []).filter((id) => !visited.has(memberCacheKey(item.key, id)) && !getCachedMembers(memberMaps, item.key, id));
+      if (!todo.length) continue;
+      todo.forEach((id) => visited.add(memberCacheKey(item.key, id)));
+      byKind[item.key] = (byKind[item.key] || []).concat(todo);
+    }
     frontier = [];
-    await Promise.all(batch.map(async ({ key, ids }) => {
-      const cfg = MEMBERSHIP_CONFIG[key];
-      if (!cfg) return;
-      const todo = ids.filter((id) => !visited.has(`${key}:${id}`));
-      if (!todo.length) return;
-      todo.forEach((id) => visited.add(`${key}:${id}`));
+    await Promise.all(Object.keys(byKind).map(async (key) => {
       try {
-        const tokenObj = await getFreshToken(cfg.tokenKey, tabId);
-        if (!tokenObj) { logEvent("membership", "no token", { key }); return; }
-        const response = await fetch(cfg.url(orgId), {
-          headers: { Authorization: `Bearer ${tokenObj.token}`, Accept: "application/json" },
-        });
-        if (!response.ok) { logEvent("membership", "non-OK", { key, status: response.status }); return; }
-        const json = await response.json();
-        const entries = parseMembership(json, key);
-        for (const e of entries) {
-          if (!e || e.id === undefined) continue;
-          const k = String(e.id);
-          if (!memberMaps[key][k]) {
-            memberMaps[key][k] = {
-              name: e.name || k,
-              members: (e.members || [])
-                .map((m) => (m.id !== undefined ? { id: String(m.id), kind: m.kind } : { value: m.value, kind: m.kind }))
-                .filter((m) => m.id !== undefined || m.value !== undefined),
-            };
-          }
-          // Enqueue nested groups for the next frontier.
-          for (const m of (e.members || [])) {
-            if (m && m.id !== undefined && MEMBERSHIP_CONFIG[m.kind] && !visited.has(`${m.kind}:${m.id}`)) {
+        const kindMap = await fetchMembershipKind(key, orgId, tabId, memberMaps);
+        memberMaps[key] = Object.assign({}, memberMaps[key] || {}, kindMap);
+        for (const id of byKind[key]) {
+          const entry = getCachedMembers(memberMaps, key, id);
+          for (const m of (entry && entry.members) || []) {
+            if (m && m.id !== undefined && MEMBERSHIP_CONFIG[m.kind] && !visited.has(memberCacheKey(m.kind, m.id)) && !getCachedMembers(memberMaps, m.kind, m.id)) {
               frontier.push({ key: m.kind, ids: [String(m.id)] });
             }
           }
         }
-        logEvent("membership", "resolved", { key, count: entries.length });
       } catch (err) {
         logEvent("membership", "error", { key, error: err.message });
       }
@@ -2215,44 +2277,18 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       try {
         const stored = await api.storage.local.get(["sse_member_maps", "cached_org_id"]);
         const maps = stored.sse_member_maps || {};
-        const cached = maps[kind] && maps[kind][id];
-        if (cached && Array.isArray(cached.members) && cached.members.length) {
+        const cached = getCachedMembers(maps, kind, id);
+        if (cached) {
           sendResponse({ ok: true, name: cached.name || id, members: cached.members, cached: true });
           return;
         }
         const orgId = stored.cached_org_id || await getActiveOrgId().catch(() => null);
         if (!orgId) {
-          sendResponse({ ok: false, error: "no org", name: (cached && cached.name) || id, members: (cached && cached.members) || [] });
+          sendResponse({ ok: false, error: "no org", name: id, members: [] });
           return;
         }
-        const cfg = MEMBERSHIP_CONFIG[kind];
-        const tokenObj = await getFreshToken(cfg.tokenKey, msg.tabId);
-        if (!tokenObj) {
-          sendResponse({ ok: false, error: "no token", name: (cached && cached.name) || id, members: (cached && cached.members) || [] });
-          return;
-        }
-        const response = await fetch(cfg.url(orgId), {
-          headers: { Authorization: `Bearer ${tokenObj.token}`, Accept: "application/json" },
-        });
-        if (!response.ok) {
-          sendResponse({ ok: false, error: `http ${response.status}`, name: (cached && cached.name) || id, members: (cached && cached.members) || [] });
-          return;
-        }
-        const json = await response.json();
-        const entries = parseMembership(json, kind);
-        if (!maps[kind]) maps[kind] = {};
-        for (const e of entries) {
-          if (!e || e.id === undefined) continue;
-          maps[kind][String(e.id)] = {
-            name: e.name || String(e.id),
-            members: (e.members || [])
-              .map((m) => (m.id !== undefined ? { id: String(m.id), kind: m.kind } : { value: m.value, kind: m.kind }))
-              .filter((m) => m.id !== undefined || m.value !== undefined),
-          };
-        }
-        await api.storage.local.set({ sse_member_maps: maps });
-        const fresh = maps[kind][id] || { name: id, members: [] };
-        sendResponse({ ok: true, name: fresh.name, members: fresh.members, cached: false });
+        const fresh = await resolveOneMembership(kind, id, orgId, msg.tabId);
+        sendResponse({ ok: true, name: fresh.name || id, members: fresh.members || [], cached: false });
       } catch (err) {
         sendResponse({ ok: false, error: err.message, members: [], name: id });
       }
