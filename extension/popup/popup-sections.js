@@ -1457,17 +1457,25 @@
     }
 
     trigger.addEventListener("click", (evt) => {
+      evt.stopPropagation();
       if (evt.target.closest("button")) return;
       setOpen(!wrap.classList.contains("is-open"));
     });
+    flyout.addEventListener("mousedown", (evt) => evt.stopPropagation());
+    flyout.addEventListener("click", (evt) => evt.stopPropagation());
     search.addEventListener("keydown", (evt) => {
       if (evt.key !== "Enter") return;
       if (!looksLikeAddress(search.value)) return;
       evt.preventDefault();
       commitAddress(search.value);
     });
-    document.addEventListener("click", (evt) => {
-      if (!wrap.contains(evt.target)) setOpen(false);
+    // Close on pointerdown outside. A click listener is unsafe: row handlers
+    // rebuild list.innerHTML, which detaches evt.target before bubble, so
+    // wrap.contains(target) is false and the flyout would slam shut.
+    document.addEventListener("mousedown", (evt) => {
+      const path = typeof evt.composedPath === "function" ? evt.composedPath() : [];
+      if (path.includes(wrap) || wrap.contains(evt.target)) return;
+      setOpen(false);
     });
 
     function setSelected(fieldKey, id, label, badge, on) {
