@@ -465,6 +465,7 @@
         box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
       }
       .psc-cb.is-open .psc-cb-flyout { display: block; }
+      .psc-cb-flyout { pointer-events: auto; }
       /* Cisco-style nested catalog picker */
       .psc-np {
         display: flex;
@@ -1333,6 +1334,9 @@
     wrap.appendChild(hiddenBox);
 
     let path = [];
+    let isOpen = false;
+    const sortedCache = new WeakMap();
+    const VISIBLE_LEAF_LIMIT = 80;
 
     function fieldState(fieldKey) {
       return (getFieldState && getFieldState(fieldKey)) || { enabled: true };
@@ -1523,39 +1527,50 @@
     }
 
     function setOpen(on) {
-      wrap.classList.toggle("is-open", on);
-      if (on) {
+      const next = Boolean(on);
+      if (isOpen === next) return;
+      isOpen = next;
+      wrap.classList.toggle("is-open", isOpen);
+      if (isOpen) {
         renderList();
-        requestAnimationFrame(() => search.focus());
+        requestAnimationFrame(() => { if (isOpen) search.focus(); });
       }
     }
 
-    trigger.addEventListener("mousedown", (evt) => {
+    trigger.addEventListener("pointerdown", (evt) => {
+      if (evt.button !== 0) return;
       evt.preventDefault();
       evt.stopPropagation();
       if (evt.target.closest("button")) return;
-      setOpen(!wrap.classList.contains("is-open"));
+      setOpen(!isOpen);
     });
     trigger.addEventListener("click", (evt) => {
       evt.preventDefault();
       evt.stopPropagation();
     });
+    flyout.addEventListener("pointerdown", (evt) => evt.stopPropagation());
     flyout.addEventListener("mousedown", (evt) => evt.stopPropagation());
     flyout.addEventListener("click", (evt) => evt.stopPropagation());
     search.addEventListener("keydown", (evt) => {
+      if (evt.key === "Escape") {
+        evt.preventDefault();
+        setOpen(false);
+        return;
+      }
       if (evt.key !== "Enter") return;
       if (!looksLikeAddress(search.value)) return;
       evt.preventDefault();
       commitAddress(search.value);
     });
-    // Close on pointerdown outside. A click listener is unsafe: row handlers
-    // rebuild list.innerHTML, which detaches evt.target before bubble, so
-    // wrap.contains(target) is false and the flyout would slam shut.
-    document.addEventListener("mousedown", (evt) => {
-      const path = typeof evt.composedPath === "function" ? evt.composedPath() : [];
-      if (path.includes(wrap) || wrap.contains(evt.target)) return;
+    // Capture-phase closer. Bubble mousedown loses the target when a row
+    // rebuilds the list, and iframe document clicks can miss a bubble
+    // listener on a detached wrap.
+    document.addEventListener("pointerdown", (evt) => {
+      if (!isOpen) return;
+      const eventPath = typeof evt.composedPath === "function" ? evt.composedPath() : [];
+      if (eventPath.includes(wrap) || wrap.contains(evt.target)) return;
       setOpen(false);
-    });
+    }, true);
 
     function setSelected(fieldKey, id, label, badge, on) {
       const node = fieldNodes[fieldKey];
@@ -1568,7 +1583,7 @@
       }
       syncHidden(fieldKey);
       renderChips();
-      renderList();
+      if (isOpen) renderList();
       dispatchChange();
     }
 
@@ -1602,10 +1617,22 @@
     }
 
     function sortedItemEntries(items) {
-      return Object.keys(items || {}).map(id => ({
+      const map = items || {};
+      const cached = sortedCache.get(map);
+      if (cached) return cached;
+      const entries = Object.keys(map).map(id => ({
         id,
-        label: catalogItemLabel(items[id], id),
+        label: catalogItemLabel(map[id], id),
       })).sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+      sortedCache.set(map, entries);
+      return entries;
+    }
+
+    function appendMoreRow(hiddenCount, hint) {
+      if (hiddenCount <= 0) return;
+      list.appendChild(el("div", { class: "psc-np-empty" }, [
+        hiddenCount + " more — type to search" + (hint ? " " + hint : ""),
+      ]));
     }
 
     function appendCategoryRow(node) {
@@ -1683,6 +1710,7 @@
     }
 
     function renderList() {
+      if (!isOpen) return;
       list.innerHTML = "";
       renderCrumb();
       const q = (search.value || "").trim().toLowerCase();
@@ -1691,9 +1719,11 @@
       if (q) {
         const scope = path.length ? current : { children: tree };
         let shown = 0;
+        let hidden = 0;
         collectTypeNodes(scope, []).forEach(node => {
           if (!nodeEnabled(node) && !typeChecked[typeNodeKey(node)]) return;
           if (!matchesQuery(node.label, "", q) && !(node.description && matchesQuery(node.description, "", q))) return;
+          if (shown >= VISIBLE_LEAF_LIMIT) { hidden += 1; return; }
           appendCategoryRow(node);
           shown += 1;
         });
@@ -1702,6 +1732,7 @@
           if (node.status === "unavailable") return;
           sortedItemEntries(node.items).forEach(({ id, label }) => {
             if (!matchesQuery(label, id, q)) return;
+            if (shown >= VISIBLE_LEAF_LIMIT) { hidden += 1; return; }
             appendLeafRow(node, id, label);
             shown += 1;
           });
@@ -1714,6 +1745,7 @@
           return;
         }
         if (!shown) list.appendChild(el("div", { class: "psc-np-empty" }, ["No matching items"]));
+        else appendMoreRow(hidden);
         return;
       }
 
@@ -1734,9 +1766,11 @@
           list.appendChild(el("div", { class: "psc-np-empty" }, [emptyMessage(current)]));
           return;
         }
-        sortedItemEntries(current.items).forEach(({ id, label }) => {
+        const entries = sortedItemEntries(current.items);
+        entries.slice(0, VISIBLE_LEAF_LIMIT).forEach(({ id, label }) => {
           appendLeafRow(current, id, label);
         });
+        appendMoreRow(entries.length - VISIBLE_LEAF_LIMIT);
         return;
       }
 
@@ -1812,8 +1846,8 @@
         element: wrap,
         input,
         getValue: () => fieldKey === "identityTypes" ? collectTypeIds() : getValue(fieldKey),
-        restore: (value, selected) => { restore(fieldKey, value, selected); renderList(); },
-        reset: () => { resetField(fieldKey); renderList(); },
+        restore: (value, selected) => { restore(fieldKey, value, selected); if (isOpen) renderList(); },
+        reset: () => { resetField(fieldKey); if (isOpen) renderList(); },
       };
     }
 
@@ -1822,14 +1856,14 @@
     });
     if (hiddenInputs.identityTypes) facades.identityTypes = makeFacade("identityTypes");
 
-    renderList();
     renderChips();
 
     return {
       element: wrap,
       addressInput,
       facades,
-      refresh: renderList,
+      isOpen: () => isOpen,
+      refresh() { if (isOpen) renderList(); },
       selectedFieldKeys,
       hasAnySelection,
       resetAll() {
@@ -1911,7 +1945,8 @@
       const parsedDraft = JSON.parse(sessionStorage.getItem(draftStorageKey) || "{}");
       draft = parsedDraft && typeof parsedDraft === "object" && !Array.isArray(parsedDraft) ? parsedDraft : {};
     } catch (_) {}
-    const persistDraft = () => {
+    let persistDraftTimer = 0;
+    const persistDraftNow = () => {
       const fields = Array.from(panel.querySelectorAll("input, textarea, select"));
       const next = {};
       for (const field of fields) {
@@ -1919,6 +1954,10 @@
         next[field.id] = { value: field.value || "", selected: field.dataset && field.dataset.selectedValue || "" };
       }
       try { sessionStorage.setItem(draftStorageKey, JSON.stringify(next)); } catch (_) {}
+    };
+    const persistDraft = () => {
+      clearTimeout(persistDraftTimer);
+      persistDraftTimer = setTimeout(persistDraftNow, 180);
     };
     const restoreDraft = () => {
       for (const [id, saved] of Object.entries(draft)) {
@@ -2207,10 +2246,10 @@
         if (!destAndEnabled[key] && destAndPicker.facades[key].getValue()) destAndPicker.facades[key].reset();
       }
 
-      sourcePicker.refresh();
-      destPicker.refresh();
-      sourceAndPicker.refresh();
-      destAndPicker.refresh();
+      if (sourcePicker.isOpen()) sourcePicker.refresh();
+      if (destPicker.isOpen()) destPicker.refresh();
+      if (sourceAndOn && sourceAndPicker.isOpen()) sourceAndPicker.refresh();
+      if (destAndOn && destAndPicker.isOpen()) destAndPicker.refresh();
     }
 
     panel.addEventListener("change", recomputeEnabledFields);
