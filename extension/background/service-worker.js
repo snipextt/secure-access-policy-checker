@@ -1859,9 +1859,32 @@ function normalizeMemberEntry(entry, fallbackName) {
   return { name, members, resolved };
 }
 
+function needsPerIdMembers(kind) {
+  return kind === "destinationLists" || kind === "identityGroups" || kind === "sourceNetworks";
+}
+
 function getCachedMembers(maps, kind, id) {
   const entry = maps && maps[kind] && maps[kind][String(id)];
-  return entry && entry.resolved ? entry : null;
+  if (!entry || !entry.resolved) return null;
+  // A previous collection prefetch stored dest lists / AD groups / networks
+  // as resolved with zero members. That is never a real answer — Cisco only
+  // puts those entries on the per-id destinations/children URLs.
+  if (needsPerIdMembers(kind) && (!entry.members || !entry.members.length)) return null;
+  return entry;
+}
+
+async function getMembershipTabId(preferredTabId) {
+  if (preferredTabId) return preferredTabId;
+  try {
+    const tabs = await api.tabs.query({ url: ["https://dashboard.sse.cisco.com/*", "https://*.sse.cisco.com/*"] });
+    if (tabs && tabs[0] && tabs[0].id) return tabs[0].id;
+  } catch (_) {}
+  try {
+    const tabs = await api.tabs.query({ active: true, currentWindow: true });
+    return tabs && tabs[0] && tabs[0].id || null;
+  } catch (_) {
+    return null;
+  }
 }
 
 var _memberInflight = {};
@@ -2142,9 +2165,10 @@ async function resolveOneMembership(kind, id, orgId, tabId) {
     const maps = stored.sse_member_maps || emptyMemberMaps();
     const cached = getCachedMembers(maps, kind, id);
     if (cached) return cached;
+    const liveTabId = await getMembershipTabId(tabId);
     let entry = null;
-    if (kind === "destinationLists" || kind === "identityGroups" || kind === "sourceNetworks") {
-      entry = await fetchMembersById(kind, id, orgId, tabId, maps[kind] && maps[kind][String(id)]);
+    if (needsPerIdMembers(kind)) {
+      entry = await fetchMembersById(kind, id, orgId, liveTabId, maps[kind] && maps[kind][String(id)]);
     } else {
       const kindMap = await fetchMembershipKind(kind, orgId, tabId, maps);
       maps[kind] = kindMap;
@@ -2185,7 +2209,7 @@ async function resolveMembership(orgId, tabId, rules) {
     frontier = [];
     await Promise.all(Object.keys(byKind).map(async (key) => {
       try {
-        if (key === "destinationLists" || key === "identityGroups" || key === "sourceNetworks") {
+        if (needsPerIdMembers(key)) {
           for (const id of byKind[key]) {
             const entry = await fetchMembersById(key, id, orgId, tabId, memberMaps[key] && memberMaps[key][String(id)]);
             if (!memberMaps[key]) memberMaps[key] = {};
@@ -2393,7 +2417,8 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           sendResponse({ ok: false, error: "no org", name: id, members: [] });
           return;
         }
-        const fresh = await resolveOneMembership(kind, id, orgId, msg.tabId);
+        const tabId = await getMembershipTabId(msg.tabId || (sender && sender.tab && sender.tab.id));
+        const fresh = await resolveOneMembership(kind, id, orgId, tabId);
         sendResponse({ ok: true, name: fresh.name || id, members: fresh.members || [], cached: false });
       } catch (err) {
         sendResponse({ ok: false, error: err.message, members: [], name: id });

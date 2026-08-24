@@ -608,7 +608,9 @@ function isExpandableKind(kind) {
 
 function hasCachedMembers(memberMaps, kind, id) {
   const entry = memberMaps && memberMaps[kind] && memberMaps[kind][String(id)];
-  return Boolean(entry && Array.isArray(entry.members) && entry.resolved !== false);
+  if (!entry || !Array.isArray(entry.members) || entry.resolved === false) return false;
+  if ((kind === "destinationLists" || kind === "identityGroups" || kind === "sourceNetworks") && !entry.members.length) return false;
+  return true;
 }
 
 function requestMembers(kind, id, callback) {

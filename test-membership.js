@@ -193,6 +193,10 @@ console.log("\n=== Group 5c: per-id dest-list destinations stay unresolved until
   const resolved = M.normalizeMemberEntry({ name: "Social Media", members: [fromHar], resolved: true }, "18147945");
   eq(resolved.resolved, true, "per-id dest-list with members is resolved");
   eq(resolved.members.map(m => m.value), ["facebook.com"], "resolved dest-list keeps fqdn members");
+
+  const staleEmpty = { name: "Social Media", members: [], resolved: true };
+  assert(M.getCachedMembers({ destinationLists: { "18147945": staleEmpty } }, "destinationLists", "18147945") === null,
+    "stale empty dest-list cache is ignored so per-id fetch can run");
 }
 
 // ---------------------------------------------------------------------------
