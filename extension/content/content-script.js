@@ -443,7 +443,24 @@ function ensureHoverPopoverStyle() {
     }
     #sec-member-popover .sec-mp-chip.sec-mp-expandable:hover { background: #dbeafe; }
     #sec-member-popover .sec-mp-empty { color: #64748b; font-style: italic; font-size: 12px; padding: 4px; }
-    #sec-member-popover .sec-mp-loading { color: #64748b; font-size: 12px; padding: 4px; }
+    @keyframes sec-skel {
+      0% { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
+    }
+    .sec-skel {
+      background: linear-gradient(90deg, #eef2f7 0%, #f8fafc 45%, #eef2f7 90%);
+      background-size: 200% 100%;
+      animation: sec-skel 1.1s ease-in-out infinite;
+      border: 1px solid #e2e8f0;
+    }
+    #sec-hover-popover .sec-hp-skel,
+    #sec-member-popover .sec-mp-skel {
+      height: 28px; width: 100%; box-sizing: border-box;
+    }
+    #sec-hover-popover .sec-hp-skel-title,
+    #sec-member-popover .sec-mp-skel-title {
+      height: 14px; width: 42%; margin-bottom: 2px;
+    }
   `;
   document.head.appendChild(style);
 }
@@ -617,10 +634,11 @@ function renderMemberPopover(headerTitle, members, memberMaps, lookups, loading)
   list.className = "sec-mp-list";
 
   if (loading) {
-    const row = document.createElement("div");
-    row.className = "sec-mp-loading";
-    row.textContent = "Loading members…";
-    list.appendChild(row);
+    for (let i = 0; i < 4; i++) {
+      const row = document.createElement("div");
+      row.className = "sec-mp-skel sec-skel";
+      list.appendChild(row);
+    }
   } else if (!members || members.length === 0) {
     const empty = document.createElement("div");
     empty.className = "sec-mp-empty";
@@ -1449,6 +1467,25 @@ function showPopoverForRule(anchorEl, ruleName, testMatchReasons, autoHideMs) {
     triggeredDismissListener = null;
   }
 
+  function renderHoverSkeleton() {
+    popover.innerHTML = "";
+    const header = document.createElement("div");
+    header.className = "sec-hp-header";
+    header.textContent = ruleName;
+    popover.appendChild(header);
+    const body = document.createElement("div");
+    body.className = "sec-hp-body";
+    const title = document.createElement("div");
+    title.className = "sec-hp-skel-title sec-skel";
+    body.appendChild(title);
+    for (let i = 0; i < 5; i++) {
+      const row = document.createElement("div");
+      row.className = "sec-hp-skel sec-skel";
+      body.appendChild(row);
+    }
+    popover.appendChild(body);
+  }
+
   function reveal() {
     popover.classList.add("sec-hover-visible");
     // Keep the native cursor beside the card rather than anchoring to the
@@ -1483,6 +1520,9 @@ function showPopoverForRule(anchorEl, ruleName, testMatchReasons, autoHideMs) {
   // then enrich with rules/findings data if it arrives in time.
   if (isTriggered) {
     renderHoverPopoverContent(popover, ruleName, null, null, null, testMatchReasons);
+    reveal();
+  } else {
+    renderHoverSkeleton();
     reveal();
   }
 
