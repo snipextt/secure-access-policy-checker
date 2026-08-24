@@ -255,18 +255,6 @@
         width: 100%;
       }
 
-      .psc-tester-guide {
-        margin: 0;
-        padding: 9px 10px;
-        border-left: 3px solid #64748b;
-        background: #ffffff;
-        color: #475569;
-        font-size: 10.5px;
-        line-height: 1.45;
-        font-family: var(--hbr-font-family);
-      }
-      .psc-tester-guide strong { color: #0f172a; }
-
       /* Default Primary IP+Port Cards */
       .psc-hud-card {
         border: 1px solid #e2e8f0;
@@ -1627,10 +1615,6 @@
     srcBox.appendChild(el("div", { class: "psc-section-header" }, [
       el("span", { class: "psc-section-title" }, ["Source"]),
     ]));
-    srcBox.appendChild(el("p", { class: "psc-tester-guide" }, [
-      el("strong", {}, ["Choose a named source. "]),
-      "Open a category, then check the catalog item. A named AD user, group, roaming computer, or tunnel can satisfy a policy such as “Any AD User” or “Any Network Tunnel.” Type-only labels such as Posture, OS, or Endpoint Requirements cannot be independently simulated."
-    ]));
     srcBox.appendChild(srcIpField.element);
     srcBox.appendChild(sourcePicker.element);
 
@@ -1695,10 +1679,6 @@
     const dstBox = el("div", { class: "psc-section-box", id: "psc-dst-box" });
     dstBox.appendChild(el("div", { class: "psc-section-header" }, [
       el("span", { class: "psc-section-title" }, ["Destination"]),
-    ]));
-    dstBox.appendChild(el("p", { class: "psc-tester-guide" }, [
-      el("strong", {}, ["Pick the destination being reached. "]),
-      "Open a category, then check catalog items. Destination Scope distinguishes Internet from Private Access. Resource Kind is only a rule classifier; use a named private resource or group whenever one is configured."
     ]));
     dstBox.appendChild(dstIpField.element);
     dstBox.appendChild(destPicker.element);
