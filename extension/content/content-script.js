@@ -855,7 +855,7 @@ function conditionKindFor(attributeName) {
 
 function isIdentityGroupId(id, lookups) {
   const typeId = lookups && lookups.sourceIdentityTypeIds && lookups.sourceIdentityTypeIds[String(id)];
-  if (typeId === undefined || typeId === null) return true;
+  if (typeId === undefined || typeId === null) return false;
   return Boolean(IDENTITY_GROUP_TYPE_IDS[String(typeId)]);
 }
 
@@ -927,10 +927,12 @@ function summarizeConditions(rule, lookups) {
         // back to raw.
         const mergedTypes = Object.assign({}, HOVER_DEFAULT_IDENTITY_TYPES, lookups.identityTypes || {});
         const identityNames = (Array.isArray(values) ? values : [values]).map((id) => {
-          const name = lookups.identities && lookups.identities[String(id)];
+          const raw = lookups.identities && (lookups.identities[String(id)] !== undefined ? lookups.identities[String(id)] : lookups.identities[id]);
+          const name = typeof raw === "string" ? raw : (raw && (raw.name || raw.label || raw.displayName)) || "";
           const typeId = lookups.sourceIdentityTypeIds && lookups.sourceIdentityTypeIds[String(id)];
           const type = typeId !== undefined ? (mergedTypes[String(typeId)] || `Type ${typeId}`) : null;
-          return type ? `${name || "Identity"} (${type})` : (name || "Identity");
+          const label = name || "Deleted identity";
+          return type ? `${label} (${type})` : label;
         });
         summaryText = `Source Identities: ${identityNames.join(", ")}`;
         break;

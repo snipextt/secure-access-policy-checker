@@ -1245,7 +1245,8 @@ function collectIdentityIds(rules) {
     const conds = rule.ruleConditions || rule.conditions || [];
     if (!Array.isArray(conds)) continue;
     for (const c of conds) {
-      if (c.attributeName !== "umbrella.source.identity_ids") continue;
+      const attr = (c.attributeName || "").toLowerCase();
+      if (attr !== "umbrella.source.identity_ids" && attr !== "umbrella.source.identity_ids_shared") continue;
       const values = c.attributeValue;
       if (Array.isArray(values)) {
         values.forEach((v) => ids.add(v));

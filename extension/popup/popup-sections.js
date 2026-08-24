@@ -1991,7 +1991,7 @@
           case "umbrella.source.identity_ids_shared": {
             const typeMap = lookups.sourceIdentityTypeIds || {};
             const identityNames = (Array.isArray(values) ? values : [values]).map((id) => {
-              const name = lookupItemName(lookups.identities, id) || "Identity";
+              const name = lookupItemName(lookups.identities, id) || "Deleted identity";
               const typeId = typeMap[String(id)];
               const type = typeId !== undefined
                 ? (lookupItemName(lookups.identityTypes, typeId) || lookupItemName(DEFAULT_IDENTITY_TYPES, typeId) || `Type ${typeId}`)
