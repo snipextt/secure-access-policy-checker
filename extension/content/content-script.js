@@ -468,13 +468,14 @@ function getHoverPopoverEl() {
   return hoverPopoverEl;
 }
 
+function hideHoverPopover() {
+  if (hoverPopoverEl) hoverPopoverEl.classList.remove("sec-hover-visible");
+  hideMemberPopover();
+}
+
 function scheduleHideHoverPopover(delayMs) {
   clearTimeout(hoverHideTimer);
-  hoverHideTimer = setTimeout(() => {
-    if (memberPopoverEl && memberPopoverEl.classList.contains("sec-member-visible")) return;
-    if (hoverPopoverEl) hoverPopoverEl.classList.remove("sec-hover-visible");
-    hideMemberPopover();
-  }, delayMs !== undefined ? delayMs : HOVER_HIDE_DELAY_MS);
+  hoverHideTimer = setTimeout(hideHoverPopover, delayMs !== undefined ? delayMs : HOVER_HIDE_DELAY_MS);
 }
 
 // Cursor-proximate placement for normal hovers; supports a DOMRect-like
@@ -517,14 +518,12 @@ function hideMemberPopover() {
   }
 }
 
-function getMemberPopoverEl() {
-  if (!memberPopoverEl) {
-    memberPopoverEl = document.createElement("div");
-    memberPopoverEl.id = "sec-member-popover";
-    document.body.appendChild(memberPopoverEl);
-  }
-  return memberPopoverEl;
-}
+    memberPopoverEl.addEventListener("mouseenter", () => clearTimeout(hoverHideTimer));
+    memberPopoverEl.addEventListener("mouseleave", (event) => {
+      const next = event.relatedTarget;
+      if (hoverPopoverEl && next && hoverPopoverEl.contains(next)) return;
+      scheduleHideHoverPopover();
+    });
 
 function lookupName(map, id) {
   if (!map || id === undefined || id === null) return "";
@@ -1189,6 +1188,7 @@ function appendMatchReasonSection(body, reasons) {
 }
 
 function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSummary, testMatchReasons) {
+  hideMemberPopover();
   popover.innerHTML = "";
 
   // Set data-action for left border accent color (matches rules tab cards)
