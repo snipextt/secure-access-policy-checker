@@ -1,5 +1,13 @@
 var api = typeof browser !== 'undefined' ? browser : chrome;
 
+// Reloading an unpacked MV3 extension can leave the previous content script
+// in the same page. A second inject must stop immediately; otherwise `const`
+// declarations throw "already been declared" and break the hover card.
+if (window.__secPolicyCheckerInjected) {
+  // Stale leftover — do not rebind listeners or redeclare locals.
+} else {
+window.__secPolicyCheckerInjected = true;
+
 // Reloading an unpacked MV3 extension invalidates content scripts already
 // injected into dashboard tabs. A stale script must quietly stop instead of
 // throwing from a later hover/message callback; the fresh script takes over
@@ -805,7 +813,7 @@ function loadMemberMaps() {
 // Maps a source/destination condition attributeName to the membership map key
 // whose members should be expandable in the popover. Only group/list types
 // are expandable; leaf conditions (identities, IPs, single apps) are not.
-const MEMBER_CONDITION_KIND = {
+var MEMBER_CONDITION_KIND = {
   identityGroups: true,
   networkObjectGroups: true,
   serviceObjectGroups: true,
@@ -815,7 +823,7 @@ const MEMBER_CONDITION_KIND = {
   privateResourceGroups: true,
 };
 
-const MEMBER_CONDITION_MAP = {
+var MEMBER_CONDITION_MAP = {
   "umbrella.source.networkobjectgroupids": "networkObjectGroups",
   "umbrella.source.networkobjectgroupids_shared": "networkObjectGroups",
   "umbrella.destination.networkobjectgroupids": "networkObjectGroups",
@@ -828,7 +836,7 @@ const MEMBER_CONDITION_MAP = {
   "umbrella.source.identity_ids_shared": "identityGroups",
 };
 
-const IDENTITY_GROUP_TYPE_IDS = {
+var IDENTITY_GROUP_TYPE_IDS = {
   "3": true, "4": true, "8": true, "11": true, "40": true, "45": true, "54": true,
 };
 
@@ -1849,3 +1857,4 @@ if (document.readyState === "loading") {
   setupPersistence();
 }
 window.addEventListener("load", setupPersistence);
+}
