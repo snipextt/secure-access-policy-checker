@@ -83,7 +83,6 @@ console.log("\n=== Group 1: collectGroupIds (rule condition → group IDs) ===")
       { attributeName: "umbrella.destination.application_list_ids", attributeValue: [300] },
       { attributeName: "umbrella.destination.category_list_ids", attributeValue: [400] },
       { attributeName: "umbrella.destination.private_resource_group_ids", attributeValue: [500] },
-      // non-group condition must NOT be collected
       { attributeName: "umbrella.source.identity_ids", attributeValue: [7] },
       { attributeName: "umbrella.destination.application_ids", attributeValue: [123] },
     ]},
@@ -95,7 +94,7 @@ console.log("\n=== Group 1: collectGroupIds (rule condition → group IDs) ===")
   eq(ids.applicationLists, ["300"], "applicationLists");
   eq(ids.categoryLists, ["400"], "categoryLists");
   eq(ids.privateResourceGroups, ["500"], "privateResourceGroups");
-  assert(ids.identityGroups === undefined, "no identityGroups key (removed)");
+  eq(ids.identityGroups, ["7"], "identityGroups");
 }
 
 // ---------------------------------------------------------------------------
@@ -179,8 +178,8 @@ console.log("\n=== Group 7: MEMBERSHIP_CONFIG keys are expandable kinds ===");
 {
   const keys = Object.keys(M.MEMBERSHIP_CONFIG);
   eq(keys.sort(),
-     ["applicationLists", "categoryLists", "destinationLists", "networkObjectGroups", "privateResourceGroups", "serviceObjectGroups"].sort(),
-     "configured group/list kinds (no identityGroups)");
+     ["applicationLists", "categoryLists", "destinationLists", "identityGroups", "networkObjectGroups", "privateResourceGroups", "serviceObjectGroups"].sort(),
+     "configured group/list kinds include identityGroups");
   for (const k of keys) {
     assert(M.MEMBERSHIP_CONFIG[k] && M.MEMBERSHIP_CONFIG[k].tokenKey, `config ${k} has tokenKey`);
   }

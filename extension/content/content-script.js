@@ -308,6 +308,9 @@ var currentLookups = {};
 var memberPopoverEl = null;
 var memberHideTimer = null;
 var memberHoverTimer = null;
+var memberDismissListener = null;
+var memberOpenKey = null;
+var memberRequestSeq = 0;
 
 // Cisco Hummingbird (hbr) token VALUES duplicated here as literals — this
 // stylesheet is injected into the live dashboard's own document (a separate
@@ -432,6 +435,7 @@ function ensureHoverPopoverStyle() {
     }
     #sec-member-popover .sec-mp-chip.sec-mp-expandable:hover { background: #dbeafe; }
     #sec-member-popover .sec-mp-empty { color: #64748b; font-style: italic; font-size: 12px; padding: 4px; }
+    #sec-member-popover .sec-mp-loading { color: #64748b; font-size: 12px; padding: 4px; }
   `;
   document.head.appendChild(style);
 }
@@ -447,7 +451,11 @@ function getHoverPopoverEl() {
     // popover itself (e.g. to read a long finding message), same 150ms
     // hide-delay pattern as leaving the chip.
     hoverPopoverEl.addEventListener("mouseenter", () => clearTimeout(hoverHideTimer));
-    hoverPopoverEl.addEventListener("mouseleave", scheduleHideHoverPopover);
+    hoverPopoverEl.addEventListener("mouseleave", (event) => {
+      const next = event.relatedTarget;
+      if (memberPopoverEl && next && memberPopoverEl.contains(next)) return;
+      scheduleHideHoverPopover();
+    });
   }
   return hoverPopoverEl;
 }
@@ -455,8 +463,9 @@ function getHoverPopoverEl() {
 function scheduleHideHoverPopover(delayMs) {
   clearTimeout(hoverHideTimer);
   hoverHideTimer = setTimeout(() => {
+    if (memberPopoverEl && memberPopoverEl.classList.contains("sec-member-visible")) return;
     if (hoverPopoverEl) hoverPopoverEl.classList.remove("sec-hover-visible");
-    if (memberPopoverEl) memberPopoverEl.classList.remove("sec-member-visible");
+    hideMemberPopover();
   }, delayMs !== undefined ? delayMs : HOVER_HIDE_DELAY_MS);
 }
 
@@ -484,44 +493,94 @@ function positionHoverPopover(popover, anchor) {
 }
 
 // ---------------------------------------------------------------------------
-// Recursive member popover — expands a source/destination group into its
-// members, and any member that is itself a known group type expands one
-// level deeper, to arbitrary depth. Driven from the dashboard hover popover's
-// expandable condition chips (see renderConditionGroup). A single reused
-// #sec-member-popover element is re-targeted per hover; a 150ms bridge keeps
-// it open while the pointer moves from chip → popover → nested child.
+// Recursive member popover — click a source/destination group to expand its
+// members. Nested groups expand the same way, to arbitrary depth. Driven
+// from the dashboard hover popover's expandable condition chips (see
+// renderConditionGroup). A single reused #sec-member-popover is re-targeted
+// per click and stays open until the user clicks elsewhere.
 // ---------------------------------------------------------------------------
+
+function hideMemberPopover() {
+  if (memberPopoverEl) memberPopoverEl.classList.remove("sec-member-visible");
+  memberOpenKey = null;
+  if (memberDismissListener) {
+    document.removeEventListener("mousedown", memberDismissListener, true);
+    memberDismissListener = null;
+  }
+}
 
 function getMemberPopoverEl() {
   if (!memberPopoverEl) {
     memberPopoverEl = document.createElement("div");
     memberPopoverEl.id = "sec-member-popover";
     document.body.appendChild(memberPopoverEl);
-    memberPopoverEl.addEventListener("mouseenter", () => { clearTimeout(memberHideTimer); clearTimeout(memberHoverTimer); });
-    memberPopoverEl.addEventListener("mouseleave", scheduleHideMemberPopover);
   }
   return memberPopoverEl;
 }
 
-function scheduleHideMemberPopover() {
-  clearTimeout(memberHideTimer);
-  memberHideTimer = setTimeout(() => {
-    if (memberPopoverEl) memberPopoverEl.classList.remove("sec-member-visible");
-  }, HOVER_HIDE_DELAY_MS);
+function lookupName(map, id) {
+  if (!map || id === undefined || id === null) return "";
+  const raw = map[String(id)] !== undefined ? map[String(id)] : map[id];
+  if (!raw) return "";
+  if (typeof raw === "string") return raw;
+  return raw.name || raw.label || raw.displayName || "";
 }
 
-// Resolve a member entry's display label against the live name maps. `kind`
-// is the membership map key; nested groups keep their kind so the popover can
-// drill further. fqdn/destination-list members carry a raw value (domain).
+// Resolve a member's display label from membership data first, then the
+// already-loaded identity/object catalogs. Never prefer a bare numeric id
+// when a name exists somewhere we already fetched.
 function resolveMemberLabel(member, memberMaps, lookups) {
-  if (member.value !== undefined) return member.value; // destination list domain
-  const entry = memberMaps[member.kind] && memberMaps[member.kind][String(member.id)];
-  return (entry && entry.name) || String(member.id);
+  if (member && member.value !== undefined && member.value !== "") return String(member.value);
+  const id = member && member.id !== undefined ? String(member.id) : "";
+  if (!id) return "";
+  const maps = memberMaps || {};
+  const lu = lookups || {};
+  const om = lu.objectMaps || {};
+  const kindMaps = {
+    identityGroups: maps.identityGroups,
+    identity: lu.identities,
+    networkObjectGroups: maps.networkObjectGroups || om.networkObjectGroups,
+    networkObject: om.networkObjects,
+    serviceObjectGroups: maps.serviceObjectGroups || om.serviceObjectGroups,
+    serviceObject: om.serviceObjects,
+    destinationLists: maps.destinationLists || om.destinationLists,
+    applicationLists: maps.applicationLists || om.applicationLists,
+    application: lu.apps,
+    categoryLists: maps.categoryLists || om.categoryLists,
+    category: lu.categories,
+    privateResourceGroups: maps.privateResourceGroups || om.privateResourceGroups,
+    privateResource: om.privateResources,
+  };
+  const fromKind = lookupName(kindMaps[member.kind], id);
+  if (fromKind) return fromKind;
+  const fromMember = maps[member.kind] && maps[member.kind][id] && maps[member.kind][id].name;
+  if (fromMember) return fromMember;
+  return lookupName(lu.identities, id)
+    || lookupName(om.privateResources, id)
+    || lookupName(om.networkObjects, id)
+    || lookupName(om.networkObjectGroups, id)
+    || lookupName(om.serviceObjects, id)
+    || lookupName(om.serviceObjectGroups, id)
+    || lookupName(om.destinationLists, id)
+    || lookupName(om.applicationLists, id)
+    || lookupName(om.categoryLists, id)
+    || lookupName(om.privateResourceGroups, id)
+    || lookupName(lu.apps, id)
+    || lookupName(lu.categories, id)
+    || id;
 }
 
-// Render one level of the tree into the reusable popover element. `members`
-// is the array from memberMaps[kind][id].members.
-function renderMemberPopover(headerTitle, members, memberMaps, lookups) {
+function isExpandableKind(kind) {
+  return Boolean(kind && MEMBER_CONDITION_KIND[kind]);
+}
+
+function requestMembers(kind, id, callback) {
+  safeRuntimeMessage({ type: "RESOLVE_MEMBERS", kind, id: String(id) }, (response) => {
+    callback(response || { ok: false, members: [], name: String(id) });
+  });
+}
+
+function renderMemberPopover(headerTitle, members, memberMaps, lookups, loading) {
   const pop = getMemberPopoverEl();
   pop.innerHTML = "";
   const header = document.createElement("div");
@@ -532,29 +591,29 @@ function renderMemberPopover(headerTitle, members, memberMaps, lookups) {
   const list = document.createElement("div");
   list.className = "sec-mp-list";
 
-  if (!members || members.length === 0) {
+  if (loading) {
+    const row = document.createElement("div");
+    row.className = "sec-mp-loading";
+    row.textContent = "Loading members…";
+    list.appendChild(row);
+  } else if (!members || members.length === 0) {
     const empty = document.createElement("div");
     empty.className = "sec-mp-empty";
-    empty.textContent = "No members resolved (group may be empty or its membership fetch is unconfirmed).";
+    empty.textContent = "No members resolved for this group.";
     list.appendChild(empty);
   } else {
     for (const m of members) {
       const childEntry = memberMaps[m.kind] && memberMaps[m.kind][String(m.id)];
-      const childMembers = childEntry && childEntry.members;
-      const nested = Boolean(childMembers && childMembers.length);
+      const nested = Boolean(isExpandableKind(m.kind) || (childEntry && childEntry.members && childEntry.members.length));
       const chip = document.createElement("div");
       chip.className = "sec-mp-chip" + (nested ? " sec-mp-expandable" : "");
       chip.textContent = resolveMemberLabel(m, memberMaps, lookups) + (nested ? "  ›" : "");
       if (nested) {
-        chip.addEventListener("mouseenter", () => {
-          clearTimeout(memberHideTimer); clearTimeout(memberHoverTimer);
-          const childTitle = resolveMemberLabel(m, memberMaps, lookups);
-          memberHoverTimer = setTimeout(() => {
-            renderMemberPopover(childTitle, childMembers, memberMaps, lookups);
-            showMemberPopover(chip);
-          }, 90);
+        chip.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          openMemberPopover(chip, resolveMemberLabel(m, memberMaps, lookups), m.kind, m.id, memberMaps, lookups);
         });
-        chip.addEventListener("mouseleave", scheduleHideMemberPopover);
       }
       list.appendChild(chip);
     }
@@ -567,30 +626,56 @@ function showMemberPopover(anchorEl) {
   const rect = anchorEl.getBoundingClientRect();
   pop.classList.add("sec-member-visible");
   positionHoverPopover(pop, { x: rect.right, y: rect.top });
+  if (!memberDismissListener) {
+    memberDismissListener = (event) => {
+      if (memberPopoverEl && memberPopoverEl.contains(event.target)) return;
+      if (event.target && event.target.closest && event.target.closest(".sec-hp-expandable, .sec-mp-expandable")) return;
+      hideMemberPopover();
+    };
+    document.addEventListener("mousedown", memberDismissListener, true);
+  }
 }
 
-// Expandable source/destination condition chips. For each condition whose
-// attributeName maps to a group/list type with stored membership, render a
-// separate expandable chip per group that, on hover, drills into its members.
+function openMemberPopover(anchorEl, title, kind, id, memberMaps, lookups) {
+  const key = `${kind}:${id}`;
+  if (memberOpenKey === key && memberPopoverEl && memberPopoverEl.classList.contains("sec-member-visible")) {
+    hideMemberPopover();
+    return;
+  }
+  memberOpenKey = key;
+  const cached = memberMaps[kind] && memberMaps[kind][String(id)];
+  renderMemberPopover(title, cached && cached.members, memberMaps, lookups, !(cached && cached.members));
+  showMemberPopover(anchorEl);
+  const seq = ++memberRequestSeq;
+  requestMembers(kind, id, (response) => {
+    if (seq !== memberRequestSeq || memberOpenKey !== key) return;
+    const members = (response && response.members) || [];
+    const name = (response && response.name) || title;
+    if (!memberMaps[kind]) memberMaps[kind] = {};
+    memberMaps[kind][String(id)] = { name, members };
+    currentMemberMaps = memberMaps;
+    renderMemberPopover(name, members, memberMaps, lookups, false);
+    showMemberPopover(anchorEl);
+  });
+}
+
+// Expandable source/destination condition chips. Click opens a member
+// popover and resolves members on demand.
 function appendExpandableMemberChips(chipsWrap, items, memberMaps, lookups) {
   for (const cs of items) {
-    const members = expansionForCondition(cs, memberMaps);
+    const members = expansionForCondition(cs, memberMaps, lookups);
     if (!members) continue;
     for (const m of members) {
       const chip = document.createElement("span");
       chip.className = "sec-hp-chip sec-hp-expandable";
       chip.textContent = m.label + "  ▾";
-      chip.title = "Hover to expand members";
-      chip.addEventListener("mouseenter", () => {
-        clearTimeout(hoverHideTimer); clearTimeout(memberHideTimer);
-        const entry = memberMaps[m.kind] && memberMaps[m.kind][m.id];
-        const childMembers = entry && entry.members;
-        memberHoverTimer = setTimeout(() => {
-          renderMemberPopover(m.label, childMembers, memberMaps, lookups);
-          showMemberPopover(chip);
-        }, 90);
+      chip.title = "Click to expand members";
+      chip.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        clearTimeout(hoverHideTimer);
+        openMemberPopover(chip, m.label, m.kind, m.id, memberMaps, lookups);
       });
-      chip.addEventListener("mouseleave", scheduleHideMemberPopover);
       chipsWrap.appendChild(chip);
     }
   }
@@ -720,6 +805,16 @@ function loadMemberMaps() {
 // Maps a source/destination condition attributeName to the membership map key
 // whose members should be expandable in the popover. Only group/list types
 // are expandable; leaf conditions (identities, IPs, single apps) are not.
+const MEMBER_CONDITION_KIND = {
+  identityGroups: true,
+  networkObjectGroups: true,
+  serviceObjectGroups: true,
+  destinationLists: true,
+  applicationLists: true,
+  categoryLists: true,
+  privateResourceGroups: true,
+};
+
 const MEMBER_CONDITION_MAP = {
   "umbrella.source.networkobjectgroupids": "networkObjectGroups",
   "umbrella.source.networkobjectgroupids_shared": "networkObjectGroups",
@@ -729,25 +824,48 @@ const MEMBER_CONDITION_MAP = {
   "umbrella.destination.application_list_ids": "applicationLists",
   "umbrella.destination.category_list_ids": "categoryLists",
   "umbrella.destination.private_resource_group_ids": "privateResourceGroups",
+  "umbrella.source.identity_ids": "identityGroups",
+  "umbrella.source.identity_ids_shared": "identityGroups",
 };
 
+const IDENTITY_GROUP_TYPE_IDS = {
+  "3": true, "4": true, "8": true, "11": true, "40": true, "45": true, "54": true,
+};
+
+function conditionKindFor(attributeName) {
+  const attr = String(attributeName || "").toLowerCase();
+  if (MEMBER_CONDITION_MAP[attr]) return MEMBER_CONDITION_MAP[attr];
+  if (attr.includes("private_resource_group")) return "privateResourceGroups";
+  if (attr.includes("networkobjectgroup")) return "networkObjectGroups";
+  if (attr.includes("serviceobjectgroup")) return "serviceObjectGroups";
+  if (attr.includes("destination_list")) return "destinationLists";
+  if (attr.includes("application_list")) return "applicationLists";
+  if (attr.includes("category_list")) return "categoryLists";
+  if (attr.includes("identity_ids") || attr.includes("identity_group")) return "identityGroups";
+  return null;
+}
+
+function isIdentityGroupId(id, lookups) {
+  const typeId = lookups && lookups.sourceIdentityTypeIds && lookups.sourceIdentityTypeIds[String(id)];
+  if (typeId === undefined || typeId === null) return true;
+  return Boolean(IDENTITY_GROUP_TYPE_IDS[String(typeId)]);
+}
+
 // Returns expandable member descriptors for a condition, or null if the
-// condition is not a group/list type or has no stored membership. Each
-// descriptor: { id, kind, label } — kind is the membership map key so the
-// popover can drill into nested groups at any depth.
-function expansionForCondition(cond, memberMaps) {
+// condition is not a group/list type. Each descriptor: { id, kind, label }.
+// Names come from membership data first, then already-loaded catalogs.
+function expansionForCondition(cond, memberMaps, lookups) {
   if (!cond || !cond.raw || !cond.raw.attributeName) return null;
-  const key = MEMBER_CONDITION_MAP[cond.raw.attributeName.toLowerCase()];
+  const key = conditionKindFor(cond.raw.attributeName);
   if (!key) return null;
-  const map = memberMaps && memberMaps[key];
-  if (!map) return null;
   const av = Array.isArray(cond.raw.attributeValue) ? cond.raw.attributeValue : [cond.raw.attributeValue];
   const members = [];
   for (const id of av) {
+    if (id === undefined || id === null || id === "*" || String(id).toLowerCase() === "any") continue;
     const sid = String(id);
-    const entry = map[sid];
-    if (!entry) continue;
-    members.push({ id: sid, kind: key, label: entry.name || sid });
+    if (key === "identityGroups" && !isIdentityGroupId(sid, lookups)) continue;
+    const label = resolveMemberLabel({ id: sid, kind: key }, memberMaps || {}, lookups || {});
+    members.push({ id: sid, kind: key, label });
   }
   return members.length ? members : null;
 }

@@ -201,6 +201,7 @@ async function fetchAllData(explicitOrgId) {
       logEvent("auto-fetch", "No orgId available, skipping fetch");
       return;
     }
+    await api.storage.local.set({ cached_org_id: orgId });
 
     // 2. Get tabId for on-demand token checks
     let tabId = null;
@@ -1843,6 +1844,7 @@ function collectGroupIds(rules) {
     applicationLists: new Set(),
     categoryLists: new Set(),
     privateResourceGroups: new Set(),
+    identityGroups: new Set(),
   };
   for (const rule of rules || []) {
     const conds = rule.conditions || rule.ruleConditions || [];
@@ -1859,6 +1861,10 @@ function collectGroupIds(rules) {
       else if (name.includes("application_list")) add("applicationLists");
       else if (name.includes("category_list")) add("categoryLists");
       else if (name.includes("private_resource_group")) add("privateResourceGroups");
+      // Source identity conditions (AD groups, SGT groups, etc.) resolve to
+      // members via directory_group; non-group identity IDs simply won't
+      // appear in that by-id map and stay non-expandable.
+      else if (name.includes("identity_ids") || name.includes("identity_group")) add("identityGroups");
     }
   }
   for (const key of Object.keys(result)) result[key] = Array.from(result[key]);
@@ -1907,6 +1913,12 @@ const MEMBERSHIP_CONFIG = {
     wrapper: ["data", "items", "results"], idField: "resourceGroupId", nameField: ["name", "label"],
     memberFields: ["resourceIds", "resources", "members"],
     url: (o) => `https://api.umbrella.com/v1/organizations/${o}/private_resource_groups?offset=0&limit=1000&sortBy=name&sortOrder=asc`,
+  },
+  identityGroups: {
+    tokenKey: "mgmt_authz_token", leafKind: "identity",
+    wrapper: ["data", "items", "results"], idField: "id", nameField: ["name", "label"],
+    memberFields: ["members", "users", "identities", "children"],
+    url: (o) => `https://management.api.umbrella.com/identity/v2/organizations/${o}/directory_group?offset=0&limit=100`,
   },
 };
 
@@ -1976,6 +1988,7 @@ async function resolveMembership(orgId, tabId, rules) {
   const memberMaps = {
     networkObjectGroups: {}, serviceObjectGroups: {}, destinationLists: {},
     applicationLists: {}, categoryLists: {}, privateResourceGroups: {},
+    identityGroups: {},
   };
   const visited = new Set();
   let frontier = [];
@@ -2185,6 +2198,65 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     api.storage.local.get("sse_member_maps").then(result => {
       sendResponse({ memberMaps: result.sse_member_maps || {} });
     });
+    return true;
+  }
+
+  // On-demand membership resolve for a single group/list. Used by the
+  // dashboard popover's click-to-expand so names/members are fetched when
+  // the user actually opens a group instead of relying on a stale prefetch.
+  if (msg.type === "RESOLVE_MEMBERS") {
+    const kind = msg.kind;
+    const id = msg.id !== undefined && msg.id !== null ? String(msg.id) : "";
+    if (!kind || !id || !MEMBERSHIP_CONFIG[kind]) {
+      sendResponse({ ok: false, error: "unknown group kind", members: [], name: id });
+      return true;
+    }
+    (async () => {
+      try {
+        const stored = await api.storage.local.get(["sse_member_maps", "cached_org_id"]);
+        const maps = stored.sse_member_maps || {};
+        const cached = maps[kind] && maps[kind][id];
+        if (cached && Array.isArray(cached.members) && cached.members.length) {
+          sendResponse({ ok: true, name: cached.name || id, members: cached.members, cached: true });
+          return;
+        }
+        const orgId = stored.cached_org_id || await getActiveOrgId().catch(() => null);
+        if (!orgId) {
+          sendResponse({ ok: false, error: "no org", name: (cached && cached.name) || id, members: (cached && cached.members) || [] });
+          return;
+        }
+        const cfg = MEMBERSHIP_CONFIG[kind];
+        const tokenObj = await getFreshToken(cfg.tokenKey, msg.tabId);
+        if (!tokenObj) {
+          sendResponse({ ok: false, error: "no token", name: (cached && cached.name) || id, members: (cached && cached.members) || [] });
+          return;
+        }
+        const response = await fetch(cfg.url(orgId), {
+          headers: { Authorization: `Bearer ${tokenObj.token}`, Accept: "application/json" },
+        });
+        if (!response.ok) {
+          sendResponse({ ok: false, error: `http ${response.status}`, name: (cached && cached.name) || id, members: (cached && cached.members) || [] });
+          return;
+        }
+        const json = await response.json();
+        const entries = parseMembership(json, kind);
+        if (!maps[kind]) maps[kind] = {};
+        for (const e of entries) {
+          if (!e || e.id === undefined) continue;
+          maps[kind][String(e.id)] = {
+            name: e.name || String(e.id),
+            members: (e.members || [])
+              .map((m) => (m.id !== undefined ? { id: String(m.id), kind: m.kind } : { value: m.value, kind: m.kind }))
+              .filter((m) => m.id !== undefined || m.value !== undefined),
+          };
+        }
+        await api.storage.local.set({ sse_member_maps: maps });
+        const fresh = maps[kind][id] || { name: id, members: [] };
+        sendResponse({ ok: true, name: fresh.name, members: fresh.members, cached: false });
+      } catch (err) {
+        sendResponse({ ok: false, error: err.message, members: [], name: id });
+      }
+    })();
     return true;
   }
 
