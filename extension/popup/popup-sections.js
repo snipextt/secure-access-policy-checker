@@ -115,6 +115,18 @@
         width: 100%;
         min-width: 0;
         box-sizing: border-box;
+        position: relative;
+        z-index: 20;
+        overflow: visible;
+      }
+      #psc-panel-body,
+      .psc-criteria-grid,
+      .psc-and-slot {
+        overflow: visible;
+      }
+      #psc-result-col {
+        position: relative;
+        z-index: 1;
       }
 
       /* 2-Column Grid Layout: SOURCE on Left, DESTINATION on Right */
@@ -453,19 +465,20 @@
         font-size: 10px;
         flex-shrink: 0;
       }
+      .psc-cb.is-open {
+        z-index: 80;
+      }
       .psc-cb-flyout {
         display: none;
-        position: absolute;
-        top: calc(100% + 2px);
-        left: 0;
-        right: 0;
-        z-index: 40;
+        position: fixed;
+        z-index: 2147483000;
         background: #ffffff;
         border: 1px solid #cbd5e1;
         box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+        box-sizing: border-box;
+        overflow: auto;
       }
       .psc-cb.is-open .psc-cb-flyout { display: block; }
-      .psc-cb-flyout { pointer-events: auto; }
       /* Cisco-style nested catalog picker */
       .psc-np {
         display: flex;
@@ -1240,6 +1253,10 @@
     32: "networkDevices", 36: "mobileDevices", 38: "chromebooks", 57: "ztnaClients",
   };
 
+  // Only one From/To flyout stays open. Closing goes through this hook so
+  // opening Dest does not leave Source painted on top of the results pane.
+  let activeCatalogPickerClose = null;
+
   // Cisco From/To combobox: chips in one field, flyout with search,
   // breadcrumbs, category counts, chevrons, checkbox leaves. Hidden field
   // ids stay the ones the matcher already consumes (psc-src-users, …).
@@ -1530,22 +1547,82 @@
       renderList();
     }
 
+    function eventHitsPickerSurface(evt) {
+      const eventPath = typeof evt.composedPath === "function" ? evt.composedPath() : [];
+      return eventPath.includes(trigger) || eventPath.includes(flyout)
+        || trigger.contains(evt.target) || flyout.contains(evt.target);
+    }
+
+    function placeFlyout() {
+      if (!isOpen) return;
+      const rect = trigger.getBoundingClientRect();
+      const gap = 2;
+      const width = Math.max(rect.width, 240);
+      const maxHeight = Math.min(360, Math.max(160, window.innerHeight - 16));
+      let left = rect.left;
+      if (left + width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - width - 8);
+      if (left < 8) left = 8;
+      const below = rect.bottom + gap;
+      const above = rect.top - gap;
+      const spaceBelow = window.innerHeight - below;
+      const spaceAbove = above;
+      const openUp = spaceBelow < 180 && spaceAbove > spaceBelow;
+      flyout.style.width = width + "px";
+      flyout.style.maxHeight = maxHeight + "px";
+      flyout.style.left = left + "px";
+      if (openUp) {
+        flyout.style.top = "auto";
+        flyout.style.bottom = (window.innerHeight - above) + "px";
+      } else {
+        flyout.style.bottom = "auto";
+        flyout.style.top = below + "px";
+      }
+    }
+
+    function parkFlyout() {
+      if (flyout.parentNode !== wrap) wrap.insertBefore(flyout, hiddenBox);
+      flyout.style.top = "";
+      flyout.style.bottom = "";
+      flyout.style.left = "";
+      flyout.style.width = "";
+      flyout.style.maxHeight = "";
+    }
+
     function setOpen(on) {
       const next = Boolean(on);
-      if (isOpen === next) return;
+      if (isOpen === next) {
+        if (next) {
+          placeFlyout();
+          requestAnimationFrame(() => { if (isOpen) search.focus(); });
+        }
+        return;
+      }
       isOpen = next;
       wrap.classList.toggle("is-open", isOpen);
       if (isOpen) {
+        if (activeCatalogPickerClose && activeCatalogPickerClose !== setOpen) {
+          activeCatalogPickerClose(false);
+        }
+        activeCatalogPickerClose = setOpen;
+        if (flyout.parentNode !== document.body) document.body.appendChild(flyout);
         renderList();
-        requestAnimationFrame(() => { if (isOpen) search.focus(); });
+        placeFlyout();
+        requestAnimationFrame(() => {
+          if (!isOpen) return;
+          placeFlyout();
+          search.focus();
+        });
+      } else {
+        if (activeCatalogPickerClose === setOpen) activeCatalogPickerClose = null;
+        parkFlyout();
       }
     }
 
     trigger.addEventListener("pointerdown", (evt) => {
       if (evt.button !== 0) return;
+      if (evt.target.closest("button")) return;
       evt.preventDefault();
       evt.stopPropagation();
-      if (evt.target.closest("button")) return;
       setOpen(!isOpen);
     });
     trigger.addEventListener("click", (evt) => {
@@ -1566,15 +1643,20 @@
       evt.preventDefault();
       commitAddress(search.value);
     });
-    // Capture-phase closer. Bubble mousedown loses the target when a row
-    // rebuilds the list, and iframe document clicks can miss a bubble
-    // listener on a detached wrap.
+    // Window capture runs before any document closer, so a click that
+    // opened this list cannot be treated as an outside close on the
+    // same pointerdown. Labels live on wrap, not trigger, so they close.
+    window.addEventListener("pointerdown", (evt) => {
+      if (eventHitsPickerSurface(evt)) evt.__pscPickerSurface = true;
+    }, true);
     document.addEventListener("pointerdown", (evt) => {
       if (!isOpen) return;
-      const eventPath = typeof evt.composedPath === "function" ? evt.composedPath() : [];
-      if (eventPath.includes(wrap) || wrap.contains(evt.target)) return;
+      if (evt.__pscPickerSurface) return;
+      if (eventHitsPickerSurface(evt)) return;
       setOpen(false);
     }, true);
+    window.addEventListener("resize", placeFlyout);
+    document.addEventListener("scroll", placeFlyout, true);
 
     function setSelected(fieldKey, id, label, badge, on) {
       const node = fieldNodes[fieldKey];
