@@ -518,12 +518,20 @@ function hideMemberPopover() {
   }
 }
 
+function getMemberPopoverEl() {
+  if (!memberPopoverEl) {
+    memberPopoverEl = document.createElement("div");
+    memberPopoverEl.id = "sec-member-popover";
+    document.body.appendChild(memberPopoverEl);
     memberPopoverEl.addEventListener("mouseenter", () => clearTimeout(hoverHideTimer));
     memberPopoverEl.addEventListener("mouseleave", (event) => {
       const next = event.relatedTarget;
       if (hoverPopoverEl && next && hoverPopoverEl.contains(next)) return;
       scheduleHideHoverPopover();
     });
+  }
+  return memberPopoverEl;
+}
 
 function lookupName(map, id) {
   if (!map || id === undefined || id === null) return "";
