@@ -478,7 +478,8 @@
         box-sizing: border-box;
         overflow: auto;
       }
-      .psc-cb.is-open .psc-cb-flyout { display: block; }
+      .psc-cb.is-open .psc-cb-flyout,
+      .psc-cb-flyout.is-open { display: block; }
       /* Cisco-style nested catalog picker */
       .psc-np {
         display: flex;
@@ -1599,6 +1600,7 @@
       }
       isOpen = next;
       wrap.classList.toggle("is-open", isOpen);
+      flyout.classList.toggle("is-open", isOpen);
       if (isOpen) {
         if (activeCatalogPickerClose && activeCatalogPickerClose !== setOpen) {
           activeCatalogPickerClose(false);
