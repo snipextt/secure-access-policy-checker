@@ -167,6 +167,13 @@ console.log("\n=== Group 5: parseMembership — destination list FQDN strings ==
 }
 
 // ---------------------------------------------------------------------------
+console.log("\n=== Group 5b: HAR destination object members ===");
+{
+  const classified = M._classifyMember({ id: "36", destination: "ebay.com", type: "domain" }, "destinationLists");
+  eq(classified, { value: "ebay.com", kind: "fqdn" }, "HAR destination object → fqdn value");
+}
+
+// ---------------------------------------------------------------------------
 console.log("\n=== Group 6: parseMembership — unknown wrapper degrades to [] ===");
 {
   eq(M.parseMembership({}, "networkObjectGroups"), [], "empty object → no items → []");

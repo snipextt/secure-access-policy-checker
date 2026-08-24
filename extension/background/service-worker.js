@@ -1940,19 +1940,19 @@ const MEMBERSHIP_CONFIG = {
     tokenKey: "sse_token", leafKind: "application",
     wrapper: ["applicationLists", "data", "items", "results"], idField: "applicationListId",
     nameField: ["applicationListName", "name", "label"],
-    memberFields: ["applications", "applicationIds", "items", "members"],
+    memberFields: ["applicationIds", "applications", "items", "members"],
     url: (o) => `https://api.umbrella.com/v1/organizations/${o}/application_lists`,
   },
   categoryLists: {
     tokenKey: "opendns_token", leafKind: "category",
-    wrapper: ["data", "items", "results"], idField: "categorySettingId",
-    nameField: ["categorySettingName", "name", "label"],
+    wrapper: ["data", "items", "results"], idField: "id",
+    nameField: ["name", "categorySettingName", "label"],
     memberFields: ["categories", "categoryIds", "members"],
     url: (o) => `https://api.opendns.com/v3/organizations/${o}/categorysettings?outputFormat=jsonHttpStatusOverride&filters=%7B%7D`,
   },
   privateResourceGroups: {
     tokenKey: "sse_token", leafKind: "privateResource",
-    wrapper: ["data", "items", "results"], idField: "resourceGroupId", nameField: ["name", "label"],
+    wrapper: ["items", "data", "results"], idField: "resourceGroupId", nameField: ["name", "label"],
     memberFields: ["resourceIds", "resources", "members"],
     url: (o) => `https://api.umbrella.com/v1/organizations/${o}/private_resource_groups?offset=0&limit=1000&sortBy=name&sortOrder=asc`,
   },
@@ -1964,12 +1964,21 @@ const MEMBERSHIP_CONFIG = {
   },
 };
 
+function membershipAuthHeaders(token) {
+  return {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/json",
+    Origin: "https://dashboard.sse.cisco.com",
+    Referer: "https://dashboard.sse.cisco.com/",
+  };
+}
+
 function _classifyMember(m, key) {
   const cfg = MEMBERSHIP_CONFIG[key];
   const leafKind = cfg ? cfg.leafKind : "unknown";
-  // Destination lists are FQDN/CIDR strings, not IDs.
+  // HAR: destination list members are { destination, type }, not IDs.
   if (key === "destinationLists") {
-    const v = typeof m === "string" ? m : (m && (m.domain || m.value || m.name)) || "";
+    const v = typeof m === "string" ? m : (m && (m.destination || m.domain || m.value || m.name)) || "";
     return v ? { value: v, kind: "fqdn" } : null;
   }
   if (typeof m === "string") return { id: m, kind: leafKind };
@@ -2021,6 +2030,60 @@ function parseMembership(json, key) {
   }).filter(Boolean);
 }
 
+// HAR-backed per-id member fetch. Destination lists do not include members
+// on the collection endpoint; Cisco loads
+// /destinationlists/{id}/destinations. AD groups expose a children URL, not
+// an inline members array. Networks use /network/{id}/children.
+async function fetchMembersById(kind, id, orgId, tabId, existing) {
+  const tokenKey =
+    kind === "destinationLists" ? "opendns_token" :
+    (kind === "identityGroups" || kind === "sourceNetworks") ? "mgmt_authz_token" :
+    null;
+  if (!tokenKey) return existing || { name: String(id), members: [], resolved: true };
+  const tokenObj = await getFreshToken(tokenKey, tabId);
+  if (!tokenObj) return existing || { name: String(id), members: [], resolved: true };
+
+  let url = null;
+  if (kind === "destinationLists") {
+    url = `https://api.opendns.com/v3/organizations/${orgId}/destinationlists/${id}/destinations?page=1&outputFormat=jsonHttpStatusOverride&optionalFields={meta:%27meta%27}`;
+  } else if (kind === "identityGroups") {
+    url = `https://management.api.umbrella.com/identity/v2/organizations/${orgId}/directory_group/${id}/children?offset=0&limit=100`;
+  } else if (kind === "sourceNetworks") {
+    url = `https://management.api.umbrella.com/identity/v2/organizations/${orgId}/network/${id}/children?offset=0&limit=100`;
+  }
+  if (!url) return existing || { name: String(id), members: [], resolved: true };
+
+  const response = await fetch(url, { headers: membershipAuthHeaders(tokenObj.token) });
+  if (!response.ok) {
+    logEvent("membership", "per-id non-OK", { kind, id, status: response.status });
+    return existing || { name: String(id), members: [], resolved: true };
+  }
+  const json = await response.json();
+  const rows = Array.isArray(json) ? json : (json.data || json.items || json.results || []);
+  let members = [];
+  if (kind === "destinationLists") {
+    members = rows.map((row) => {
+      const value = typeof row === "string" ? row : (row && (row.destination || row.domain || row.value || row.name));
+      return value ? { value: String(value), kind: "fqdn" } : null;
+    }).filter(Boolean);
+  } else {
+    members = rows.map((row) => {
+      if (!row || row.id === undefined) return null;
+      const nested = row.type === "directory_group" || Number(row.childCount) > 0 || (typeof row.children === "string" && /\/children/.test(row.children));
+      return {
+        id: String(row.id),
+        kind: nested ? "identityGroups" : "identity",
+        name: row.label || row.name || String(row.id),
+      };
+    }).filter(Boolean);
+  }
+  return {
+    name: (existing && existing.name) || String(id),
+    members,
+    resolved: true,
+  };
+}
+
 // Breadth-first recursive fetch. Each group's members are recorded flat under
 // its kind; any member that is itself a known group type is pushed onto the
 // next frontier so the popover can drill arbitrarily deep. `visited` prevents
@@ -2054,10 +2117,19 @@ async function resolveOneMembership(kind, id, orgId, tabId) {
     const maps = stored.sse_member_maps || emptyMemberMaps();
     const cached = getCachedMembers(maps, kind, id);
     if (cached) return cached;
-    const kindMap = await fetchMembershipKind(kind, orgId, tabId, maps);
-    maps[kind] = kindMap;
-    await persistMemberMaps({ [kind]: kindMap });
-    return getCachedMembers(maps, kind, id) || { name: String(id), members: [], resolved: true };
+    let entry = null;
+    if (kind === "destinationLists" || kind === "identityGroups" || kind === "sourceNetworks") {
+      entry = await fetchMembersById(kind, id, orgId, tabId, maps[kind] && maps[kind][String(id)]);
+    } else {
+      const kindMap = await fetchMembershipKind(kind, orgId, tabId, maps);
+      maps[kind] = kindMap;
+      entry = getCachedMembers(maps, kind, id);
+    }
+    if (!entry) entry = { name: String(id), members: [], resolved: true };
+    if (!maps[kind]) maps[kind] = {};
+    maps[kind][String(id)] = entry;
+    await persistMemberMaps({ [kind]: { [String(id)]: entry } });
+    return entry;
   })().finally(() => { delete _memberInflight[cacheId]; });
   return _memberInflight[cacheId];
 }
