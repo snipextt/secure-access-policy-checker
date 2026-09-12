@@ -611,6 +611,21 @@
         width: 8px;
         height: 12px;
       }
+      .psc-np-address-row .psc-np-name { color: #049fd9; }
+      .psc-np-warn {
+        margin: 0 0 6px;
+        padding: 7px 9px;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        color: #991b1b;
+        font-size: 11px;
+        line-height: 1.4;
+      }
+      .psc-np-chip.is-invalid {
+        border-color: #fca5a5;
+        background: #fef2f2;
+        color: #991b1b;
+      }
       .psc-np-badge {
         flex-shrink: 0;
         font-size: 10px;
@@ -1267,6 +1282,9 @@
     tree,
     getFieldState,
     getDisabledReason,
+    getNodeGate,
+    validateAddress,
+    getFieldIssue,
     addressInputId,
     addressPlaceholder,
     allowAddress = true,
@@ -1353,6 +1371,7 @@
 
     let path = [];
     let isOpen = false;
+    let addressError = "";
     const sortedCache = new WeakMap();
     const VISIBLE_LEAF_LIMIT = 80;
 
@@ -1361,6 +1380,10 @@
     }
 
     function nodeEnabled(node) {
+      if (getNodeGate) {
+        const gate = getNodeGate(node);
+        if (gate && gate.managed) return gate.enabled !== false;
+      }
       if (node.typeIds && node.typeIds.length && (!node.fieldKey || node.typeOnly)) {
         return node.typeIds.some(typeId => {
           const key = TYPE_ID_TO_SOURCE_FIELD[String(typeId)];
@@ -1468,6 +1491,10 @@
     }
 
     function nodeDisabledReason(node) {
+      if (getNodeGate) {
+        const gate = getNodeGate(node);
+        if (gate && gate.managed) return gate.reason || "";
+      }
       if (!getDisabledReason) return "";
       if (node.fieldKey && node.fieldKey !== "identityTypes") {
         return getDisabledReason(node.fieldKey) || "";
@@ -1496,9 +1523,11 @@
         if (!node.fieldKey || node.fieldKey === "identityTypes" || node.typeOnly) return;
         selectedIds(node.fieldKey).forEach(id => {
           const rec = selectedByField[node.fieldKey][id];
-          const chip = el("span", { class: "psc-np-chip" }, [
+          const issue = getFieldIssue ? getFieldIssue(node.fieldKey) : "";
+          const chip = el("span", { class: "psc-np-chip" + (issue ? " is-invalid" : "") }, [
             el("span", { class: "psc-np-chip-label" }, [rec.label + (rec.badge ? " (" + rec.badge + ")" : "")]),
           ]);
+          if (issue) chip.title = issue;
           const remove = el("button", { type: "button", title: "Remove" }, ["×"]);
           remove.addEventListener("click", (evt) => {
             evt.preventDefault();
@@ -1539,6 +1568,16 @@
     function commitAddress(raw) {
       const value = String(raw || "").trim();
       if (!value) return;
+      if (validateAddress) {
+        const verdict = validateAddress(value) || { ok: true };
+        if (verdict.ok === false) {
+          addressError = verdict.reason || "This value cannot be combined with the current selection.";
+          search.value = "";
+          renderList();
+          return;
+        }
+      }
+      addressError = "";
       const next = addressList();
       if (!next.includes(value)) next.push(value);
       addressInput.value = next.join("\n");
@@ -1725,6 +1764,30 @@
 
     function appendCategoryRow(node) {
       const enabled = nodeEnabled(node);
+      // Typed-address rows declare a value kind that lives in the search box
+      // rather than a catalog (IP / CIDR, FQDN, IP + port + protocol). They
+      // are never navigable — clicking focuses the search input.
+      if (node.addressHint) {
+        const row = el("div", { class: "psc-np-row psc-np-address-row" + (enabled ? "" : " is-disabled") });
+        const hintText = el("div", { class: "psc-np-text" });
+        hintText.appendChild(el("span", { class: "psc-np-name" }, [node.label]));
+        if (node.description) hintText.appendChild(el("span", { class: "psc-np-desc" }, [node.description]));
+        row.appendChild(hintText);
+        const gate = getNodeGate ? getNodeGate(node) : null;
+        if (enabled && gate && gate.active) row.appendChild(el("span", { class: "psc-np-badge" }, ["In use"]));
+        if (!enabled) {
+          const reason = nodeDisabledReason(node);
+          if (reason) row.appendChild(el("span", { class: "psc-np-info", title: reason }, ["i"]));
+        } else {
+          row.addEventListener("click", (evt) => {
+            if (evt.target.closest("input[type=checkbox]")) return;
+            setOpen(true);
+            search.focus();
+          });
+        }
+        list.appendChild(row);
+        return;
+      }
       const hasItems = Boolean(node.fieldKey && node.fieldKey !== "identityTypes" && !node.typeOnly);
       const hasKids = Boolean((node.children && node.children.length) || hasItems);
       const row = el("div", { class: "psc-np-row" + (enabled ? "" : " is-disabled") });
@@ -1801,6 +1864,7 @@
       if (!isOpen) return;
       list.innerHTML = "";
       renderCrumb();
+      if (addressError) list.appendChild(el("div", { class: "psc-np-warn" }, [addressError]));
       const q = (search.value || "").trim().toLowerCase();
       const current = path.length ? path[path.length - 1] : { label: rootLabel, children: tree };
 
@@ -1985,6 +2049,10 @@
       isOpen: () => isOpen,
       refresh() { if (isOpen) renderList(); },
       selectedFieldKeys,
+      selectedTypeKeys() {
+        return Object.keys(typeChecked).filter(key => typeChecked[key]);
+      },
+      addressError: () => addressError,
       hasAnySelection,
       resetAll() {
         Object.keys(typeChecked).forEach(key => { typeChecked[key] = false; });
@@ -2001,31 +2069,6 @@
     };
   }
 
-  function clonePickerTree(nodes, idPrefix) {
-    return (nodes || []).map(node => {
-      const copy = Object.assign({}, node);
-      if (copy.inputId) copy.inputId = `${idPrefix}-${copy.inputId}`;
-      if (copy.children) copy.children = clonePickerTree(copy.children, idPrefix);
-      return copy;
-    });
-  }
-
-  function mergePickerValues(primary, secondary, key) {
-    const toArr = (value) => {
-      if (value == null || value === "") return [];
-      return (Array.isArray(value) ? value : [value]).map(String).filter(Boolean);
-    };
-    const left = primary && primary.facades && primary.facades[key];
-    const right = secondary && secondary.facades && secondary.facades[key];
-    const merged = Array.from(new Set([
-      ...toArr(left && left.getValue()),
-      ...toArr(right && right.getValue()),
-    ]));
-    if (!merged.length) return "";
-    if (merged.length === 1) return merged[0];
-    return merged;
-  }
-
   function buildTesterPanel(container, rules, identityOptions, objectMaps, identityTypeMap, identityMap, onRun, onReset) {
     injectStyles();
 
@@ -2039,20 +2082,20 @@
     };
 
     // ---------------------------------------------------------------------
-    // Destination families stay mutually exclusive (Cisco trafficScope).
-    // First-field chips stay OR; AND is fail-closed to screenshot-proven
-    // families only.
+    // Taxonomy + combination gating (see tester-taxonomy.js).
+    //
+    // Sources may combine, but only across kinds a rule can actually express.
+    // Destination accepts exactly ONE kind — no AND/OR across destination
+    // kinds, and no second destination picker.
     // ---------------------------------------------------------------------
-    const DEST_FAMILY = { privateResource: "private", privateResourceGroup: "private", privateResourceType: "private", destScope: "scope", destinationList: "internet", netObject: "internet", netObjectGroup: "internet", serviceObject: "internet", serviceObjectItem: "internet", application: "internet", protocol: "internet", enterpriseApplication: "internet", appList: "internet", appCategory: "internet", contentCategory: "internet", catList: "internet", geolocation: "internet", appRiskProfile: "internet" };
-    // Screenshot/HAR fail-closed AND matrix. Same-field chips stay OR.
-    // Unproven first-pick families do not get a second picker.
-    const SOURCE_IDENTITY_FIELDS = new Set([
-      "users", "gsuiteUsers", "groups", "gsuiteOus", "roaming",
-      "mobileDevices", "chromebooks", "endpointDevices",
-    ]);
-    const SOURCE_AND_LIVE = new Set(["networks", "tunnelGroups"]);
-    const DEST_AND_LIVE = new Set(["application", "protocol", "serviceObjectItem", "serviceObject"]);
-    const AND_UNSUPPORTED = "This category cannot be combined with the current selection.";
+    const taxonomy = (typeof window !== "undefined" && window.TesterTaxonomy)
+      || (typeof TesterTaxonomy !== "undefined" ? TesterTaxonomy : null);
+    const DEST_SINGLE_REASON = "Destination accepts exactly one kind. Clear the current destination first.";
+    const DEST_ANY_REASON = "Any destination cannot be combined with a specific destination kind.";
+    const DEST_LIST_REASON = "Destination lists apply to Block rules only.";
+    let activeSourceKinds = [];
+    let activeDestKind = "";
+
 
     const panel = el("div", { id: "psc-panel" });
 
@@ -2104,8 +2147,6 @@
     // 1. SOURCE / DESTINATION COMBOBOXES
     // =========================================================================
     const sourceEnabled = {};
-    const sourceAndEnabled = {};
-    const destAndEnabled = {};
     const sourceTree = [
         {
           label: "Users",
@@ -2122,7 +2163,7 @@
           ],
         },
         {
-          label: "Groups and Organizational Units",
+          label: "Groups / OUs",
           children: [
             {
               label: "Any Group or Organizational Unit",
@@ -2136,7 +2177,7 @@
           ],
         },
         {
-          label: "Roaming Devices",
+          label: "Device identity",
           children: [
             {
               label: "Any Roaming Device",
@@ -2148,18 +2189,23 @@
             { label: "macOS and Windows Devices", fieldKey: "roaming", inputId: "psc-src-roaming", items: maps.sourceRoaming, badge: "Roaming Computer", typeIds: [9] },
             { label: "iOS and Android Devices", fieldKey: "mobileDevices", inputId: "psc-src-mobile-devices", items: maps.sourceMobileDevices || {}, badge: "Mobile Device", typeIds: [36] },
             { label: "ChromeOS Devices", fieldKey: "chromebooks", inputId: "psc-src-chromebooks", items: maps.sourceChromebooks || {}, badge: "Chromebook", typeIds: [38] },
+            { label: "Endpoint Devices", fieldKey: "endpointDevices", inputId: "psc-src-endpoints", items: maps.sourceEndpointDevices, badge: "AD Computer" },
           ],
         },
-        { label: "Endpoint Devices", fieldKey: "endpointDevices", inputId: "psc-src-endpoints", items: maps.sourceEndpointDevices, badge: "AD Computer" },
-        { label: "Networks", fieldKey: "networks", inputId: "psc-src-networks", items: maps.sourceNetworks, badge: "Network" },
-        { label: "Sites", fieldKey: "sites", inputId: "psc-src-sites", items: maps.sourceSites, badge: "Site" },
-        { label: "Network Devices", fieldKey: "networkDevices", inputId: "psc-src-network-devices", items: maps.sourceNetworkDevices || {}, badge: "Network Device" },
-        { label: "Security Group Tags", fieldKey: "sgt", inputId: "psc-src-sgt", items: maps.sourceSecurityGroupTags, badge: "SGT" },
-        { label: "Catalyst SD-WAN Service VPN IDs", fieldKey: "catalystSdwan", inputId: "psc-src-catalyst-sdwan", items: maps.sourceCatalystSdwan, badge: "SD-WAN VPN" },
-        { label: "Network Tunnel Groups", fieldKey: "tunnelGroups", inputId: "psc-src-tunnel-groups", items: maps.sourceTunnelGroups, badge: "Network Tunnel" },
         {
-          label: "Network Objects and Network Object Groups",
+          label: "IP / CIDR",
+          addressHint: true,
+          gateKey: "sourceIpCidr",
+          description: "Type a client IP or CIDR in the search box, for example 10.20.0.0/16.",
+        },
+        {
+          label: "Networks",
           children: [
+            { label: "Networks", fieldKey: "networks", inputId: "psc-src-networks", items: maps.sourceNetworks, badge: "Network" },
+            { label: "Sites", fieldKey: "sites", inputId: "psc-src-sites", items: maps.sourceSites, badge: "Site" },
+            { label: "Network Devices", fieldKey: "networkDevices", inputId: "psc-src-network-devices", items: maps.sourceNetworkDevices || {}, badge: "Network Device" },
+            { label: "Catalyst SD-WAN Service VPN IDs", fieldKey: "catalystSdwan", inputId: "psc-src-catalyst-sdwan", items: maps.sourceCatalystSdwan, badge: "SD-WAN VPN" },
+            { label: "Network Tunnel Groups", fieldKey: "tunnelGroups", inputId: "psc-src-tunnel-groups", items: maps.sourceTunnelGroups, badge: "Network Tunnel" },
             { label: "Network Objects", fieldKey: "networkObjects", inputId: "psc-src-network-objects", items: maps.networkObjects || {}, badge: "Network Object" },
             { label: "Network Object Groups", fieldKey: "networkObjectGroups", inputId: "psc-src-network-object-groups", items: maps.networkObjectGroups || {}, badge: "Network Object Group" },
           ],
@@ -2171,6 +2217,9 @@
       addressInputId: "psc-src",
       addressPlaceholder: "Select sources",
       getFieldState: (fieldKey) => ({ enabled: sourceEnabled[fieldKey] !== false }),
+      getNodeGate: (node) => sourceNodeGate(node),
+      getFieldIssue: (fieldKey) => sourceFieldIssue(fieldKey),
+      validateAddress: (value) => validateSourceAddress(value),
       tree: sourceTree,
     });
     const sourceInputMap = sourcePicker.facades;
@@ -2178,34 +2227,26 @@
 
     const destEnabled = {};
     const destTree = [
-        { label: "Destination Lists", fieldKey: "destinationList", inputId: "psc-destlist", items: maps.destinationLists || {}, badge: "Destination List" },
-        { label: "Internet Applications", fieldKey: "application", inputId: "psc-app", items: maps.internetApplications || maps.applications || {}, badge: "Application" },
-        { label: "Application Protocols", fieldKey: "protocol", inputId: "psc-protocol", items: maps.applicationProtocols || {}, badge: "Protocol" },
-        { label: "Content Categories", fieldKey: "contentCategory", inputId: "psc-content-cat", items: maps.contentCategories || {}, badge: "Content Category" },
-        { label: "Geolocations", fieldKey: "geolocation", inputId: "psc-geolocation", items: maps.geolocations || {}, badge: "Geolocation", status: "unavailable", emptyText: "Geolocations are not selectable in this tester" },
         {
-          label: "Network Objects and Network Object Groups",
-          children: [
-            { label: "Network Objects", fieldKey: "netObject", inputId: "psc-netobj", items: maps.networkObjects || {}, badge: "Network Object" },
-            { label: "Network Object Groups", fieldKey: "netObjectGroup", inputId: "psc-netobj-group", items: maps.networkObjectGroups || {}, badge: "Network Object Group" },
-          ],
+          label: "FQDN",
+          addressHint: true,
+          destKind: "fqdn",
+          description: "Type a domain in the search box, for example login.example.com.",
         },
         {
-          label: "Service Objects and Service Object Groups",
-          children: [
-            { label: "Service Objects", fieldKey: "serviceObjectItem", inputId: "psc-svcobj-item", items: maps.serviceObjects || {}, badge: "Service Object" },
-            { label: "Service Object Groups", fieldKey: "serviceObject", inputId: "psc-svcobj", items: maps.serviceObjectGroups || {}, badge: "Service Object Group" },
-          ],
+          label: "IP / CIDR",
+          addressHint: true,
+          destKind: "ip",
+          description: "Type an IP address or CIDR, for example 208.67.222.222 or 10.0.0.0/8.",
         },
-        { label: "Application Lists", fieldKey: "appList", inputId: "psc-applist", items: maps.applicationLists || {}, badge: "Application List" },
-        { label: "Application Categories", fieldKey: "appCategory", inputId: "psc-appcat", items: maps.applicationCategories || {}, badge: "App Category" },
-        { label: "Category Lists", fieldKey: "catList", inputId: "psc-catlist", items: maps.categoryLists || {}, badge: "Category List" },
-        { label: "Enterprise Applications", fieldKey: "enterpriseApplication", inputId: "psc-enterprise-app", items: maps.enterpriseApplications || {}, badge: "Enterprise App" },
-        { label: "Private Resources", fieldKey: "privateResource", inputId: "psc-privres", items: maps.privateResources || {}, badge: "Private Resource" },
-        { label: "Private Resource Groups", fieldKey: "privateResourceGroup", inputId: "psc-privresgrp", items: maps.privateResourceGroups || {}, badge: "Private Resource Group" },
-        { label: "Private Resource Kind", fieldKey: "privateResourceType", inputId: "psc-privres-type", items: { apps: "Applications", networks: "Networks" }, badge: "Resource Kind", single: true },
-        { label: "App Risk Profile", fieldKey: "appRiskProfile", inputId: "psc-app-risk", items: maps.appRiskProfiles || {}, badge: "App Risk" },
-        { label: "Destination Scope", fieldKey: "destScope", inputId: "psc-dst-scope", items: maps.destinationScopes || { public_internet: "Internet", private_network: "Private Access" }, badge: "Scope", single: true },
+        {
+          label: "IP + port + protocol",
+          addressHint: true,
+          destKind: "ipport",
+          description: "Type address:port, optionally with a protocol, for example 10.0.0.5:443/tcp.",
+        },
+        { label: "Destination list", fieldKey: "destinationList", inputId: "psc-destlist", items: maps.destinationLists || {}, badge: "Destination List" },
+        { label: "Any destination", fieldKey: "anyDestination", inputId: "psc-any-destination", items: { any: "Any destination" }, badge: "Any", single: true },
       ];
     const destPicker = createNestedCatalogPicker({
       idPrefix: "psc-dst-np",
@@ -2213,54 +2254,13 @@
       addressInputId: "psc-dest",
       addressPlaceholder: "Select destinations",
       getFieldState: (fieldKey) => ({ enabled: destEnabled[fieldKey] !== false }),
+      getNodeGate: (node) => destNodeGate(node),
+      getFieldIssue: (fieldKey) => destFieldIssue(fieldKey),
+      validateAddress: (value) => validateDestinationAddress(value),
       tree: destTree,
     });
-    const destScopeSelect = destPicker.facades.destScope || { getValue: () => "", restore() {}, reset() {} };
     const destInputMap = destPicker.facades;
     const destInput = destPicker.addressInput;
-
-    const sourceAndPicker = createNestedCatalogPicker({
-      idPrefix: "psc-src-and-np",
-      rootLabel: "AND",
-      addressInputId: "psc-src-and",
-      addressPlaceholder: "Select additional sources",
-      allowAddress: false,
-      getFieldState: (fieldKey) => ({ enabled: sourceAndEnabled[fieldKey] !== false }),
-      getDisabledReason: (fieldKey) => sourceAndEnabled[fieldKey] === false ? AND_UNSUPPORTED : "",
-      tree: clonePickerTree(sourceTree, "and"),
-    });
-    const destAndPicker = createNestedCatalogPicker({
-      idPrefix: "psc-dst-and-np",
-      rootLabel: "AND",
-      addressInputId: "psc-dest-and",
-      addressPlaceholder: "Select additional destinations",
-      allowAddress: false,
-      getFieldState: (fieldKey) => ({ enabled: destAndEnabled[fieldKey] !== false }),
-      getDisabledReason: (fieldKey) => destAndEnabled[fieldKey] === false ? AND_UNSUPPORTED : "",
-      tree: clonePickerTree(destTree, "and"),
-    });
-    let sourceAndWanted = false;
-    let destAndWanted = false;
-    const sourceAndWrap = el("div", { class: "psc-and-wrap" }, [sourceAndPicker.element]);
-    const destAndWrap = el("div", { class: "psc-and-wrap" }, [destAndPicker.element]);
-    const sourceAndToggle = el("button", { type: "button", class: "psc-and-toggle" }, ["+ AND"]);
-    const destAndToggle = el("button", { type: "button", class: "psc-and-toggle" }, ["+ AND"]);
-    sourceAndWrap.hidden = true;
-    destAndWrap.hidden = true;
-    sourceAndToggle.hidden = true;
-    destAndToggle.hidden = true;
-    sourceAndToggle.addEventListener("click", (evt) => {
-      evt.preventDefault();
-      evt.stopPropagation();
-      sourceAndWanted = true;
-      recomputeEnabledFields();
-    });
-    destAndToggle.addEventListener("click", (evt) => {
-      evt.preventDefault();
-      evt.stopPropagation();
-      destAndWanted = true;
-      recomputeEnabledFields();
-    });
 
     const actionInput = el("input", {
       id: "psc-preferred-action",
@@ -2292,93 +2292,153 @@
     formRow.appendChild(actionRow);
     formRow.appendChild(actionInput);
     formRow.appendChild(el("div", { class: "psc-criteria-grid" }, [
-      el("div", { class: "psc-and-slot" }, [sourcePicker.element, sourceAndToggle, sourceAndWrap]),
-      el("div", { class: "psc-and-slot" }, [destPicker.element, destAndToggle, destAndWrap]),
+      el("div", { class: "psc-and-slot" }, [sourcePicker.element]),
+      el("div", { class: "psc-and-slot" }, [destPicker.element]),
     ]));
     body.appendChild(formRow);
 
     // ---------------------------------------------------------------------
-    // First-field chips stay OR. Internet vs Private Access destinations
-    // remain mutually exclusive. The AND picker is fail-closed: only the
-    // screenshot-proven families stay live after a first pick.
+    // Combination gating (see tester-taxonomy.js).
+    //
+    // Sources may combine, but only across kinds a real rule can express:
+    // picking an incompatible kind greys the option out with the reason.
+    // Destination accepts exactly ONE kind, so a second kind is disabled
+    // with its reason rather than silently dropped.
     // ---------------------------------------------------------------------
-    function firstSourceFamily(keys) {
-      if (keys.some(key => SOURCE_IDENTITY_FIELDS.has(key))) return "identity";
-      const typeIds = sourcePicker.facades.identityTypes && sourcePicker.facades.identityTypes.getValue();
-      if (Array.isArray(typeIds) ? typeIds.length : typeIds) return "identity";
+    function taxonomyApi() {
+      return typeof window !== "undefined" && window.TesterTaxonomy ? window.TesterTaxonomy : null;
+    }
+
+    function sourceGateKey(node) {
+      return node.gateKey || node.fieldKey || "";
+    }
+
+    // Gate a source row. Options whose kind is already active stay enabled so
+    // the user can always deselect them.
+    function sourceNodeGate(node) {
+      const T = taxonomyApi();
+      if (!T) return { managed: false };
+      const kind = T.kindForSourceField(sourceGateKey(node));
+      if (!kind) return { managed: false };
+      const reason = T.sourceKindBlockReason(activeSourceKinds, kind);
+      return { managed: true, enabled: !reason, reason: reason, active: activeSourceKinds.indexOf(kind) !== -1 };
+    }
+
+    function sourceFieldIssue(fieldKey) {
+      const T = taxonomyApi();
+      if (!T || !fieldKey) return "";
+      return T.sourceKindBlockReason(activeSourceKinds, T.kindForSourceField(fieldKey));
+    }
+
+    function destKindOfField(fieldKey) {
+      if (fieldKey === "anyDestination") return "any";
+      if (fieldKey === "destinationList") return "destList";
       return "";
     }
-    function firstDestFamily(keys) {
-      if (keys.includes("destinationList")) return "destList";
+
+    function destBlockReason(fieldKey) {
+      const kind = destKindOfField(fieldKey);
+      if (!kind) return "";
+      if (kind === "destinationList" && actionInput.value !== "block") return DEST_LIST_REASON;
+      if (activeDestKind && activeDestKind !== kind) {
+        return activeDestKind === "any" || kind === "any" ? DEST_ANY_REASON : DEST_SINGLE_REASON;
+      }
       return "";
     }
+
+    function destNodeGate(node) {
+      if (!node.fieldKey) return { managed: false };
+      const kind = destKindOfField(node.fieldKey);
+      if (!kind) return { managed: false };
+      const reason = destBlockReason(node.fieldKey);
+      return { managed: true, enabled: !reason, reason: reason, active: activeDestKind === kind };
+    }
+
+    function destFieldIssue(fieldKey) {
+      return destBlockReason(fieldKey);
+    }
+
+    // The typed box is shared by FQDN / IP / IP+port+protocol, so the typed
+    // value's own classification decides which kind is in play.
+    function destKindFromTyped() {
+      const T = taxonomyApi();
+      if (!T) return "";
+      const kinds = new Set();
+      String(destInput.value || "").split("\n").map(part => part.trim()).filter(Boolean).forEach((token) => {
+        const kind = T.classifyDestinationValue(token);
+        if (kind) kinds.add(kind);
+      });
+      if (kinds.size === 0) return "";
+      // IP and IP+port are one L4 composite family; a box mixing both is fine.
+      if (kinds.size === 1) return Array.from(kinds)[0];
+      if (kinds.size === 2 && kinds.has("ip") && kinds.has("ipport")) return "ipport";
+      return "mixed";
+    }
+
+    function validateSourceAddress(value) {
+      const T = taxonomyApi();
+      if (!T) return { ok: true };
+      if (!T.classifySourceValue(value)) {
+        return { ok: false, reason: "Source addresses must be an IP address or CIDR." };
+      }
+      const reason = T.sourceKindBlockReason(activeSourceKinds, "ip");
+      return reason ? { ok: false, reason: reason } : { ok: true };
+    }
+
+    function validateDestinationAddress(value) {
+      const T = taxonomyApi();
+      if (!T) return { ok: true };
+      const kind = T.classifyDestinationValue(value);
+      if (!kind) return { ok: false, reason: "Enter a domain, IP address, or address:port." };
+      const reason = destBlockReasonForKind(kind);
+      return reason ? { ok: false, reason: reason } : { ok: true };
+    }
+
+    function destBlockReasonForKind(kind) {
+      if (!activeDestKind || activeDestKind === kind) return "";
+      const sameFamily =
+        (activeDestKind === "ip" && kind === "ipport") ||
+        (activeDestKind === "ipport" && kind === "ip");
+      if (sameFamily) return "";
+      return activeDestKind === "any" || kind === "any" ? DEST_ANY_REASON : DEST_SINGLE_REASON;
+    }
+
+    function destFieldSelected(key) {
+      const facade = destInputMap[key];
+      if (!facade) return false;
+      const value = facade.getValue();
+      return Array.isArray(value) ? value.length > 0 : Boolean(value);
+    }
+
     function recomputeEnabledFields() {
-      let fam = null;
-      const dstVals = Object.entries(destInputMap).map(([key, sel]) => ({ key, v: sel.getValue(), f: DEST_FAMILY[key] }));
-      const andDestVals = Object.entries(destAndPicker.facades).map(([key, sel]) => ({ key, v: sel.getValue(), f: DEST_FAMILY[key] }));
-      if (dstVals.some(d => d.v && d.f === "private") || andDestVals.some(d => d.v && d.f === "private")) fam = "private";
-      else if (dstVals.some(d => d.v && d.f === "internet") || andDestVals.some(d => d.v && d.f === "internet")) fam = "internet";
-      else if (destInput.value.trim() && /[a-z]/i.test(destInput.value.trim().split("/")[0])) fam = "internet";
+      const T = taxonomyApi();
 
-      for (const d of dstVals) {
-        if (d.f !== "scope" && fam && d.f !== fam && d.v) destInputMap[d.key].reset();
-      }
-      for (const d of andDestVals) {
-        if (d.f !== "scope" && fam && d.f !== fam && d.v) destAndPicker.facades[d.key].reset();
-      }
-
-      if (fam === "private" && !destScopeSelect.getValue()) {
-        destScopeSelect.restore("Private Access", "private_network");
-      } else if (fam === "internet" && !destScopeSelect.getValue()) {
-        destScopeSelect.restore("Internet", "public_internet");
-      }
-
-      for (const key of Object.keys(sourceInputMap)) sourceEnabled[key] = true;
-      for (const [key, sel] of Object.entries(destInputMap)) {
-        const f = DEST_FAMILY[key];
-        if (f === "scope") {
-          destEnabled[key] = true;
-          continue;
-        }
-        destEnabled[key] = !fam || f === fam;
-        if (key === "destinationList" && actionInput.value !== "block") destEnabled[key] = false;
-        if (!destEnabled[key] && sel.getValue()) sel.reset();
-      }
-
+      // --- sources: which kinds are in play ---
       const sourceKeys = sourcePicker.selectedFieldKeys();
-      const destKeys = destPicker.selectedFieldKeys();
-      const sourceAndAllowed = firstSourceFamily(sourceKeys) === "identity";
-      const destAndAllowed = firstDestFamily(destKeys) === "destList";
-      if (!sourceAndAllowed) sourceAndWanted = false;
-      if (!destAndAllowed) destAndWanted = false;
-      const sourceAndOn = sourceAndAllowed && sourceAndWanted;
-      const destAndOn = destAndAllowed && destAndWanted;
-      sourceAndToggle.hidden = !sourceAndAllowed || sourceAndWanted;
-      destAndToggle.hidden = !destAndAllowed || destAndWanted;
-      sourceAndWrap.hidden = !sourceAndOn;
-      destAndWrap.hidden = !destAndOn;
-      if (!sourceAndOn) sourceAndPicker.resetAll();
-      if (!destAndOn) destAndPicker.resetAll();
+      const hasSourceAddress = Boolean(sourcePicker.addressInput.value.trim());
+      activeSourceKinds = T ? T.activeSourceKinds(sourceKeys, hasSourceAddress) : sourceKeys.slice();
 
-      for (const key of Object.keys(sourceAndPicker.facades)) {
-        const live = sourceAndOn && SOURCE_AND_LIVE.has(key);
-        sourceAndEnabled[key] = live;
-        if (!live && sourceAndPicker.facades[key].getValue()) sourceAndPicker.facades[key].reset();
+      for (const key of Object.keys(sourceInputMap)) {
+        const kind = T ? T.kindForSourceField(key) : "";
+        const reason = kind && T ? T.sourceKindBlockReason(activeSourceKinds, kind) : "";
+        sourceEnabled[key] = !reason;
       }
-      for (const key of Object.keys(destAndPicker.facades)) {
-        const f = DEST_FAMILY[key];
-        const live = destAndOn && DEST_AND_LIVE.has(key) && (!fam || f === fam || f === "scope");
-        destAndEnabled[key] = live;
-        if (key === "destinationList") destAndEnabled[key] = false;
-        if (!destAndEnabled[key] && destAndPicker.facades[key].getValue()) destAndPicker.facades[key].reset();
+
+      // --- destination: exactly one kind ---
+      const typedKind = destKindFromTyped();
+      if (destFieldSelected("anyDestination")) activeDestKind = "any";
+      else if (destFieldSelected("destinationList")) activeDestKind = "destList";
+      else activeDestKind = typedKind;
+
+      for (const key of Object.keys(destInputMap)) {
+        const kind = destKindOfField(key);
+        if (!kind) continue;
+        destEnabled[key] = !destBlockReason(key);
       }
 
       if (sourcePicker.isOpen()) sourcePicker.refresh();
       if (destPicker.isOpen()) destPicker.refresh();
-      if (sourceAndOn && sourceAndPicker.isOpen()) sourceAndPicker.refresh();
-      if (destAndOn && destAndPicker.isOpen()) destAndPicker.refresh();
     }
-
     panel.addEventListener("change", recomputeEnabledFields);
     destInput.addEventListener("input", recomputeEnabledFields);
     recomputeEnabledFields();
@@ -2408,8 +2468,6 @@
     restoreDraft();
     sourcePicker.ingestDraft();
     destPicker.ingestDraft();
-    sourceAndPicker.ingestDraft();
-    destAndPicker.ingestDraft();
     const savedAction = (actionInput.dataset.selectedValue || actionInput.value || "").toLowerCase();
     if (savedAction === "allow" || savedAction === "block" || savedAction === "isolate") {
       actionInput.value = savedAction;
@@ -2536,62 +2594,75 @@
       resultCol.appendChild(heroCard);
     }
 
+    // The destination box is shared by FQDN / IP / IP+port+protocol. Split the
+    // L4 composite so "10.0.0.5:443/tcp" feeds address, port and protocol.
     function parseIpInput(val) {
       if (!val) return { ipCidr: "" };
+      const T = taxonomyApi();
       const tokens = String(val).split(/[\n,]+/).map(part => part.trim()).filter(Boolean);
       if (!tokens.length) return { ipCidr: "" };
       if (tokens.length === 1) {
-        const portMatch = tokens[0].match(/:(\d+)$/);
-        if (!portMatch) return { ipCidr: tokens[0] };
+        const token = tokens[0];
+        if (T && T.classifyDestinationValue(token) === "ipport") {
+          const split = T.splitIpPort(token);
+          return { ipCidr: split.address, port: split.port, protocol: split.protocol };
+        }
+        const portMatch = token.match(/:(\d+)$/);
+        if (!portMatch) return { ipCidr: token };
         return {
-          ipCidr: tokens[0].substring(0, tokens[0].length - portMatch[0].length),
+          ipCidr: token.substring(0, token.length - portMatch[0].length),
           port: portMatch[1],
         };
       }
       return { ipCidr: tokens.join("\n") };
     }
 
+    const sourcePick = (key) => (sourcePicker.facades[key] ? sourcePicker.facades[key].getValue() : "");
+    const destPick = (key) => (destPicker.facades[key] ? destPicker.facades[key].getValue() : "");
+
     runBtn.addEventListener("click", () => {
       const srcVal = sourceInput.value.trim();
       const destVal = destInput.value.trim();
-      const usersId = mergePickerValues(sourcePicker, sourceAndPicker, "users");
-      const identityTypeIds = mergePickerValues(sourcePicker, sourceAndPicker, "identityTypes");
-      const gsuiteUsersId = mergePickerValues(sourcePicker, sourceAndPicker, "gsuiteUsers");
-      const gsuiteOusId = mergePickerValues(sourcePicker, sourceAndPicker, "gsuiteOus");
-      const roamingId = mergePickerValues(sourcePicker, sourceAndPicker, "roaming");
-      const groupsId = mergePickerValues(sourcePicker, sourceAndPicker, "groups");
-      const endpointDevicesId = mergePickerValues(sourcePicker, sourceAndPicker, "endpointDevices");
-      const networksId = mergePickerValues(sourcePicker, sourceAndPicker, "networks");
-      const sitesId = mergePickerValues(sourcePicker, sourceAndPicker, "sites");
-      const sgtId = mergePickerValues(sourcePicker, sourceAndPicker, "sgt");
-      const catalystSdwanId = mergePickerValues(sourcePicker, sourceAndPicker, "catalystSdwan");
-      const tunnelGroupId = mergePickerValues(sourcePicker, sourceAndPicker, "tunnelGroups");
-      const sourceNetworkObjectId = mergePickerValues(sourcePicker, sourceAndPicker, "networkObjects");
-      const sourceNetworkObjectGroupId = mergePickerValues(sourcePicker, sourceAndPicker, "networkObjectGroups");
-      const mobileDeviceId = mergePickerValues(sourcePicker, sourceAndPicker, "mobileDevices");
-      const chromebookId = mergePickerValues(sourcePicker, sourceAndPicker, "chromebooks");
-      const ztnaClientId = mergePickerValues(sourcePicker, sourceAndPicker, "ztnaClients");
-      const networkDeviceId = mergePickerValues(sourcePicker, sourceAndPicker, "networkDevices");
-      const destScopeVal = destScopeSelect.getValue();
-      const privResId = mergePickerValues(destPicker, destAndPicker, "privateResource");
-      const privResGroupId = mergePickerValues(destPicker, destAndPicker, "privateResourceGroup");
-      const destListId = mergePickerValues(destPicker, destAndPicker, "destinationList");
-      const netObjId = mergePickerValues(destPicker, destAndPicker, "netObject");
-      const netObjGroupId = mergePickerValues(destPicker, destAndPicker, "netObjectGroup");
-      const svcObjItemId = mergePickerValues(destPicker, destAndPicker, "serviceObjectItem");
-      const svcObjId = mergePickerValues(destPicker, destAndPicker, "serviceObject");
-      const appId = mergePickerValues(destPicker, destAndPicker, "application");
-      const protocolId = mergePickerValues(destPicker, destAndPicker, "protocol");
-      const enterpriseAppId = mergePickerValues(destPicker, destAndPicker, "enterpriseApplication");
-      const appListId = mergePickerValues(destPicker, destAndPicker, "appList");
-      const appCatId = mergePickerValues(destPicker, destAndPicker, "appCategory");
-      const contentCatId = mergePickerValues(destPicker, destAndPicker, "contentCategory");
-      const catListId = mergePickerValues(destPicker, destAndPicker, "catList");
-      const geoVal = mergePickerValues(destPicker, destAndPicker, "geolocation");
+      const usersId = sourcePick("users");
+      const identityTypeIds = sourcePick("identityTypes");
+      const gsuiteUsersId = sourcePick("gsuiteUsers");
+      const gsuiteOusId = sourcePick("gsuiteOus");
+      const roamingId = sourcePick("roaming");
+      const groupsId = sourcePick("groups");
+      const endpointDevicesId = sourcePick("endpointDevices");
+      const networksId = sourcePick("networks");
+      const sitesId = sourcePick("sites");
+      const sgtId = sourcePick("sgt");
+      const catalystSdwanId = sourcePick("catalystSdwan");
+      const tunnelGroupId = sourcePick("tunnelGroups");
+      const sourceNetworkObjectId = sourcePick("networkObjects");
+      const sourceNetworkObjectGroupId = sourcePick("networkObjectGroups");
+      const mobileDeviceId = sourcePick("mobileDevices");
+      const chromebookId = sourcePick("chromebooks");
+      const ztnaClientId = sourcePick("ztnaClients");
+      const networkDeviceId = sourcePick("networkDevices");
+      // Destination lists carry Internet scope, which is what the retired
+      // scope selector used to fill in for this family.
+      const destScopeVal = activeDestKind === "destList" ? "public_internet" : "";
+      const privResId = destPick("privateResource");
+      const privResGroupId = destPick("privateResourceGroup");
+      const destListId = destPick("destinationList");
+      const netObjId = destPick("netObject");
+      const netObjGroupId = destPick("netObjectGroup");
+      const svcObjItemId = destPick("serviceObjectItem");
+      const svcObjId = destPick("serviceObject");
+      const appId = destPick("application");
+      const protocolId = destPick("protocol");
+      const enterpriseAppId = destPick("enterpriseApplication");
+      const appListId = destPick("appList");
+      const appCatId = destPick("appCategory");
+      const contentCatId = destPick("contentCategory");
+      const catListId = destPick("catList");
+      const geoVal = destPick("geolocation");
       const privateResourceTypeVal = destPicker.facades.privateResourceType
         ? destPicker.facades.privateResourceType.getValue()
         : "";
-      const appRiskProfileId = mergePickerValues(destPicker, destAndPicker, "appRiskProfile");
+      const appRiskProfileId = destPick("appRiskProfile");
 
       const hasVal = (value) => Array.isArray(value) ? value.length > 0 : Boolean(value);
       if (![srcVal, destVal, usersId, identityTypeIds, gsuiteUsersId, gsuiteOusId, roamingId, groupsId, endpointDevicesId, networksId, sitesId, sgtId, catalystSdwanId, tunnelGroupId, sourceNetworkObjectId, sourceNetworkObjectGroupId, networkDeviceId, mobileDeviceId, chromebookId, ztnaClientId, destScopeVal, privResId, privResGroupId, destListId, netObjId, netObjGroupId, svcObjItemId, svcObjId, appId, protocolId, enterpriseAppId, appListId, appCatId, contentCatId, catListId, geoVal, privateResourceTypeVal, appRiskProfileId].some(hasVal)) {
@@ -2647,6 +2718,7 @@
         appRiskProfileId,
         destination:               destParsed.ipCidr,
         destinationPort:           destParsed.port,
+        destinationProtocol:       destParsed.protocol || "",
         preferredAction:           actionInput.value || "",
       };
 
@@ -2667,14 +2739,8 @@
       try { sessionStorage.removeItem(draftStorageKey); } catch (_) {}
       sourcePicker.resetAll();
       destPicker.resetAll();
-      sourceAndPicker.resetAll();
-      destAndPicker.resetAll();
-      sourceAndWanted = false;
-      destAndWanted = false;
-      sourceAndWrap.hidden = true;
-      destAndWrap.hidden = true;
-      sourceAndToggle.hidden = true;
-      destAndToggle.hidden = true;
+      activeSourceKinds = [];
+      activeDestKind = "";
       errorLine.textContent = "";
       onReset();
     });

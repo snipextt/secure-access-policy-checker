@@ -236,7 +236,7 @@
     for (const entry of compositeArr) {
       if (typeof entry === "string") {
         if (entry.trim()) {
-          items.push({ cidr: entry.trim(), ports: ["any"] });
+          items.push({ cidr: entry.trim(), ports: ["any"], protocol: "any" });
         }
         continue;
       }
@@ -261,8 +261,11 @@
           entryCidrs.push(entry.ip.trim());
         }
         
+        const proto = typeof entry.protocol === "string" && entry.protocol.trim()
+          ? entry.protocol.trim()
+          : "any";
         for (const cidr of entryCidrs) {
-          items.push({ cidr, ports });
+          items.push({ cidr, ports, protocol: proto });
         }
         
         // port/protocol: include in note but do NOT use for matching
@@ -319,6 +322,21 @@
       }
     }
     return false;
+  }
+
+  // L4 protocol comparison for composite_inline_ip. Accepts the protocol names
+  // the dashboard emits ("TCP"/"UDP"/"ANY") or a numeric IP protocol value.
+  // A blank/`any` expected value never narrows the match.
+  function protocolMatch(testProtocol, ruleProtocol) {
+    const want = String(testProtocol || "").trim().toLowerCase();
+    if (!want || want === "any") return true;
+    const have = String(ruleProtocol || "").trim().toLowerCase();
+    if (!have || have === "any" || have === "*") return true;
+    if (have === want) return true;
+    const NUMERIC = { tcp: 6, udp: 17, icmp: 1, icmpv6: 58, esp: 50 };
+    const wantNum = NUMERIC[want] !== undefined ? NUMERIC[want] : parseInt(want, 10);
+    const haveNum = NUMERIC[have] !== undefined ? NUMERIC[have] : parseInt(have, 10);
+    return !isNaN(wantNum) && !isNaN(haveNum) && wantNum === haveNum;
   }
 
   // ---------------------------------------------------------------------------
@@ -706,12 +724,23 @@
           };
         }
 
+        const testProtocol = dimension === "destination"
+          ? (testInput && testInput.destinationProtocol)
+          : (testInput && testInput.sourceProtocol);
+
         let matchResult;
         for (const item of items) {
           const cidr = item.cidr;
           const ipMatched = cidrMatch(tv, cidr) || (dimension === "destination" && fqdnMatch(cidr, tv));
           
           if (ipMatched) {
+            if (!protocolMatch(testProtocol, item.protocol)) {
+               matchResult = {
+                 matched: false,
+                 note: `${dimension}: IP matched ${cidr} but protocol ${testProtocol} excluded by allowed protocol ${item.protocol} (${portProtocolNote})`,
+               };
+               continue;
+            }
             if (portMatch(testPort, item.ports)) {
                matchResult = {
                  matched: true,
@@ -1089,6 +1118,7 @@
       privateResourceType = null,
       destination = "",
       destinationPort = null,
+      destinationProtocol = "",
     } = testInput;
     const hasSelected = (value) => flattenSelectedIds(value).length > 0;
     const hasSource = source.trim() !== "" || [
@@ -1103,7 +1133,7 @@
       destinationScope, privateResourceId, privateResourceGroupId,
       destinationListId, networkObjectId, networkObjectGroupId, serviceObjectId, serviceObjectGroupId, applicationId,
       protocolId, enterpriseApplicationId, applicationListId, applicationCategoryId, contentCategoryId, categoryListId, geolocation,
-      appRiskProfileId, privateResourceType,
+      appRiskProfileId, privateResourceType, destinationProtocol,
     ].some(hasSelected);
 
     const matchedConditions = [];
