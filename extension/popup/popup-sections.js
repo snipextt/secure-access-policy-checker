@@ -452,14 +452,22 @@
         display: flex;
         flex-wrap: wrap;
         gap: 6px;
-        flex: 1;
+        flex: 0 1 auto;
         min-width: 0;
         align-items: center;
       }
-      .psc-cb-placeholder {
-        color: #94a3b8;
+      .psc-cb-input {
+        flex: 1 1 90px;
+        min-width: 70px;
+        border: none;
+        outline: none;
+        background: transparent;
+        padding: 0;
+        font-family: var(--hbr-font-family);
         font-size: 12px;
+        color: #0f172a;
       }
+      .psc-cb-input::placeholder { color: #94a3b8; }
       .psc-cb-caret {
         color: #64748b;
         font-size: 10px;
@@ -486,25 +494,6 @@
         flex-direction: column;
         background: #ffffff;
         min-width: 0;
-      }
-      .psc-np-search {
-        padding: 8px;
-        border-bottom: 1px solid #e2e8f0;
-      }
-      .psc-np-search input {
-        width: 100%;
-        padding: 7px 10px;
-        border: 1px solid #cbd5e1 !important;
-        border-radius: 2px !important;
-        font-size: 12px;
-        font-family: var(--hbr-font-family) !important;
-        color: #0f172a !important;
-        background: #ffffff !important;
-        outline: none;
-      }
-      .psc-np-search input:focus {
-        border-color: #049fd9 !important;
-        box-shadow: 0 0 0 1px #049fd9 !important;
       }
       .psc-np-crumb {
         display: flex;
@@ -611,7 +600,6 @@
         width: 8px;
         height: 12px;
       }
-      .psc-np-address-row .psc-np-name { color: #049fd9; }
       .psc-np-warn {
         margin: 0 0 6px;
         padding: 7px 9px;
@@ -1249,6 +1237,10 @@
     return String(item);
   }
 
+  function taxonomyRef() {
+    return (typeof window !== "undefined" && window.TesterTaxonomy) || null;
+  }
+
   function catalogMapSize(itemsObj) {
     return itemsObj && typeof itemsObj === "object" ? Object.keys(itemsObj).length : 0;
   }
@@ -1332,22 +1324,22 @@
     const wrap = el("div", { class: "psc-cb", id: idPrefix + "-cb" });
     const trigger = el("div", { class: "psc-cb-trigger" });
     const chips = el("div", { class: "psc-cb-chips" });
-    const placeholder = el("span", { class: "psc-cb-placeholder" }, [addressPlaceholder || "Select"]);
+    const search = el("input", {
+      id: idPrefix + "-search",
+      type: "text",
+      class: "psc-cb-input",
+      placeholder: addressPlaceholder || "Select or type",
+      autocomplete: "off",
+    });
     const caret = el("span", { class: "psc-cb-caret" }, ["▾"]);
     trigger.appendChild(chips);
+    trigger.appendChild(search);
     trigger.appendChild(caret);
 
     const flyout = el("div", { class: "psc-cb-flyout" });
     const panel = el("div", { class: "psc-np" });
-    const search = el("input", {
-      id: idPrefix + "-search",
-      type: "text",
-      placeholder: "Search",
-      autocomplete: "off",
-    });
     const crumb = el("div", { class: "psc-np-crumb" });
     const list = el("div", { class: "psc-np-list" });
-    panel.appendChild(el("div", { class: "psc-np-search" }, [search]));
     panel.appendChild(crumb);
     panel.appendChild(list);
     flyout.appendChild(panel);
@@ -1364,7 +1356,7 @@
     const hiddenBox = el("div", { class: "psc-np-hidden" });
     Object.values(hiddenInputs).forEach(input => hiddenBox.appendChild(input));
     hiddenBox.appendChild(addressInput);
-    wrap.appendChild(el("label", { class: "psc-cb-label" }, [rootLabel]));
+    wrap.appendChild(el("label", { class: "psc-cb-label", htmlFor: idPrefix + "-search" }, [rootLabel]));
     wrap.appendChild(trigger);
     wrap.appendChild(flyout);
     wrap.appendChild(hiddenBox);
@@ -1553,13 +1545,16 @@
         chip.appendChild(remove);
         chips.appendChild(chip);
       });
-      if (!hasAnySelection()) chips.appendChild(placeholder);
     }
 
+    // Committable = something the taxonomy can classify. Validation still
+    // decides whether the specific field accepts it.
     function looksLikeAddress(q) {
       if (allowAddress === false) return false;
       const value = String(q || "").trim();
       if (!value) return false;
+      const T = taxonomyRef();
+      if (T && T.classifyDestinationValue(value)) return true;
       if (/^[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?$/i.test(value)) return true;
       if (/^\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?(?::\d+)?$/.test(value)) return true;
       return false;
@@ -1656,19 +1651,30 @@
       } else {
         if (activeCatalogPickerClose === setOpen) activeCatalogPickerClose = null;
         parkFlyout();
+        // Release focus so the next click on the box re-fires focus and reopens.
+        if (document.activeElement === search) search.blur();
       }
     }
 
-    trigger.addEventListener("pointerdown", (evt) => {
-      if (evt.button !== 0) return;
+    // The trigger box holds a real text input, so all interaction flows
+    // through it: focus opens the list, typing filters it, Enter commits.
+    trigger.addEventListener("click", (evt) => {
       if (evt.target.closest("button")) return;
+      if (evt.target === search) return;
+      if (!isOpen) setOpen(true);
+      search.focus();
+    });
+    caret.addEventListener("click", (evt) => {
       evt.preventDefault();
       evt.stopPropagation();
       setOpen(!isOpen);
+      if (isOpen) search.focus();
     });
-    trigger.addEventListener("click", (evt) => {
-      evt.preventDefault();
-      evt.stopPropagation();
+    search.addEventListener("focus", () => setOpen(true));
+    search.addEventListener("input", () => {
+      addressError = "";
+      if (!isOpen) setOpen(true);
+      renderList();
     });
     flyout.addEventListener("pointerdown", (evt) => evt.stopPropagation());
     flyout.addEventListener("mousedown", (evt) => evt.stopPropagation());
@@ -1677,12 +1683,40 @@
       if (evt.key === "Escape") {
         evt.preventDefault();
         setOpen(false);
+        search.blur();
         return;
       }
+      // Backspace on an empty box removes the last chip, like any chip input.
+      if (evt.key === "Backspace" && !search.value) {
+        const committed = addressList();
+        if (committed.length) {
+          evt.preventDefault();
+          addressInput.value = committed.slice(0, -1).join("\n");
+          renderChips();
+          dispatchChange();
+          return;
+        }
+        const fields = Object.keys(selectedByField).filter(
+          key => key !== "identityTypes" && selectedIds(key).length
+        );
+        if (fields.length) {
+          const key = fields[fields.length - 1];
+          const ids = selectedIds(key);
+          const lastId = ids[ids.length - 1];
+          const rec = selectedByField[key][lastId];
+          evt.preventDefault();
+          setSelected(key, lastId, rec && rec.label, rec && rec.badge, false);
+          return;
+        }
+      }
       if (evt.key !== "Enter") return;
-      if (!looksLikeAddress(search.value)) return;
       evt.preventDefault();
-      commitAddress(search.value);
+      if (looksLikeAddress(search.value)) {
+        commitAddress(search.value);
+        return;
+      }
+      const first = list.querySelector(".psc-np-row:not(.is-disabled)");
+      if (first) first.click();
     });
     // Window capture runs before any document closer, so a click that
     // opened this list cannot be treated as an outside close on the
@@ -1764,30 +1798,6 @@
 
     function appendCategoryRow(node) {
       const enabled = nodeEnabled(node);
-      // Typed-address rows declare a value kind that lives in the search box
-      // rather than a catalog (IP / CIDR, FQDN, IP + port + protocol). They
-      // are never navigable — clicking focuses the search input.
-      if (node.addressHint) {
-        const row = el("div", { class: "psc-np-row psc-np-address-row" + (enabled ? "" : " is-disabled") });
-        const hintText = el("div", { class: "psc-np-text" });
-        hintText.appendChild(el("span", { class: "psc-np-name" }, [node.label]));
-        if (node.description) hintText.appendChild(el("span", { class: "psc-np-desc" }, [node.description]));
-        row.appendChild(hintText);
-        const gate = getNodeGate ? getNodeGate(node) : null;
-        if (enabled && gate && gate.active) row.appendChild(el("span", { class: "psc-np-badge" }, ["In use"]));
-        if (!enabled) {
-          const reason = nodeDisabledReason(node);
-          if (reason) row.appendChild(el("span", { class: "psc-np-info", title: reason }, ["i"]));
-        } else {
-          row.addEventListener("click", (evt) => {
-            if (evt.target.closest("input[type=checkbox]")) return;
-            setOpen(true);
-            search.focus();
-          });
-        }
-        list.appendChild(row);
-        return;
-      }
       const hasItems = Boolean(node.fieldKey && node.fieldKey !== "identityTypes" && !node.typeOnly);
       const hasKids = Boolean((node.children && node.children.length) || hasItems);
       const row = el("div", { class: "psc-np-row" + (enabled ? "" : " is-disabled") });
@@ -2047,6 +2057,19 @@
       addressInput,
       facades,
       isOpen: () => isOpen,
+      // Commit text the user typed but did not press Enter on, so clicking Run
+      // directly still honours it.
+      commitPending() {
+        const value = String(search.value || "").trim();
+        if (!value || !looksLikeAddress(value)) return false;
+        if (addressList().includes(value)) {
+          search.value = "";
+          renderList();
+          return false;
+        }
+        commitAddress(value);
+        return true;
+      },
       refresh() { if (isOpen) renderList(); },
       selectedFieldKeys,
       selectedTypeKeys() {
@@ -2193,12 +2216,6 @@
           ],
         },
         {
-          label: "IP / CIDR",
-          addressHint: true,
-          gateKey: "sourceIpCidr",
-          description: "Type a client IP or CIDR in the search box, for example 10.20.0.0/16.",
-        },
-        {
           label: "Networks",
           children: [
             { label: "Networks", fieldKey: "networks", inputId: "psc-src-networks", items: maps.sourceNetworks, badge: "Network" },
@@ -2215,7 +2232,7 @@
       idPrefix: "psc-src-np",
       rootLabel: "From",
       addressInputId: "psc-src",
-      addressPlaceholder: "Select sources",
+      addressPlaceholder: "Search, or type an IP / CIDR",
       getFieldState: (fieldKey) => ({ enabled: sourceEnabled[fieldKey] !== false }),
       getNodeGate: (node) => sourceNodeGate(node),
       getFieldIssue: (fieldKey) => sourceFieldIssue(fieldKey),
@@ -2227,24 +2244,6 @@
 
     const destEnabled = {};
     const destTree = [
-        {
-          label: "FQDN",
-          addressHint: true,
-          destKind: "fqdn",
-          description: "Type a domain in the search box, for example login.example.com.",
-        },
-        {
-          label: "IP / CIDR",
-          addressHint: true,
-          destKind: "ip",
-          description: "Type an IP address or CIDR, for example 208.67.222.222 or 10.0.0.0/8.",
-        },
-        {
-          label: "IP + port + protocol",
-          addressHint: true,
-          destKind: "ipport",
-          description: "Type address:port, optionally with a protocol, for example 10.0.0.5:443/tcp.",
-        },
         { label: "Destination list", fieldKey: "destinationList", inputId: "psc-destlist", items: maps.destinationLists || {}, badge: "Destination List" },
         { label: "Any destination", fieldKey: "anyDestination", inputId: "psc-any-destination", items: { any: "Any destination" }, badge: "Any", single: true },
       ];
@@ -2252,7 +2251,7 @@
       idPrefix: "psc-dst-np",
       rootLabel: "To",
       addressInputId: "psc-dest",
-      addressPlaceholder: "Select destinations",
+      addressPlaceholder: "Search, or type a domain, IP, or IP:port",
       getFieldState: (fieldKey) => ({ enabled: destEnabled[fieldKey] !== false }),
       getNodeGate: (node) => destNodeGate(node),
       getFieldIssue: (fieldKey) => destFieldIssue(fieldKey),
@@ -2306,7 +2305,7 @@
     // with its reason rather than silently dropped.
     // ---------------------------------------------------------------------
     function taxonomyApi() {
-      return typeof window !== "undefined" && window.TesterTaxonomy ? window.TesterTaxonomy : null;
+      return taxonomyRef();
     }
 
     function sourceGateKey(node) {
@@ -2621,6 +2620,8 @@
     const destPick = (key) => (destPicker.facades[key] ? destPicker.facades[key].getValue() : "");
 
     runBtn.addEventListener("click", () => {
+      sourcePicker.commitPending();
+      destPicker.commitPending();
       const srcVal = sourceInput.value.trim();
       const destVal = destInput.value.trim();
       const usersId = sourcePick("users");
