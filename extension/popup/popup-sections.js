@@ -1670,6 +1670,11 @@
       setOpen(!isOpen);
       if (isOpen) search.focus();
     });
+    // Clicking an input that already has focus fires no focus event, so a
+    // closed list would never reopen. Open on pointerdown as well.
+    search.addEventListener("pointerdown", () => {
+      if (!isOpen) setOpen(true);
+    });
     search.addEventListener("focus", () => setOpen(true));
     search.addEventListener("input", () => {
       addressError = "";
@@ -1798,6 +1803,33 @@
 
     function appendCategoryRow(node) {
       const enabled = nodeEnabled(node);
+      // Self-selecting rows hold exactly one item and toggle it directly,
+      // instead of drilling into a submenu with a single entry.
+      if (node.selfSelect) {
+        const onlyId = Object.keys(node.items || {})[0];
+        const checked = Boolean(selectedByField[node.fieldKey] && onlyId !== undefined && selectedByField[node.fieldKey][onlyId]);
+        const srow = el("div", { class: "psc-np-row" + (enabled ? "" : " is-disabled") });
+        const sbox = el("input", { type: "checkbox" });
+        sbox.checked = checked;
+        sbox.disabled = !enabled;
+        srow.appendChild(sbox);
+        srow.appendChild(el("span", { class: "psc-np-name" }, [node.label]));
+        if (node.badge) srow.appendChild(el("span", { class: "psc-np-badge" }, [node.badge]));
+        if (enabled) {
+          const toggle = (evt) => {
+            evt.preventDefault();
+            evt.stopPropagation();
+            setSelected(node.fieldKey, onlyId, node.label, node.badge, !checked);
+          };
+          srow.addEventListener("click", toggle);
+          sbox.addEventListener("click", toggle);
+        } else {
+          const reason = nodeDisabledReason(node);
+          if (reason) srow.appendChild(el("span", { class: "psc-np-info", title: reason }, ["i"]));
+        }
+        list.appendChild(srow);
+        return;
+      }
       const hasItems = Boolean(node.fieldKey && node.fieldKey !== "identityTypes" && !node.typeOnly);
       const hasKids = Boolean((node.children && node.children.length) || hasItems);
       const row = el("div", { class: "psc-np-row" + (enabled ? "" : " is-disabled") });
@@ -2137,6 +2169,8 @@
       const next = {};
       for (const field of fields) {
         if (!field.id) continue;
+        // The From/To trigger input holds a transient query, not a value.
+        if (field.classList && field.classList.contains("psc-cb-input")) continue;
         next[field.id] = {
           value: field.value || "",
           selected: field.dataset && field.dataset.selectedValue || "",
@@ -2153,6 +2187,7 @@
       for (const [id, saved] of Object.entries(draft)) {
         const field = panel.querySelector(`#${typeof CSS !== "undefined" && CSS.escape ? CSS.escape(id) : id}`);
         if (!field) continue;
+        if (field.classList && field.classList.contains("psc-cb-input")) continue;
         field.value = saved && saved.value || "";
         if (saved && saved.selected) field.dataset.selectedValue = saved.selected;
         else delete field.dataset.selectedValue;
@@ -2245,7 +2280,7 @@
     const destEnabled = {};
     const destTree = [
         { label: "Destination list", fieldKey: "destinationList", inputId: "psc-destlist", items: maps.destinationLists || {}, badge: "Destination List" },
-        { label: "Any destination", fieldKey: "anyDestination", inputId: "psc-any-destination", items: { any: "Any destination" }, badge: "Any", single: true },
+        { label: "Any destination", fieldKey: "anyDestination", inputId: "psc-any-destination", items: { any: "Any destination" }, badge: "Any", single: true, selfSelect: true },
       ];
     const destPicker = createNestedCatalogPicker({
       idPrefix: "psc-dst-np",
@@ -2338,10 +2373,12 @@
     function destBlockReason(fieldKey) {
       const kind = destKindOfField(fieldKey);
       if (!kind) return "";
-      if (kind === "destinationList" && actionInput.value !== "block") return DEST_LIST_REASON;
+      // The single-kind conflict is the binding reason, so it outranks the
+      // Block-only requirement when both apply.
       if (activeDestKind && activeDestKind !== kind) {
         return activeDestKind === "any" || kind === "any" ? DEST_ANY_REASON : DEST_SINGLE_REASON;
       }
+      if (kind === "destList" && actionInput.value !== "block") return DEST_LIST_REASON;
       return "";
     }
 
@@ -2664,9 +2701,10 @@
         ? destPicker.facades.privateResourceType.getValue()
         : "";
       const appRiskProfileId = destPick("appRiskProfile");
+      const anyDestVal = destPick("anyDestination");
 
       const hasVal = (value) => Array.isArray(value) ? value.length > 0 : Boolean(value);
-      if (![srcVal, destVal, usersId, identityTypeIds, gsuiteUsersId, gsuiteOusId, roamingId, groupsId, endpointDevicesId, networksId, sitesId, sgtId, catalystSdwanId, tunnelGroupId, sourceNetworkObjectId, sourceNetworkObjectGroupId, networkDeviceId, mobileDeviceId, chromebookId, ztnaClientId, destScopeVal, privResId, privResGroupId, destListId, netObjId, netObjGroupId, svcObjItemId, svcObjId, appId, protocolId, enterpriseAppId, appListId, appCatId, contentCatId, catListId, geoVal, privateResourceTypeVal, appRiskProfileId].some(hasVal)) {
+      if (![srcVal, destVal, usersId, identityTypeIds, gsuiteUsersId, gsuiteOusId, roamingId, groupsId, endpointDevicesId, networksId, sitesId, sgtId, catalystSdwanId, tunnelGroupId, sourceNetworkObjectId, sourceNetworkObjectGroupId, networkDeviceId, mobileDeviceId, chromebookId, ztnaClientId, destScopeVal, privResId, privResGroupId, destListId, netObjId, netObjGroupId, svcObjItemId, svcObjId, appId, protocolId, enterpriseAppId, appListId, appCatId, contentCatId, catListId, geoVal, privateResourceTypeVal, appRiskProfileId, anyDestVal].some(hasVal)) {
         errorLine.textContent = "SELECT AT LEAST ONE CRITERION.";
         return;
       }
