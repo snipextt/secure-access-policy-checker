@@ -117,14 +117,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const identityOptions = window.Matcher.getIdentityOptions(rules);
 
-    // 1. Tab 1: Policy Tester panel
-    testerHandle = window.PopupSections.buildTesterPanel(
+    // Traffic-path flow replaces the broad From/To tester; the Rules & Audit tab remains unchanged.
+    testerHandle = window.TrafficPathPanel.create(
       testerRoot,
-      rules,
-      identityOptions,
-      objectMaps || { privateResources: objectMap || {} },
-      identityTypeMap || {},
-      identityMap || {},
+      objectMaps || {},
       /* onRun */ async (testInput) => {
         const lookups = await window.PopupSections.loadLookups();
         Object.assign(lookups, currentObjectMaps || {});
@@ -147,25 +143,14 @@ document.addEventListener("DOMContentLoaded", () => {
         lookups.enterpriseApplications = (currentObjectMaps && currentObjectMaps.enterpriseApplications) || {};
         lookups.memberMaps = currentMemberMaps || {};
         const result = window.Matcher.matchPolicy(currentRules, testInput, lookups);
-        if (testerHandle) {
-          if (result && result.noMatch) {
-            testerHandle.updateResult({
-              noMatch: true,
-              diagnostic: buildNoMatchDiagnostic(currentRules, testInput, currentRuleFetchStatus),
-              rejected: result.rejected,
-            });
-          } else {
-            testerHandle.updateResult(result);
-          }
-        }
-        if (result && !result.noMatch) {
-          const displayName = result.rule.ruleName || result.rule.name || "(unnamed)";
-          highlightOnPage(displayName, result.matchedConditions);
-          minimizeEmbeddedPanel();
-        }
+        return result;
       },
-      /* onReset */ () => {
-        if (testerHandle) testerHandle.updateResult(null);
+      /* onReset */ () => {},
+      /* onHighlight */ (result) => {
+        if (!result || result.noMatch || !result.rule) return;
+        const displayName = result.rule.ruleName || result.rule.name || "(unnamed)";
+        highlightOnPage(displayName, result.matchedConditions);
+        minimizeEmbeddedPanel();
       }
     );
 

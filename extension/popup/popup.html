@@ -9,6 +9,7 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
     />
+    <link rel="stylesheet" href="traffic-path.css" />
     <style>
       /* ==================================================================== */
       /* Light Mode Design Tokens (White Background, Dark Text)              */
@@ -245,7 +246,7 @@
 
     <!-- Tabs -->
     <div class="tabs">
-      <button class="tab-btn active" data-target="tab-tester">TESTER</button>
+      <button class="tab-btn active" data-target="tab-tester">POLICY CHECK</button>
       <button class="tab-btn" data-target="tab-rules">RULES & AUDIT</button>
     </div>
 
@@ -261,6 +262,8 @@
     <!-- Script load order matters -->
     <script src="matcher.js"></script>
     <script src="tester-taxonomy.js"></script>
+    <script src="traffic-path.js"></script>
+    <script src="traffic-path-panel.js"></script>
     <script src="popup-sections.js"></script>
     <script src="popup.js"></script>
   </body>
