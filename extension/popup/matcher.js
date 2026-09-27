@@ -1275,6 +1275,42 @@
    *   resolved names instead of raw IDs. See resolveDisplayValue() above.
    * @returns {{ rule: object, matchedConditions: string[], matchFields: object } | null}
    */
+  function needsTransportContext(rule, testInput, lookups) {
+    if (!testInput.trafficStage || rule.ruleIsEnabled === false || rule.enabled === false) return false;
+    const conditions = rule.ruleConditions || rule.conditions || [];
+    const specific = conditions.filter(cond => {
+      if (String(cond.attributeName || "").toLowerCase() !== "umbrella.destination.composite_inline_ip") return false;
+      const items = extractCompositeInlineIp(Array.isArray(cond.attributeValue) ? cond.attributeValue : []).items;
+      return items.some(item =>
+        (!testInput.destinationPort && item.ports.some(port => !["any", "*", "0-65535"].includes(String(port).toLowerCase()))) ||
+        (!testInput.destinationProtocol && !["any", "*"].includes(String(item.protocol).toLowerCase())));
+    });
+    if (!specific.length) return false;
+    const other = conditions.filter(cond => !specific.includes(cond));
+    if (!matchesRule({ ...rule, ruleConditions: other, conditions: other }, testInput, lookups).matched) return false;
+    return specific.some(cond => extractCompositeInlineIp(cond.attributeValue).items.some(item =>
+      cidrMatch(testInput.destination, item.cidr) || fqdnMatch(item.cidr, testInput.destination)));
+  }
+
+  function needsDestinationClassification(rule, testInput, lookups) {
+    if (testInput.trafficStage !== "dns" && testInput.trafficStage !== "web") return false;
+    if (rule.ruleIsEnabled === false || rule.enabled === false) return false;
+    const unknown = (rule.ruleConditions || rule.conditions || []).filter(cond => {
+      const name = String(cond.attributeName || "").toLowerCase();
+      const field = name.includes("application_list") ? testInput.applicationListId :
+        name.includes("application_ids") ? [testInput.applicationId, testInput.protocolId, testInput.enterpriseApplicationId] :
+        name.includes("application_category") ? testInput.applicationCategoryId :
+        name.endsWith(".category_ids") ? testInput.contentCategoryId :
+        name.includes("category_list") ? testInput.categoryListId :
+        name.includes("appriskprofile") ? testInput.appRiskProfileId :
+        name.includes("geolocations") ? testInput.geolocation : null;
+      return field !== null && flattenSelectedIds(field).length === 0;
+    });
+    if (!unknown.length) return false;
+    const conditions = (rule.ruleConditions || rule.conditions || []).filter(cond => !unknown.includes(cond));
+    return matchesRule({ ...rule, ruleConditions: conditions, conditions }, testInput, lookups).matched;
+  }
+
   function matchPolicy(rules, testInput, lookups = {}) {
     const sorted = [...rules].sort((a, b) => {
       const aDefault = (a.ruleIsDefault !== undefined ? a.ruleIsDefault : a.is_default) === true;
@@ -1297,6 +1333,12 @@
     const rejected = [];
     for (const rule of sorted) {
       const result = matchesRule(rule, testInput, lookups);
+      if (needsTransportContext(rule, testInput, lookups) || (!result.matched && needsDestinationClassification(rule, testInput, lookups))) {
+        return {
+          indeterminate: true, reason: "A higher-priority rule needs destination classification or traffic port before this stage can be determined.",
+          rule,
+        };
+      }
       if (result.matched) {
         const ruleAction = String(rule.ruleAction || rule.action || "").toLowerCase();
         if (preferredAction && ruleAction && !actionsMatch(preferredAction, ruleAction)) {
