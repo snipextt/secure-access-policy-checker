@@ -57,49 +57,8 @@
   // CIDR / IP helpers  (schema-independent)
   // ---------------------------------------------------------------------------
 
-  /**
-   * Parse an IPv4 address string into a 32-bit unsigned integer.
-   * Returns NaN if the string is not a valid dotted-decimal IPv4 address.
-   *
-   * @param {string} ip
-   * @returns {number}
-   */
-  function ipv4ToInt(ip) {
-    const parts = ip.split(".");
-    if (parts.length !== 4) return NaN;
-    let n = 0;
-    for (const part of parts) {
-      const octet = parseInt(part, 10);
-      if (isNaN(octet) || octet < 0 || octet > 255) return NaN;
-      n = (n << 8) | octet;
-    }
-    return n >>> 0;  // >>> 0 forces unsigned 32-bit
-  }
-
-  /**
-   * Return true if `ip` falls within the network described by `cidr`.
-   * Supports bare IPs (treated as /32) and standard CIDR notation.
-   *
-   * TODO: IPv6 support not yet implemented.
-   *
-   * @param {string} ip   — test IP (from user input)
-   * @param {string} cidr — CIDR block to test against
-   * @returns {boolean}
-   */
   function cidrMatch(ip, cidr) {
-    if (!ip || !cidr) return false;
-    if (ip.includes(":") || cidr.includes(":")) {
-      console.warn("[matcher] IPv6 CIDR matching not yet implemented:", cidr);
-      return false;
-    }
-    const [network, prefixStr] = cidr.split("/");
-    const prefixLen = prefixStr !== undefined ? parseInt(prefixStr, 10) : 32;
-    if (isNaN(prefixLen) || prefixLen < 0 || prefixLen > 32) return false;
-    const ipInt      = ipv4ToInt(ip);
-    const networkInt = ipv4ToInt(network);
-    if (isNaN(ipInt) || isNaN(networkInt)) return false;
-    const mask = prefixLen === 0 ? 0 : (~0 << (32 - prefixLen)) >>> 0;
-    return (ipInt & mask) >>> 0 === (networkInt & mask) >>> 0;
+    return window.IPAddress.contains(ip, cidr);
   }
 
   /**
@@ -116,10 +75,7 @@
     const p = pattern.toLowerCase().trim();
     const v = value.toLowerCase().trim();
     if (p === "*") return true;
-    // Never apply FQDN substring semantics to IPv4 literals. A rule for
-    // 8.8.8.8 must not match 8.8.8.80 merely because the strings overlap.
-    const ipv4Literal = /^\d{1,3}(?:\.\d{1,3}){3}$/;
-    if (ipv4Literal.test(p) || ipv4Literal.test(v)) return v === p;
+    if (window.IPAddress.parseCidr(p) || window.IPAddress.parseCidr(v)) return cidrMatch(v, p);
     if (p.startsWith("*.")) {
       const suffix = p.slice(2);
       return v === suffix || v.endsWith("." + suffix);
@@ -452,11 +408,14 @@
   function parseAddressToken(raw) {
     const value = String(raw || "").trim();
     if (!value) return { ipCidr: "", port: null };
-    const portMatch = value.match(/:(\d+)$/);
-    if (!portMatch) return { ipCidr: value, port: null };
+    const portMatch = value.match(/^\[([0-9a-f:.]+)\]:(\d+)$/i);
+    if (portMatch && window.IPAddress.parse(portMatch[1])?.version === 6) return { ipCidr: portMatch[1], port: portMatch[2] };
+    if (window.IPAddress.parseCidr(value)?.version === 6) return { ipCidr: value, port: null };
+    const trailingPort = value.match(/:(\d+)$/);
+    if (!trailingPort) return { ipCidr: value, port: null };
     return {
-      ipCidr: value.substring(0, value.length - portMatch[0].length),
-      port: portMatch[1],
+      ipCidr: value.substring(0, value.length - trailingPort[0].length),
+      port: trailingPort[1],
     };
   }
 
@@ -1070,7 +1029,7 @@
     const inferredScope = explicitScope ||
       (hasPrivateResource ? "private_network" : null) ||
       (hasInternetCatalog ? "public_internet" : null) ||
-      (destinationValue && Number.isNaN(ipv4ToInt(destinationValue.split("/")[0])) && /[a-z]/i.test(destinationValue)
+      (destinationValue && !window.IPAddress.parseCidr(destinationValue) && /[a-z]/i.test(destinationValue)
         ? "public_internet"
         : null);
     if (ruleScope && (!inferredScope || ruleScope !== inferredScope)) {

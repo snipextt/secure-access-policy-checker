@@ -29,13 +29,14 @@
     web: "HTTP(S) web request",
   };
 
+  const ip = root.IPAddress;
   const SOURCES = {
     user: { label: "User", catalog: "sourceUsers", inputKey: "sourceUserId" },
     group: { label: "User group", catalog: "sourceGroups", inputKey: "sourceGroupId" },
     roaming: { label: "Roaming computer", catalog: "sourceRoaming", inputKey: "sourceRoamingId" },
     site: { label: "Site", catalog: "sourceSites", inputKey: "sourceSiteId" },
     tunnelGroup: { label: "Network tunnel", catalog: "sourceTunnelGroups", inputKey: "sourceTunnelGroupId" },
-    internalIp: { label: "Internal client IPv4", inputKey: "source" },
+    internalIp: { label: "Internal client IP", inputKey: "source" },
   };
 
   function stagesForPath(path, scenario = {}) {
@@ -57,15 +58,8 @@
     return stagesForPath(path, scenario);
   }
 
-  function validIPv4(text) {
-    const parts = text.split(".");
-    return parts.length === 4 && parts.every(part => /^(0|[1-9]\d{0,2})$/.test(part) && Number(part) <= 255);
-  }
-
-  function ipv4OrCidr(text) {
-    const [address, prefix, extra] = text.split("/");
-    return extra === undefined && validIPv4(address) &&
-      (prefix === undefined || /^(0|[1-9]|[12]\d|3[0-2])$/.test(prefix));
+  function ipOrCidr(text) {
+    return !!ip.parseCidr(text);
   }
 
   function normalizeDestination(text) {
@@ -74,16 +68,18 @@
     if (/^https?:\/\//i.test(value)) {
       try {
         const url = new URL(value);
-        if (!url.hostname || url.username || url.password || !(ipv4OrCidr(url.hostname) || root.TesterTaxonomy && root.TesterTaxonomy.classifyDestinationValue(url.hostname) === "fqdn")) {
-          return { error: "Enter a valid HTTP(S) destination URL with a domain or IPv4 host." };
+        const host = url.hostname.startsWith("[") && url.hostname.endsWith("]") ? url.hostname.slice(1, -1) : url.hostname;
+        const isIpHost = !!ip.parse(host);
+        if (!host || url.username || url.password || !(isIpHost || root.TesterTaxonomy && root.TesterTaxonomy.classifyDestinationValue(host) === "fqdn")) {
+          return { error: "Enter a valid HTTP(S) destination URL with a domain or IP host." };
         }
-        return { destination: url.hostname, destinationKind: ipv4OrCidr(url.hostname) ? "url-ip" : "url", note: "URL host and Web port are checked; path, query, and scheme are not evaluated." };
+        return { destination: host, destinationKind: isIpHost ? "url-ip" : "url", note: "URL host and Web port are checked; path, query, and scheme are not evaluated." };
       } catch (_) { return { error: "Enter a valid HTTP(S) destination URL." }; }
     }
     const kind = root.TesterTaxonomy && root.TesterTaxonomy.classifyDestinationValue(value);
-    if (ipv4OrCidr(value)) return { destination: value, destinationKind: "ip" };
-    if (kind === "fqdn" && !/[/:?#\s]/.test(value) && !/^\d+(?:\.\d+){3}$/.test(value)) return { destination: value, destinationKind: "domain" };
-    return { error: "Enter a domain, HTTP(S) URL, or IPv4 address/CIDR. Ports and IPv6 are not evaluated in this flow." };
+    if (ipOrCidr(value)) return { destination: value, destinationKind: "ip" };
+    if (kind === "fqdn" && !/[/:?#\s]/.test(value) && !/^\d+(?:\.\d+){3}$/.test(value) && !value.includes(":")) return { destination: value, destinationKind: "domain" };
+    return { error: "Enter a domain, HTTP(S) URL, or IPv4/IPv6 address. Ports require a URL." };
   }
 
   function sourceForPath(path, kind, value, catalogs) {
@@ -91,7 +87,7 @@
     if (!config || !config.sources.includes(kind)) return { error: "Select a source supported by this traffic path." };
     const source = SOURCES[kind];
     if (kind === "internalIp") {
-      if (!ipv4OrCidr(String(value || "").trim())) return { error: "Enter a valid IPv4 client address or CIDR (IPv6 is not evaluated)." };
+      if (!ipOrCidr(String(value || "").trim())) return { error: "Enter a valid IPv4 or IPv6 client address." };
       return { source: value.trim() };
     }
     const entries = catalogs && catalogs[source.catalog];
@@ -110,14 +106,16 @@
     const selected = sourceForPath(path, sourceKind, sourceValue, catalogs);
     if (selected.error) return selected;
     if (selected.source && selected.source.includes("/")) {
-      if (!selected.source.endsWith("/32")) return { error: "A CIDR contains multiple clients; enter one IPv4 address to check a single request." };
-      selected.source = selected.source.slice(0, -3);
+      const cidr = ip.parseCidr(selected.source);
+      if (cidr.prefix !== (cidr.version === 4 ? 32 : 128)) return { error: "A CIDR contains multiple clients; enter one IP address to check a single request." };
+      selected.source = selected.source.slice(0, selected.source.lastIndexOf("/"));
     }
     if (parsed.destination.includes("/")) {
-      if (!parsed.destination.endsWith("/32")) return { error: "A destination CIDR contains multiple hosts; enter one IPv4 address to check a single request." };
-      parsed.destination = parsed.destination.slice(0, -3);
+      const cidr = ip.parseCidr(parsed.destination);
+      if (cidr.prefix !== (cidr.version === 4 ? 32 : 128)) return { error: "A destination CIDR contains multiple hosts; enter one IP address to check a single request." };
+      parsed.destination = parsed.destination.slice(0, parsed.destination.lastIndexOf("/"));
     }
-    const isIp = ipv4OrCidr(parsed.destination);
+    const isIp = ipOrCidr(parsed.destination);
     if (isIp && !["public_internet", "private_network"].includes(scope)) {
       return { error: "Choose Internet or Private Access for an IP destination; its scope cannot be inferred." };
     }
@@ -129,7 +127,7 @@
     if (scope !== "private_network" && !pathModes.stages.includes("web") && (trafficKind === "web" || parsed.destinationKind === "url" || parsed.destinationKind === "url-ip")) {
       return { error: "This path only covers DNS. Enter a domain or choose another traffic path for Web." };
     }
-    if (trafficKind === "auto" && isIp && scope !== "private_network") {
+    if (trafficKind === "auto" && parsed.destinationKind === "ip" && scope !== "private_network") {
       return { error: "Choose Web for an IP destination; an IP alone does not identify its traffic service." };
     }
     const webPort = parsed.destinationKind === "url" || parsed.destinationKind === "url-ip" ? (new URL(String(destination).trim()).port || (/^https:/i.test(destination) ? "443" : "80")) : "";

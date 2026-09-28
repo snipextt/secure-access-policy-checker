@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 "use strict";
 const assert = require("node:assert/strict");
+const ip = require("./extension/popup/ip-address.js");
+global.IPAddress = ip;
 global.TesterTaxonomy = require("./extension/popup/tester-taxonomy.js");
 const path = require("./extension/popup/traffic-path.js");
 const catalogs = {
@@ -49,8 +51,9 @@ assert.deepEqual(path.stagesForPath("client", { trafficKind: "web", destinationK
 assert.deepEqual(path.stagesForPath("client", { trafficKind: "auto", destinationKind: "url-ip" }).map(stage => stage.key), ["web"]);
 assert.deepEqual(path.stagesForPath("va", { trafficKind: "dns", destinationKind: "domain" }).map(stage => stage.key), ["dns"]);
 assert.equal(path.normalizeDestination("https://203.0.113.5/docs").destinationKind, "url-ip");
-assert.equal(path.normalizeDestination("http://[2001:db8::1]/").error !== undefined, true);
-for (const invalid of ["example.com/secret", "10.0.0.1:443", "2001:db8::1", "999.2.3.4", "example.com?query=yes"]) {
+assert.deepEqual(path.normalizeDestination("http://[2001:db8::1]/"), { destination: "2001:db8::1", destinationKind: "url-ip", note: "URL host and Web port are checked; path, query, and scheme are not evaluated." });
+assert.equal(path.normalizeDestination("2001:db8::1").destinationKind, "ip");
+for (const invalid of ["example.com/secret", "10.0.0.1:443", "2001:db8::1/129", "2001:::1", "999.2.3.4", "example.com?query=yes"]) {
   assert.ok(path.normalizeDestination(invalid).error, invalid);
 }
 assert.deepEqual(path.policyLayer(null), {
@@ -66,7 +69,7 @@ for (const [raw, action] of [["allow", "Allow"], ["block", "Block"], ["warn", "W
 assert.equal(path.policyLayer({ rule: { action: "unexpected" } }).status, "unknown");
 const vm = require("node:vm");
 const fs = require("node:fs");
-const context = vm.createContext({ window: {}, console, Array, String, Object, JSON, Math, Set, RegExp, parseInt, isNaN });
+const context = vm.createContext({ window: { IPAddress: ip }, console, Array, String, Object, JSON, Math, Set, RegExp, parseInt, isNaN });
 vm.runInContext(fs.readFileSync("extension/popup/matcher.js", "utf8"), context);
 const request = path.buildInput({ path: "client", sourceKind: "user", sourceValue: "7", destination: "https://example.com/path" }, catalogs);
 const rule = {
@@ -148,3 +151,13 @@ const mismatchedSource = { ...classifiedRule, ruleId: 20, ruleConditions: [
 assert.equal(context.window.Matcher.matchPolicy([mismatchedSource, rule], path.stageInput(request.testInput, request.scenario, "dns"), { sourceIdentityTypeIds: { 7: 7 } }).rule.ruleId, 14);
 
 console.log("traffic path model and matcher integration: assertions passed");
+
+const ipv6Source = path.buildInput({ path: "va", sourceKind: "internalIp", sourceValue: "2001:db8::1/128", destination: "example.com" }, catalogs);
+assert.equal(ipv6Source.testInput.source, "2001:db8::1");
+assert.match(path.buildInput({ path: "va", sourceKind: "internalIp", sourceValue: "2001:db8::/64", destination: "example.com" }, catalogs).error, /multiple clients/);
+const ipv6Destination = path.buildInput({ path: "client", sourceKind: "user", sourceValue: "7", destination: "https://[2001:db8::1]:443/", scope: "public_internet" }, catalogs);
+assert.equal(ipv6Destination.testInput.destination, "2001:db8::1");
+assert.deepEqual(path.stagesForPath("client", ipv6Destination.scenario).map(stage => stage.key), ["web"]);
+assert.match(path.buildInput({ path: "client", sourceKind: "user", sourceValue: "7", destination: "2001:db8::/64", scope: "public_internet", trafficKind: "web" }, catalogs).error, /multiple hosts/);
+const ipv6Rule = { ...rule, ruleId: 128, ruleConditions: [rule.ruleConditions[0], { attributeName: "umbrella.destination.composite_inline_ip", attributeOperator: "IN", attributeValue: [{ ip: ["2001:db8::/32"], port: ["443"], protocol: "TCP" }] }] };
+assert.equal(path.evaluateStages("client", ipv6Destination, stage => context.window.Matcher.matchPolicy([ipv6Rule], stage, { sourceIdentityTypeIds: { 7: 7 } }))[0].match.rule.ruleId, 128);

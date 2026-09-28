@@ -69,7 +69,7 @@
     sourceSelect.id = "tp-source-catalog";
     const sourceIp = node("input", "tp-input");
     sourceIp.id = "tp-source-ip";
-    sourceIp.placeholder = "Client IPv4 address (one host)";
+    sourceIp.placeholder = "Client IPv4 or IPv6 address (one host)";
     sourceIp.autocomplete = "off";
     const sourceHint = node("p", "tp-hint");
     const trafficField = node("div", "tp-field tp-traffic-field");
@@ -123,7 +123,7 @@
       for (const kind of path ? model.PATHS[path].sources : []) {
         const type = model.SOURCES[kind];
         if (kind === "internalIp") {
-          const option = node("option", "", "Internal client IPv4");
+          const option = node("option", "", "Internal client IP");
           option.value = "internalIp:";
           sourceSelect.append(option);
           continue;
