@@ -21,10 +21,11 @@ On the dashboard's policy page, the shield button opens the checker. It predicts
 | Secure Client | Roaming computer, user or group | DNS → Web |
 | On-prem VA | Site, internal client IP, user or group, AD computer, egress network | DNS |
 | Network DNS | Registered network (public IP) | DNS |
-| Site-to-site tunnel | Network tunnel, internal client IP, user or group, AD computer, SD-WAN VPN, security group tag | DNS → Firewall → Web |
+| Site-to-site tunnel | Network tunnel, internal client IP, user or group, AD computer, SD-WAN VPN, security group tag | Firewall → Web |
 
 - The request carries every identity you fill in. A rule's source matches if any of them, or any AD group they belong to (nested groups included), is listed on the rule.
 - A rule's destinations are alternatives: the request matches if it hits any one of them.
+- Branch DNS doesn't travel through the tunnel; check it with On-prem VA or Network DNS.
 - A domain is checked at DNS and then at Web over HTTPS. A URL uses its own port. An IP address includes the firewall on a tunnel, with the port and protocol you give.
 - Destinations that match a configured private resource, or an internal (RFC 1918 / ULA) address, are evaluated as Private Access. From a tunnel, an internal IP goes through the firewall under the private-access rules.
 - A firewall block stops the later stages ("Not reached"). After a DNS block, Web is still shown as the fallback, because DNS may not know the user.

@@ -7,11 +7,13 @@
 //   Secure Client   roaming computer (+ logged-in user)          DNS → Web
 //   On-prem VA      site, internal IP, AD user/computer, network  DNS only
 //   Network DNS     registered network (public IP)                DNS only
-//   S2S tunnel      tunnel, internal IP, AD user/computer,        DNS → Firewall → Web
+//   S2S tunnel      tunnel, internal IP, AD user/computer,        Firewall → Web
 //                   SD-WAN VPN, security group tag
 //
 // Identity kinds per connection follow what Activity Search logs for each
-// path. A request carries every identity its connection exposes; a rule's
+// path. Tunnel identities never appear in DNS events: branch DNS reaches
+// Secure Access through a VA or a registered network, checked as its own
+// connection. A request carries every identity its connection exposes; a rule's
 // source matches if any of them (or a group they belong to) is listed. Stages
 // run in traffic order; a firewall block stops later stages, while a DNS
 // block leaves Web evaluated as a fallback (DNS may not know the user).
@@ -64,7 +66,7 @@
       sources: ["network"],
     },
     tunnel: {
-      label: "Site-to-site tunnel", layers: "DNS + Firewall + Web",
+      label: "Site-to-site tunnel", layers: "Firewall + Web",
       description: "Branch traffic sent through an IPsec tunnel. It can also carry the AD user or computer, SD-WAN VPN, and security group tag.",
       sources: ["tunnel", "internalIp", "identity", "computer", "sdwan", "sgt"],
     },
@@ -285,7 +287,7 @@
     const isWebPort = destination.protocol === "TCP" && WEB_PORTS.includes(destination.port);
     const stages = [];
     const skipped = [];
-    if (destination.kind === "domain") stages.push({ ...STAGES.dns });
+    if (destination.kind === "domain" && connection !== "tunnel") stages.push({ ...STAGES.dns });
     if (connection === "tunnel") {
       if (destination.kind === "ip") stages.push({ ...STAGES.firewall });
       else skipped.push({ ...STAGES.firewall, reason: "The firewall matches the destination IP. Enter the IP address to include it." });
@@ -366,13 +368,30 @@
     const results = [];
     let blockedAt = null;
     let uncertainBefore = null;
+    const threats = threatContext(lookups);
+    const threatAnswer = (request.facts && request.facts.securityCategory) || null;
+    const flagged = new Set(threatAnswer ? threatAnswer.yes : []);
+    const threatCategories = new Set();
     for (const stage of plan.stages) {
       // A firewall block ends the connection. A DNS block usually does too,
-      // but DNS may not know the user (their identity can exist only at the
-      // proxy), so Web is still evaluated and shown as the fallback.
+      // but the client's DNS may not reach Secure Access, or DNS may not know
+      // the user (their identity can exist only at the proxy), so Web is still
+      // evaluated and shown as the fallback. Activity Search shows both: proxy
+      // blocks for requests a DNS rule, or the DNS security setting, covers.
       if (blockedAt && blockedAt.key !== "dns") {
         results.push({ stage, state: "not-reached", reason: `Blocked at ${blockedAt.label} first.` });
         continue;
+      }
+      // DNS security settings apply before any rule (Activity Search logs
+      // these as rule 0, "Block due to security setting").
+      if (stage.key === "dns" && threats.dns) {
+        threats.dns.categories.forEach(name => threatCategories.add(name));
+        const hit = threats.dns.categories.find(name => flagged.has(name));
+        if (hit) {
+          results.push({ stage, state: "matched", action: "block", match: { rule: DNS_SECURITY_RULE, matchedConditions: [`${hit} is blocked by the DNS security setting "${threats.dns.name}"`] }, security: { category: hit, setting: threats.dns.name, source: "DNS security settings" } });
+          blockedAt = stage;
+          continue;
+        }
       }
       const input = stageInput(request, scope, groups, stage);
       const match = matcher.matchPolicy(rules, input, lookups);
@@ -385,13 +404,72 @@
         results.push({ stage, state: "no-match", match, conditional: uncertainBefore, afterBlock: blockedAt || null });
         continue;
       }
-      const action = ruleAction(match.rule);
-      results.push({ stage, state: "matched", match, action, conditional: uncertainBefore, afterBlock: blockedAt || null, webProfileId: stage.key === "web" ? webProfile(match.rule) : null });
+      let action = ruleAction(match.rule);
+      const profileId = stage.key === "web" ? webProfile(match.rule) : null;
+      let security = null;
+      // An Allow/Warn/Isolate rule still sends web traffic through its
+      // security profile, which blocks flagged destinations.
+      const profile = profileId && action !== "block" ? threats.profile(profileId) : null;
+      if (profile) {
+        profile.categories.forEach(name => threatCategories.add(name));
+        const hit = profile.categories.find(name => flagged.has(name));
+        if (hit) {
+          security = { category: hit, setting: profile.settingName, profile: profile.name, source: "security profile" };
+          action = "block";
+        }
+      }
+      results.push({
+        stage, state: "matched", match, action, security, conditional: uncertainBefore, afterBlock: blockedAt || null,
+        webProfileId: profileId, webProfileName: profile ? profile.name : null,
+        ipsProfileId: stage.key === "firewall" ? ruleSettingValue(match.rule, "umbrella.posture.ipsProfileId") : null,
+      });
       if (action === "block" && !uncertainBefore && !blockedAt) blockedAt = stage;
     }
     for (const skipped of plan.skipped || []) results.push({ stage: skipped, state: "skipped", reason: skipped.reason });
     results.sort((a, b) => stageOrder(a.stage.key) - stageOrder(b.stage.key));
-    return { scope, groups, stages: results, outcome: outcomeOf(results) };
+    const outcome = outcomeOf(results);
+    // Threat categories in play and not yet answered: the result holds
+    // "unless Cisco flags it", and the panel asks.
+    const threatCheck = !threatAnswer && threatCategories.size && outcome.status !== "block" && outcome.status !== "pending"
+      ? { categories: [...threatCategories].sort() }
+      : null;
+    if (threatCheck) outcome.unlessFlagged = true;
+    return { scope, groups, stages: results, outcome, threatCheck };
+  }
+
+  const DNS_SECURITY_RULE = { ruleId: 0, ruleName: "DNS security settings", ruleAction: "block", security: true };
+
+  function ruleSettingValue(rule, name) {
+    const settings = (rule && rule.raw && rule.raw.ruleSettings) || (rule && rule.ruleSettings) || [];
+    const entry = Array.isArray(settings) && settings.find(setting => setting.settingName === name);
+    const value = entry && entry.settingValue;
+    return value === undefined || value === null || value === "" || value === 0 || value === "0" ? null : String(value);
+  }
+
+  // lookups.securityProfiles = { securitySettings, webProfiles, dnsDefaultSettingId }
+  function threatContext(lookups) {
+    const data = (lookups && lookups.securityProfiles) || {};
+    const settings = data.securitySettings || {};
+    const dnsSetting = data.dnsDefaultSettingId && settings[data.dnsDefaultSettingId];
+    return {
+      dns: dnsSetting && dnsSetting.categories.length ? { name: dnsSetting.name, categories: dnsSetting.categories } : null,
+      profile(profileId) {
+        const profile = (data.webProfiles || {})[String(profileId)];
+        const setting = profile && profile.securitySettingId && settings[profile.securitySettingId];
+        return setting && setting.categories.length ? { name: profile.name, settingName: setting.name, categories: setting.categories } : null;
+      },
+    };
+  }
+
+  // The "is it flagged as a threat?" prompt, in the same shape as questionFor.
+  function threatQuestion(evaluation, host) {
+    if (!evaluation.threatCheck) return null;
+    return {
+      host,
+      kind: "threat",
+      prompt: `Is ${host} flagged as a security threat?`,
+      groups: [{ field: "securityCategory", noun: "threat category", options: evaluation.threatCheck.categories.map(name => ({ id: name, label: name })) }],
+    };
   }
 
   function stageOrder(key) {
@@ -429,6 +507,7 @@
   };
 
   function valueLabel(field, id, lookups) {
+    if (field === "securityCategory") return String(id);
     const config = QUESTION_FIELDS[field];
     for (const key of (config && config.catalogs) || []) {
       const label = catalogLabel(lookups, key, id);
@@ -486,7 +565,7 @@
   root.TrafficPath = {
     CONNECTIONS, SOURCES, STAGES, PROTOCOLS,
     parseDestination, resolveScope, groupsContaining, buildRequest, planStages,
-    evaluate, questionFor, answer, actionLabel, webProfile, catalogLabel, valueLabel,
+    evaluate, questionFor, threatQuestion, answer, actionLabel, webProfile, catalogLabel, valueLabel,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = root.TrafficPath;
 })(typeof window !== "undefined" ? window : globalThis);

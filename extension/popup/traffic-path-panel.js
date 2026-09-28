@@ -23,7 +23,7 @@
     warn: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5l8.5 15h-17z"/><path d="M12 10v4M12 16.8h.01"/></svg>',
     question: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.6a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.4M12 16.8h.01"/></svg>',
   };
-  const LAYER_LABELS = { client: ["DNS", "Web"], va: ["DNS"], network: ["DNS"], tunnel: ["DNS", "Firewall", "Web"] };
+  const LAYER_LABELS = { client: ["DNS", "Web"], va: ["DNS"], network: ["DNS"], tunnel: ["Firewall", "Web"] };
   const SOURCE_NOUNS = {
     roaming: "roaming computers", identity: "users or groups", site: "sites", network: "networks", tunnel: "network tunnels",
     computer: "AD computers", sdwan: "SD-WAN VPNs", sgt: "security group tags",
@@ -370,7 +370,7 @@
       port.disabled = protocol.value === "ICMP";
       if (!connection) destinationHint.textContent = "";
       else if (connection === "va" || connection === "network") destinationHint.textContent = "This path only carries DNS, so enter the domain being looked up.";
-      else if (connection === "tunnel") destinationHint.textContent = "Enter an IP address to include the firewall. A domain checks DNS and Web.";
+      else if (connection === "tunnel") destinationHint.textContent = "Enter an IP address to include the firewall. Branch DNS goes through a VA or registered network; check it with that connection.";
       else destinationHint.textContent = "A domain checks DNS then Web (HTTPS). A URL uses its own port.";
     }
 
@@ -455,13 +455,16 @@
       const banner = node("div", `tp-outcome tp-outcome-${outcome.status}`);
       const bannerCopy = node("div", "tp-outcome-copy");
       bannerCopy.append(node("strong", "tp-outcome-title", outcome.title));
-      const summary = outcome.rule
-        ? `${ruleTitle(outcome.rule)} · ${rulePriority(outcome.rule)}`
+      const blockedBy = stages.find(result => result.security && result.stage.key === outcome.stage);
+      const summary = blockedBy
+        ? `${blockedBy.security.category} · ${blockedBy.security.profile ? `security profile “${blockedBy.security.profile}” on ${ruleTitle(outcome.rule)}` : `DNS security setting “${blockedBy.security.setting}”`}`
+        : outcome.rule
+        ? `${ruleTitle(outcome.rule)} · ${rulePriority(outcome.rule)}${outcome.unlessFlagged ? " · unless flagged as a threat" : ""}`
         : outcome.status === "pending" ? "Answer the question below to finish the check." : "Default rules should always match. Refresh the dashboard data and try again.";
       bannerCopy.append(node("span", "tp-outcome-rule", summary));
       const outcomeIcon = { allow: "check", block: "block", warn: "warn", isolate: "warn", pending: "question" }[outcome.status] || "question";
       banner.append(icon(outcomeIcon, "tp-outcome-icon"), bannerCopy);
-      const highlightable = stages.filter(result => result.state === "matched" && !result.afterBlock);
+      const highlightable = stages.filter(result => result.state === "matched" && !result.afterBlock && !result.match.rule.security);
       if (highlightable.length) {
         const show = node("button", "tp-secondary", "Show on page");
         show.type = "button";
@@ -482,6 +485,9 @@
       flow.setAttribute("aria-label", "Enforcement stages");
       for (const result of stages) flow.append(stageRow(result));
       results.append(flow);
+
+      const threat = !question && model.threatQuestion(evaluation, hostLabel);
+      if (threat) results.append(questionCard(threat, null));
 
       const details = node("details", "tp-details");
       details.append(node("summary", "", "What was checked"));
@@ -559,11 +565,17 @@
         const head = node("div", "tp-stage-head");
         head.append(node("span", `tp-action tp-action-${result.action}`, model.actionLabel(result.action)), node("span", "tp-stage-rule", ruleTitle(rule)));
         body.append(head);
+        if (result.security) {
+          body.append(node("span", "tp-stage-meta tp-stage-security", result.security.profile
+            ? `${result.security.category}: blocked by security profile “${result.security.profile}”, although the rule allows it`
+            : `${result.security.category}: blocked by the DNS security setting “${result.security.setting}” before any rule`));
+        }
         const meta = [rulePriority(rule)];
         if (result.afterBlock) meta.push(`only if the ${result.afterBlock.label} block doesn't apply (e.g. ${result.afterBlock.label} doesn't see this user)`);
         else if (result.conditional) meta.push(`if ${result.conditional.label} lets it through`);
         body.append(node("span", "tp-stage-meta", meta.filter(Boolean).join(" · ")));
-        if (result.webProfileId) body.append(node("span", "tp-stage-meta", "Security profile controls on this rule can still block content."));
+        if (result.webProfileId && !result.security) body.append(node("span", "tp-stage-meta", `${result.webProfileName ? `Security profile “${result.webProfileName}”` : "The rule's security profile"} can still block by file type, data loss prevention, or app controls.`));
+        if (result.ipsProfileId) body.append(node("span", "tp-stage-meta", "IPS on this rule can still block by signature."));
       } else {
         const text = result.state === "needs-answer"
           ? ["Waiting on your answer", result.match.pending && result.match.pending.length
@@ -589,7 +601,11 @@
       head.append(icon("question", "tp-question-icon"), title);
       card.append(head);
       const why = node("p", "tp-question-why");
-      why.append(node("b", "", ruleTitle(rule)), document.createTextNode(` (${rulePriority(rule)}) comes first and only applies if it's one of these. Pick all that apply.`));
+      if (question.kind === "threat") {
+        why.textContent = "The security settings in this path block these threat categories even when a rule allows the traffic. Pick any Cisco flags it as.";
+      } else {
+        why.append(node("b", "", ruleTitle(rule)), document.createTextNode(` (${rulePriority(rule)}) comes first and only applies if it's one of these. Pick all that apply.`));
+      }
       card.append(why);
       const boxes = [];
       for (const group of question.groups) {
@@ -615,7 +631,7 @@
       const actions = node("div", "tp-question-actions");
       const submit = node("button", "tp-primary", "None of these");
       submit.type = "submit";
-      const hint = node("span", "tp-question-hint", "Leave everything unticked if none apply.");
+      const hint = node("span", "tp-question-hint", question.kind === "threat" ? "Not flagged? Leave everything unticked." : "Leave everything unticked if none apply.");
       const sync = () => {
         const count = boxes.filter(box => box.checked).length;
         submit.textContent = count ? `Continue with ${count} selected` : "None of these";
@@ -644,11 +660,16 @@
       const strip = node("div", "tp-answers");
       strip.append(node("span", "tp-answers-lead", `You said ${hostLabel}`));
       const list = node("span", "tp-answers-list");
-      items.forEach(item => {
-        const chip = node("span", `tp-answer ${item.yes ? "is-yes" : "is-no"}`);
-        chip.append(node("span", "tp-answer-verb", item.yes ? "is" : "isn't"), document.createTextNode(` ${item.label}`));
-        list.append(chip);
-      });
+      const chip = (yes, text, title) => {
+        const element = node("span", `tp-answer ${yes ? "is-yes" : "is-no"}`);
+        element.append(node("span", "tp-answer-verb", yes ? "is" : "isn't"), document.createTextNode(` ${text}`));
+        if (title) element.title = title;
+        list.append(element);
+      };
+      items.filter(item => item.yes).forEach(item => chip(true, item.label));
+      const no = items.filter(item => !item.yes).map(item => item.label);
+      if (no.length > 2) chip(false, `${no.length} others`, no.join(", "));
+      else no.forEach(label => chip(false, label));
       const change = node("button", "tp-link", "Change");
       change.type = "button";
       change.addEventListener("click", () => { facts = {}; check(); });

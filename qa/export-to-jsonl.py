@@ -15,6 +15,8 @@ def rows(path):
     import openpyxl
     sheet = openpyxl.load_workbook(path, read_only=True, data_only=True).worksheets[0]
     cells = sheet.iter_rows(values_only=True)
+    # Some exports carry the byte-order mark as text ("﻿" or its
+    # mis-decoded "ï»¿") on the first header cell.
     header = [str(c or "").replace("﻿", "").replace("ï»¿", "") for c in next(cells)]
     for row in cells:
         yield dict(zip(header, row))
@@ -34,8 +36,7 @@ def main():
                     value = value.isoformat()
                 record[key] = value
             if record:
-                out.write(json.dumps(record) + "
-")
+                out.write(json.dumps(record) + "\n")
                 count += 1
     print(f"{count} events -> {target}")
 

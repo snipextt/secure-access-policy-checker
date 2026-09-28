@@ -38,6 +38,18 @@ const categoryIds = nameIndex("contentCategories");
 const appIds = nameIndex("applications");
 const appCategoryIds = nameIndex("applicationCategories");
 
+const threatNames = new Set(Object.values((om.securityProfiles && om.securityProfiles.securitySettings) || {}).flatMap(setting => setting.categories));
+// What the log says blocked an event, for events the checker cannot decide
+// from rules alone.
+function logBlockCause(event) {
+  const blocked = split(event["Blocked Categories"]);
+  const threat = blocked.find(name => threatNames.has(name));
+  if (threat) return { kind: "threat", name: threat };
+  if (event["Data Loss Prevention State"]) return { kind: "content", name: "data loss prevention" };
+  if (event.Filename) return { kind: "content", name: "file inspection" };
+  if (event.Type === "firewall") return { kind: "content", name: "IPS signature" };
+  return { kind: "content", name: `app/content controls (${event.Application || event.Categories || "unknown"})` };
+}
 const rows = fs.readFileSync(EVENTS, "utf8").trim().split("\n").map(l => JSON.parse(l));
 const split = v => String(v || "").split(/,\s*(?![^()]*\))/).map(s => s.trim()).filter(Boolean);
 
@@ -95,7 +107,6 @@ for (const event of rows) {
   const expectedRule = event["Rule ID"] === undefined ? null : String(Math.round(event["Rule ID"]));
   res.expectedRule = expectedRule;
   if (!EXPECT_STAGE[event.Type]) { res.status = "out-of-scope"; res.why = `${event.Type} events`; continue; }
-  if (expectedRule === "0") { res.status = "out-of-scope"; res.why = "DNS security setting (not an access rule)"; continue; }
 
   // identities
   const names = split(event.Identities);
@@ -138,8 +149,18 @@ for (const event of rows) {
     evaluation = model.evaluate(request, rules, lookups, Matcher);
     if (evaluation.error) break;
     const pending = evaluation.stages.find(s => s.state === "needs-answer" && s.match.pending && s.match.pending.length);
-    if (!pending || ++rounds > 12) break;
-    answerFrom(event, pending.match.pending, request.facts, res.notes);
+    if (++rounds > 12) break;
+    if (pending) { answerFrom(event, pending.match.pending, request.facts, res.notes); continue; }
+    // Threat check: answer with the threat categories the log blocked on.
+    if (evaluation.threatCheck) {
+      const flaggedNames = split(event["Blocked Categories"]).filter(name => threatNames.has(name));
+      request.facts.securityCategory = {
+        yes: evaluation.threatCheck.categories.filter(name => flaggedNames.includes(name)),
+        no: evaluation.threatCheck.categories.filter(name => !flaggedNames.includes(name)),
+      };
+      continue;
+    }
+    break;
   }
   // model.evaluate merges identity groups itself; our ids are flat already
   if (evaluation.error) { res.status = "no-stage"; res.why = evaluation.error; res.connection = connection; continue; }
@@ -154,9 +175,13 @@ for (const event of rows) {
   if (stage.state === "not-reached" || stage.state === "skipped") { res.status = "wrong-stage"; res.why = `${want} ${stage.state}: ${stage.reason}`; continue; }
   if (stage.state === "needs-answer") { res.status = "undetermined"; res.why = stage.match.reason; continue; }
   if (got === expectedRule) {
-    const rule = ruleById.get(got);
-    const action = String(rule.ruleAction || rule.action).toLowerCase();
-    res.status = action === "block" ? "match-block" : "match-rule-security-block";
+    // Every exported event was Blocked: the prediction must say so too.
+    if (stage.action === "block") res.status = stage.security ? `match-blocked-by-${stage.security.profile ? "web-security-profile" : "dns-security"}` : "match-blocked-by-rule";
+    else {
+      const cause = logBlockCause(event);
+      res.status = cause.kind === "threat" ? "missed-threat-block" : "rule-ok-content-control";
+      res.why = `rule matched and allows; log blocked by ${cause.name}`;
+    }
   } else {
     res.status = "wrong-rule";
     const r = got && ruleById.get(got);
@@ -173,15 +198,17 @@ console.log(`events ${total}, distinct scenarios ${results.length}\n`);
 console.log("status".padEnd(28), "scenarios".padStart(9), "events".padStart(8));
 for (const [k, v] of Object.entries(byStatus).sort((a, b) => b[1].events - a[1].events)) console.log(k.padEnd(28), String(v.scenarios).padStart(9), String(v.events).padStart(8));
 const inScope = results.filter(r => r.status !== "out-of-scope");
-const ruleOk = inScope.filter(r => r.status.startsWith("match"));
-console.log(`\nrule accuracy (in scope): ${sum(r => r.status.startsWith("match"))}/${sum(r => r.status !== "out-of-scope")} events, ${ruleOk.length}/${inScope.length} scenarios`);
+const ruleOk = inScope.filter(r => r.status.startsWith("match") || r.status === "rule-ok-content-control");
+const decided = r => r.status !== "out-of-scope" && r.status !== "rule-ok-content-control";
+console.log(`\nrule + layer accuracy (in scope): ${sum(r => r.status.startsWith("match") || r.status === "rule-ok-content-control")}/${sum(r => r.status !== "out-of-scope")} events, ${ruleOk.length}/${inScope.length} scenarios`);
+console.log(`final "Blocked" verdict (excluding content-level controls): ${sum(r => decided(r) && r.status.startsWith("match"))}/${sum(decided)} events`);
 console.log("\nper logged type / rule:");
 const groups = new Map();
 for (const r of results) { const k = `${r.event.Type} rule ${r.expectedRule}`; const g = groups.get(k) || {}; g[r.status] = (g[r.status] || 0) + r.count; groups.set(k, g); }
 for (const [k, g] of groups) console.log(" ", k.padEnd(24), JSON.stringify(g));
 console.log("\nfailure reasons (by events):");
 const reasons = new Map();
-for (const r of results.filter(r => !r.status.startsWith("match") && r.status !== "out-of-scope")) { const k = `${r.status}: ${r.why}`; reasons.set(k, (reasons.get(k) || 0) + r.count); }
+for (const r of results.filter(r => !r.status.startsWith("match") && r.status !== "out-of-scope" && r.status !== "rule-ok-content-control")) { const k = `${r.status}: ${r.why}`; reasons.set(k, (reasons.get(k) || 0) + r.count); }
 for (const [k, v] of [...reasons].sort((a, b) => b[1] - a[1]).slice(0, 25)) console.log(String(v).padStart(7), k.slice(0, 220));
 console.log("\nnotes (by events):");
 const notes = new Map();

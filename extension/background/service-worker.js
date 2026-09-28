@@ -285,6 +285,18 @@ async function fetchAllData(explicitOrgId) {
       logEvent("auto-fetch", "Full catalog fetch failed", { error: err.message });
     }
 
+    // Security profiles: which threat categories each web profile and the DNS
+    // defaults block. Powers the checker's "is it flagged as a threat?" step.
+    try {
+      const securityProfiles = await resolveSecurityProfiles(orgId, tabId);
+      if (securityProfiles) {
+        const previous = await api.storage.local.get("sse_object_maps");
+        await api.storage.local.set({ sse_object_maps: { ...((previous && previous.sse_object_maps) || {}), securityProfiles } });
+      }
+    } catch (err) {
+      logEvent("auto-fetch", "Security profile fetch failed", { error: err.message });
+    }
+
     if (rules.length === 0) {
       logEvent("auto-fetch", "No rules available; catalogs refreshed, skipping rule-dependent resolution");
       return;
@@ -2467,6 +2479,80 @@ function catalogHost(catalog) {
   if (catalog.host) return catalog.host;
   return catalog.tokenKey === "mgmt_authz_token" ? "https://management.api.umbrella.com" :
     catalog.tokenKey === "opendns_token" ? "https://api.opendns.com" : "https://api.umbrella.com";
+}
+
+// ---------------------------------------------------------------------------
+// Security profiles (captured from the dashboard's security profile editor):
+//   /v3/organizations/{org}/securitysettings  threat protections per setting:
+//     malware/botnet/phishing toggles + categoryBits (bit positions into
+//     data/security-categories-lookup.json)
+//   /v3/organizations/{org}/bundles?filters={"bundleTypeId":[2,5]}  web
+//     profiles; a rule's umbrella.posture.webProfileId is a bundle id whose
+//     securitySettingGroupId names its security setting
+// The DNS default is the isDefault security setting for DNS (bundleTypeId 1).
+// Verified against Activity Search: Malware / Potentially Harmful / Command
+// and Control blocks under Allow rules, and DNS "Block due to security setting".
+// ---------------------------------------------------------------------------
+var securityCategoryIndex = null;
+
+async function loadSecurityCategoryIndex() {
+  if (securityCategoryIndex) return securityCategoryIndex;
+  try {
+    securityCategoryIndex = await (await fetch(api.runtime.getURL("data/security-categories-lookup.json"))).json();
+  } catch (err) {
+    logEvent("security-profiles", "security category lookup unavailable", { error: err.message });
+    securityCategoryIndex = {};
+  }
+  return securityCategoryIndex;
+}
+
+function securitySettingCategories(setting, index) {
+  const names = new Set();
+  if (setting.malwareProtection) names.add("Malware");
+  if (setting.botnetProtection) names.add("Command and Control");
+  if (setting.phishingProtection) names.add("Phishing");
+  if (typeof setting.categoryBits === "string" && /^[0-9a-f]+$/i.test(setting.categoryBits)) {
+    let bits = BigInt(`0x${setting.categoryBits}`);
+    for (let position = 0; bits > 0n; position++, bits >>= 1n) {
+      if (bits & 1n && index[String(position)]) names.add(index[String(position)].name);
+    }
+  }
+  return [...names];
+}
+
+async function resolveSecurityProfiles(orgId, tabId) {
+  const tokenObj = await getFreshToken("opendns_token", tabId);
+  if (!tokenObj) { logEvent("security-profiles", "skipped — no opendns token"); return null; }
+  const headers = { Authorization: `Bearer ${tokenObj.token}`, Accept: "application/json" };
+  const base = `https://api.opendns.com/v3/organizations/${orgId}`;
+  const [settingsResponse, bundlesResponse, index] = await Promise.all([
+    fetch(`${base}/securitysettings?outputFormat=jsonHttpStatusOverride`, { headers }),
+    fetch(`${base}/bundles?filters=${encodeURIComponent(JSON.stringify({ bundleTypeId: [2, 5] }))}&outputFormat=jsonHttpStatusOverride`, { headers }),
+    loadSecurityCategoryIndex(),
+  ]);
+  if (!settingsResponse.ok || !bundlesResponse.ok) {
+    logEvent("security-profiles", "non-OK", { settings: settingsResponse.status, bundles: bundlesResponse.status });
+    return null;
+  }
+  const settingsRows = ((await settingsResponse.json()).data) || [];
+  const bundleRows = ((await bundlesResponse.json()).data) || [];
+  const securitySettings = {};
+  let dnsDefaultSettingId = null;
+  for (const row of settingsRows) {
+    if (!row || row.id === undefined) continue;
+    securitySettings[String(row.id)] = { name: row.name, isDefault: !!row.isDefault, bundleTypeId: row.bundleTypeId, categories: securitySettingCategories(row, index) };
+    if (row.isDefault && row.bundleTypeId === 1) dnsDefaultSettingId = String(row.id);
+  }
+  const webProfiles = {};
+  for (const row of bundleRows) {
+    if (!row || row.id === undefined) continue;
+    webProfiles[String(row.id)] = {
+      name: row.name,
+      securitySettingId: row.securitySettingGroupId !== undefined && row.securitySettingGroupId !== null ? String(row.securitySettingGroupId) : null,
+    };
+  }
+  logEvent("security-profiles", "resolved", { settings: settingsRows.length, profiles: bundleRows.length, dnsDefaultSettingId });
+  return { securitySettings, webProfiles, dnsDefaultSettingId };
 }
 
 async function resolveFullCatalogs(orgId, tabId) {

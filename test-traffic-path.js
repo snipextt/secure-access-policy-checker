@@ -116,7 +116,8 @@ test("stage plan per connection", () => {
   assert.equal(plan({ ...client, destination: "203.0.113.10" }), "web");
   assert.match(plan({ ...client, destination: "203.0.113.10", port: "22" }), /^error:/);
   assert.equal(plan({ connection: "va", sources: { site: "sourceSites:21" }, destination: "example.com" }), "dns");
-  assert.equal(plan({ ...tunnel, destination: "example.com" }), "dns,web skip:firewall");
+  // Branch DNS never shows up as a tunnel identity in Activity Search.
+  assert.equal(plan({ ...tunnel, destination: "example.com" }), "web skip:firewall");
   assert.equal(plan({ ...tunnel, destination: "203.0.113.10", port: "445" }), "firewall");
   assert.equal(plan({ ...tunnel, destination: "203.0.113.10" }), "firewall,web");
   assert.equal(plan({ ...tunnel, destination: "203.0.113.10", protocol: "ICMP" }), "firewall");
@@ -240,6 +241,53 @@ test("category conditions are bit positions, not category IDs", () => {
   assert.deepEqual(question.groups[0].options.map(option => option.label), ["Gambling"]);
   const yes = model.evaluate(build({ ...form, facts: model.answer({}, question, ["11"]) }), [gambling, internetDefault], withBits, Matcher);
   assert.deepEqual(states(yes), ["dns:matched:Block category bit 10"]);
+});
+
+test("security settings: DNS default before rules, web profile on allow rules", () => {
+  // Shapes from the tenant: web profile 14451715 → security setting "All
+  // Categories"; DNS default "Default Settings". Activity Search: Malware blocks
+  // under Allow rules (web) and rule 0 "Block due to security setting" (DNS).
+  const securityProfiles = {
+    dnsDefaultSettingId: "1",
+    securitySettings: {
+      1: { name: "Default Settings", categories: ["Command and Control", "Malware", "Phishing"] },
+      2: { name: "All Categories", categories: ["Command and Control", "Malware", "Phishing", "Potentially Harmful"] },
+    },
+    webProfiles: { 500: { name: "PseudoCo Web Profile", securitySettingId: "2" } },
+  };
+  const withSecurity = { ...lookups, securityProfiles };
+  const dia = rule("Secure DIA", "allow", [cond("umbrella.source.identity_ids", "INTERSECT", [9]), DST_ALL],
+    { raw: { ruleSettings: [{ settingName: "umbrella.posture.webProfileId", settingValue: 500 }] } });
+  const evaluateWith = facts => model.evaluate(build({ connection: "client", sources: { roaming: "sourceRoaming:9" }, destination: "https://bad.example/", facts }), [dia, internetDefault], withSecurity, Matcher);
+
+  // Unanswered: allowed, unless flagged; the union of categories is asked.
+  const open = evaluateWith(undefined);
+  assert.equal(open.outcome.title, "Allowed");
+  assert.equal(open.outcome.unlessFlagged, true);
+  const question = model.threatQuestion(open, "bad.example");
+  assert.deepEqual(question.groups[0].options.map(option => option.id), ["Command and Control", "Malware", "Phishing", "Potentially Harmful"]);
+
+  // Flagged only in the web profile: DNS resolves, the proxy blocks under the allow rule.
+  const harmful = evaluateWith(model.answer({}, question, ["Potentially Harmful"]));
+  assert.deepEqual(harmful.stages.map(stage => `${stage.stage.key}:${stage.action || stage.state}`), ["dns:allow", "web:block"]);
+  const web = harmful.stages.find(stage => stage.stage.key === "web");
+  assert.equal(web.match.rule.ruleName, "Secure DIA");
+  assert.equal(web.security.profile, "PseudoCo Web Profile");
+  assert.equal(harmful.outcome.title, "Blocked at Web");
+  assert.equal(harmful.threatCheck, null);
+
+  // Flagged in the DNS default: blocked before any rule. Web stays the
+  // fallback (the web profile blocks Malware too) in case DNS bypasses.
+  const malware = evaluateWith(model.answer({}, question, ["Malware"]));
+  assert.deepEqual(malware.stages.map(stage => `${stage.stage.key}:${stage.action}`), ["dns:block", "web:block"]);
+  assert.equal(malware.stages[1].afterBlock.key, "dns");
+  assert.equal(malware.stages[0].match.rule.ruleName, "DNS security settings");
+  assert.equal(malware.outcome.title, "Blocked at DNS");
+
+  // Not flagged: plain allow, no caveat.
+  const clean = evaluateWith(model.answer({}, question, []));
+  assert.equal(clean.outcome.title, "Allowed");
+  assert.equal(clean.outcome.unlessFlagged, undefined);
 });
 
 test("disabled rules are skipped", () => {
