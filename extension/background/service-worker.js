@@ -2393,6 +2393,13 @@ async function resolveMembership(orgId, tabId, rules) {
             const entry = await fetchMembersById(key, id, orgId, tabId, memberMaps[key] && memberMaps[key][String(id)]);
             if (!memberMaps[key]) memberMaps[key] = {};
             memberMaps[key][String(id)] = entry;
+            // Nested AD groups: the policy checker resolves a user's groups
+            // through every level, so follow child groups too.
+            for (const m of (entry && entry.members) || []) {
+              if (m && m.kind === key && m.id !== undefined && !visited.has(memberCacheKey(key, m.id))) {
+                frontier.push({ key, ids: [String(m.id)] });
+              }
+            }
           }
           return;
         }

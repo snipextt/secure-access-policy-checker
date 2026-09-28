@@ -162,11 +162,19 @@ function findDefaultRuleRows() {
 // ---------------------------------------------------------------------------
 
 function getRuleName(element) {
+  // Skip the Policy Checker's own badge when reading the first cell.
+  const firstCell = element.querySelector("td:first-child");
+  const firstCellText = firstCell
+    ? Array.from(firstCell.childNodes)
+        .filter((child) => !(child.classList && child.classList.contains("sec-hit-badge-row")))
+        .map((child) => child.textContent)
+        .join("")
+    : "";
   const name =
     element.querySelector("p.cds-text__weight--bold")?.textContent ||
     element.querySelector("[data-rule-name]")?.textContent ||
     element.querySelector(".rule-name")?.textContent ||
-    element.querySelector("td:first-child")?.textContent ||
+    firstCellText ||
     element.textContent.trim().split("\n")[0];
 
   return (name || "unknown").trim();
@@ -270,6 +278,96 @@ function highlightRule(ruleName, matchedConditions) {
     clearTimeout(hoverHideTimer);
     showPopoverForRule(anchorEl, ruleName, matchedConditions);
   }
+}
+
+// ---------------------------------------------------------------------------
+// highlightRules — Policy Checker result on the page. Marks every matched
+// rule row with a ring in its action colour and a badge naming the stages it
+// decided ("DNS · Web  Block"), then scrolls to the first one. Marks stay
+// until the next check or until the docked result card is closed.
+// ---------------------------------------------------------------------------
+var HIT_CLASS = "sec-hit";
+
+function ensureHitStyle() {
+  if (document.getElementById("sec-hit-style")) return;
+  const style = document.createElement("style");
+  style.id = "sec-hit-style";
+  style.textContent = `
+    tr.sec-hit td {
+      background-color: color-mix(in srgb, var(--sec-hit) 7%, transparent) !important;
+      border-top: 2px solid var(--sec-hit) !important;
+      border-bottom: 2px solid var(--sec-hit) !important;
+    }
+    tr.sec-hit td:first-child { border-left: 4px solid var(--sec-hit) !important; }
+    tr.sec-hit td:last-child { border-right: 2px solid var(--sec-hit) !important; }
+    tr.sec-hit { --sec-hit: #b91c1c; }
+    tr.sec-hit.sec-hit-allow { --sec-hit: #15803d; }
+    tr.sec-hit.sec-hit-warn, tr.sec-hit.sec-hit-isolate { --sec-hit: #a16207; }
+    .sec-hit-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin: 0 0 4px; padding: 2px 8px 2px 6px;
+      border-radius: 999px; background: var(--sec-hit); color: #fff;
+      font: 700 11px/1.4 Inter, system-ui, sans-serif; white-space: nowrap;
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--sec-hit) 22%, transparent);
+    }
+    .sec-hit-badge::before {
+      content: ""; width: 8px; height: 8px; border-radius: 50%;
+      background: #fff; box-shadow: 0 0 0 2px color-mix(in srgb, #fff 45%, transparent);
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      tr.sec-hit .sec-hit-badge { animation: sec-hit-pulse 1.2s ease-out 2; }
+    }
+    @keyframes sec-hit-pulse {
+      0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--sec-hit) 55%, transparent); }
+      100% { box-shadow: 0 0 0 10px transparent; }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function clearRuleHits() {
+  document.querySelectorAll(`tr.${HIT_CLASS}`).forEach((row) => {
+    row.classList.remove(HIT_CLASS, "sec-hit-allow", "sec-hit-block", "sec-hit-warn", "sec-hit-isolate");
+  });
+  document.querySelectorAll(".sec-hit-badge-row").forEach((badge) => badge.remove());
+}
+
+function findRuleRowByName(ruleName) {
+  const wanted = String(ruleName || "").trim().toLowerCase();
+  return findRuleRows().find((row) => getRuleName(row).toLowerCase() === wanted) ||
+    findDefaultRuleRows().find((row) => getRuleName(row).toLowerCase() === wanted) || null;
+}
+
+// targets: [{ ruleName, stages: ["DNS", "Web"], action: "block" }]
+function highlightRules(targets) {
+  ensureHitStyle();
+  clearRuleHits();
+  let first = null;
+  const missing = [];
+  for (const target of targets || []) {
+    const row = findRuleRowByName(target.ruleName);
+    if (!row) { missing.push(target.ruleName); continue; }
+    const action = ["allow", "block", "warn", "isolate"].includes(target.action) ? target.action : "block";
+    row.classList.add(HIT_CLASS, `sec-hit-${action}`);
+    const cell = row.querySelector("td");
+    if (cell) {
+      const badge = document.createElement("span");
+      badge.className = "sec-hit-badge";
+      const verb = action.charAt(0).toUpperCase() + action.slice(1);
+      const stages = (target.stages || []).join(" · ");
+      badge.textContent = stages ? `${stages}: ${verb}` : verb;
+      const holder = document.createElement("div");
+      holder.className = "sec-hit-badge-row";
+      holder.appendChild(badge);
+      cell.prepend(holder);
+    }
+    if (!first) first = row;
+  }
+  if (first) first.scrollIntoView({ behavior: "smooth", block: "center" });
+  if (missing.length) {
+    console.warn("[SecPolicyChecker] HIGHLIGHT_RULES: no row found for", missing);
+  }
+  return { found: (targets || []).length - missing.length, missing };
 }
 
 // ---------------------------------------------------------------------------
@@ -1874,6 +1972,33 @@ function ensureEmbeddedPopupStyle() {
       transform: translateX(0);
     }
 
+    #sec-result-dock {
+      --sec-dock-accent: #64748b;
+      position: fixed; right: 24px; bottom: 88px; z-index: 2147483645;
+      width: min(340px, calc(100vw - 48px)); padding: 12px 14px 12px 16px;
+      border: 1px solid #e2e8f0; border-left: 4px solid var(--sec-dock-accent);
+      border-radius: 4px; background: #fff; color: #1e293b;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, .18);
+      font: 13px/1.45 Inter, system-ui, sans-serif;
+    }
+    #sec-result-dock.sec-dock-allow { --sec-dock-accent: #15803d; }
+    #sec-result-dock.sec-dock-block { --sec-dock-accent: #b91c1c; }
+    #sec-result-dock.sec-dock-warn, #sec-result-dock.sec-dock-isolate { --sec-dock-accent: #a16207; }
+    #sec-result-dock.sec-dock-pending { --sec-dock-accent: #9a5b00; }
+    #sec-result-dock .sec-dock-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    #sec-result-dock .sec-dock-kicker { min-width: 0; overflow: hidden; color: #64748b; font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+    #sec-result-dock .sec-dock-close { flex: none; width: 28px; height: 28px; margin: -6px -8px 0 0; border: 0; background: transparent; color: #64748b; font-size: 18px; line-height: 1; cursor: pointer; }
+    #sec-result-dock .sec-dock-close:hover { color: #0f172a; }
+    #sec-result-dock .sec-dock-title { display: block; color: var(--sec-dock-accent); font-size: 16px; line-height: 1.3; }
+    #sec-result-dock .sec-dock-stages { margin: 8px 0 10px; padding: 0; list-style: none; }
+    #sec-result-dock .sec-dock-stages li { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; padding: 3px 0; border-top: 1px solid #f1f5f9; }
+    #sec-result-dock .sec-dock-stages li:first-child { border-top: 0; }
+    #sec-result-dock .sec-dock-stage { color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding-top: 1px; }
+    #sec-result-dock .sec-dock-value { min-width: 0; overflow-wrap: anywhere; }
+    #sec-result-dock .sec-dock-expand { min-height: 32px; padding: 5px 12px; border: 1px solid #0f172a; border-radius: 4px; background: #0f172a; color: #fff; font: 600 12px Inter, system-ui, sans-serif; cursor: pointer; }
+    #sec-result-dock .sec-dock-expand:hover { background: #1e293b; }
+    #sec-result-dock button:focus-visible { outline: 2px solid #1d6fd8; outline-offset: 2px; }
+
     #sec-embed-iframe {
       width: 100%;
       height: 100%;
@@ -1975,12 +2100,14 @@ function initEmbeddedPopup() {
     // of sitting behind the panel.
     if (event.data.type === "SEC_MINIMIZE_PANEL") {
       panel.classList.remove("sec-embed-open");
+      if (event.data.summary) showResultDock(event.data.summary, panel);
     }
   });
 
   toggleBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     panel.classList.toggle("sec-embed-open");
+    if (panel.classList.contains("sec-embed-open")) hideResultDock(false);
   });
 
   // Click outside the panel hides it. Note: clicks that happen INSIDE the
@@ -2002,6 +2129,76 @@ function initEmbeddedPopup() {
 }
 
 // ---------------------------------------------------------------------------
+// Result dock — the compact Policy Checker result shown while the panel is
+// minimized so the highlighted rows stay visible. Built with textContent
+// only: rule names are tenant data.
+// ---------------------------------------------------------------------------
+var RESULT_DOCK_ID = "sec-result-dock";
+
+function hideResultDock(clearHits) {
+  const dock = document.getElementById(RESULT_DOCK_ID);
+  if (dock) dock.remove();
+  if (clearHits) clearRuleHits();
+}
+
+function showResultDock(summary, panel) {
+  hideResultDock(false);
+  const text = (value) => (typeof value === "string" ? value : "");
+  const status = ["allow", "block", "warn", "isolate", "pending", "unknown"].includes(summary.status) ? summary.status : "unknown";
+  const dock = document.createElement("section");
+  dock.id = RESULT_DOCK_ID;
+  dock.className = `sec-dock-${status}`;
+  dock.setAttribute("aria-label", "Policy check result");
+
+  const head = document.createElement("div");
+  head.className = "sec-dock-head";
+  const kicker = document.createElement("span");
+  kicker.className = "sec-dock-kicker";
+  kicker.textContent = `Policy check · ${text(summary.destination)}`;
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "sec-dock-close";
+  close.setAttribute("aria-label", "Close result and clear highlights");
+  close.textContent = "×";
+  close.addEventListener("click", () => hideResultDock(true));
+  head.append(kicker, close);
+
+  const title = document.createElement("strong");
+  title.className = "sec-dock-title";
+  title.textContent = text(summary.title);
+
+  const list = document.createElement("ul");
+  list.className = "sec-dock-stages";
+  for (const stage of Array.isArray(summary.stages) ? summary.stages : []) {
+    const item = document.createElement("li");
+    const label = document.createElement("span");
+    label.className = "sec-dock-stage";
+    label.textContent = text(stage.label);
+    const value = document.createElement("span");
+    value.className = "sec-dock-value";
+    value.textContent = stage.state === "matched"
+      ? `${text(stage.action)} · ${text(stage.rule)}`
+      : stage.state === "needs-answer" ? "Needs a detail"
+        : stage.state === "not-reached" ? "Not reached"
+          : stage.state === "no-match" ? "No rule matched" : "Not evaluated";
+    item.append(label, value);
+    list.appendChild(item);
+  }
+
+  const expand = document.createElement("button");
+  expand.type = "button";
+  expand.className = "sec-dock-expand";
+  expand.textContent = "Open checker";
+  expand.addEventListener("click", (e) => {
+    e.stopPropagation();
+    hideResultDock(false);
+    panel.classList.add("sec-embed-open");
+  });
+
+  dock.append(head, title, list, expand);
+  document.body.appendChild(dock);
+}
+
 // ---------------------------------------------------------------------------
 // Run on page load & watch SPA route re-hydration
 // ---------------------------------------------------------------------------
@@ -2019,6 +2216,7 @@ function isSecurePolicyPage(url) {
 function teardownPolicyCheckerUi() {
   hideMemberPopover();
   hideHoverPopover();
+  hideResultDock(true);
   const toggleBtn = document.getElementById("sec-embed-toggle");
   if (toggleBtn) toggleBtn.remove();
   const panel = document.getElementById("sec-embed-panel");
@@ -2045,6 +2243,14 @@ function setupPersistence() {
   if (api && api.runtime && api.runtime.id && !window.__secPolicyCheckerMessages) {
     window.__secPolicyCheckerMessages = true;
     api.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+      if (msg && msg.type === "HIGHLIGHT_RULES") {
+        if (!isSecurePolicyPage()) {
+          sendResponse({ ok: false, reason: "not-policy-page" });
+          return;
+        }
+        sendResponse({ ok: true, ...highlightRules(Array.isArray(msg.targets) ? msg.targets : []) });
+        return;
+      }
       if (msg && msg.type === "HIGHLIGHT_RULE") {
         if (!isSecurePolicyPage()) {
           sendResponse({ ok: false, reason: "not-policy-page" });
