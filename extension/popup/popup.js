@@ -75,7 +75,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ---------------------------------------------------------------------------
   function lookupDestination(host) {
     return new Promise((resolve) => {
-      const timer = setTimeout(() => resolve({ ok: false, error: "timeout" }), 6000);
+      const timer = setTimeout(() => resolve({ ok: false, error: "timeout" }), 20000);
       try {
         api.runtime.sendMessage({ type: "LOOKUP_DESTINATION", host }, (response) => {
           clearTimeout(timer);

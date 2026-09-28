@@ -2544,14 +2544,15 @@ async function lookupDestination(host, tabId) {
   }
   if (Date.now() < investigatePausedUntil) return { ok: false, error: "Investigate paused after a refusal", retryAt: investigatePausedUntil };
 
-  const tokenObj = await getFreshToken("mgmt_authz_token", tabId);
+  const dashboardTabId = await getMembershipTabId(tabId);
+  const tokenObj = await getFreshToken("mgmt_authz_token", dashboardTabId);
   if (!tokenObj) return { ok: false, error: "no token" };
   let token = tokenObj.token;
   const encoded = encodeURIComponent(name);
   const categorizationPath = `/domains/categorization/${encoded}?taloscategories=true`;
   let categorization = await investigateGet(categorizationPath, token);
   if (categorization.status === 403) {
-    const latest = await latestTabToken("mgmt_authz_token", tabId);
+    const latest = await latestTabToken("mgmt_authz_token", dashboardTabId);
     if (latest && latest !== token) {
       token = latest;
       categorization = await investigateGet(categorizationPath, token);

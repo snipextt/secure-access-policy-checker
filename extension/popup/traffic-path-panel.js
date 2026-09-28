@@ -480,9 +480,13 @@
       const lookup = evaluation.destinationLookup;
       if (question && lookup && !lookup.ok && lookup.error !== "not a domain" && !Object.keys(facts).length) {
         const until = lookup.retryAt ? new Date(lookup.retryAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
-        results.append(node("p", "tp-note tp-note-lookup", until
-          ? `Cisco Investigate refused the last lookup, so lookups are paused until ${until}. Answer below meanwhile.`
-          : "Couldn't reach Cisco Investigate to classify this domain, so the checker needs your answer."));
+        const reason = until
+          ? `Cisco Investigate refused the last lookup; retry after ${until}.`
+          : lookup.error === "no token" ? "No dashboard authorization is available for the lookup. Refresh the Secure Access dashboard."
+            : lookup.error === "timeout" ? "The destination lookup timed out."
+              : /^Investigate returned \d+$/.test(lookup.error || "") ? `Cisco Investigate returned ${lookup.error.split(" ").pop()}.`
+                : "The destination lookup could not finish.";
+        results.append(node("p", "tp-note tp-note-lookup", `${reason} You can answer below instead.`));
       }
       // With a question to answer, the question itself is the headline.
       if (question && outcome.status === "pending") results.append(questionCard(question, pending.match.rule));
