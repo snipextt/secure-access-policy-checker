@@ -22,3 +22,6 @@ extension/scripts/
 
 # QA inputs (tenant data)
 qa/data/
+
+# Python bytecode
+__pycache__/

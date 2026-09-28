@@ -23,6 +23,7 @@
     "https://management.api.umbrella.com/*",
     "https://api.opendns.com/*",
     "https://investigate.umbrella.com/*",
+    "https://api.sse-network-tunnel-mgmt.internal.umbrella.com/*",
     "https://*.cisco.com/*",
     "https://*.sse.cisco.com/*",
     "https://dashboard.sse.cisco.com/*"

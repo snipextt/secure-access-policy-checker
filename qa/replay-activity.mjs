@@ -32,10 +32,15 @@ const lookups = { ...bundled, ...om, memberMaps: data.sse_member_maps, identitie
 const ruleById = new Map(rules.map(r => [String(r.ruleId ?? r.id), r]));
 
 // name → ids across every source catalog + identity map
-const SOURCE_CATALOGS = ["sourceUsers", "sourceGroups", "sourceRoaming", "sourceEndpointDevices", "sourceNetworks", "sourceSites", "sourceSecurityGroupTags", "sourceCatalystSdwan", "sourceTunnelGroups", "sourceZtnaClients", "sourceNetworkDevices"];
+const SOURCE_CATALOGS = ["sourceUsers", "sourceGroups", "sourceRoaming", "sourceEndpointDevices", "sourceNetworks", "sourceSites", "sourceSecurityGroupTags", "sourceCatalystSdwan", "sourceTunnelGroups", "sourceBranches", "sourceZtnaClients", "sourceNetworkDevices"];
 const byName = new Map();
 const addName = (name, id, catalog) => { const k = String(name).trim().toLowerCase(); if (!byName.has(k)) byName.set(k, []); byName.get(k).push({ id: String(id), catalog }); };
 for (const c of SOURCE_CATALOGS) for (const [id, label] of Object.entries(om[c] || {})) addName(label, id, c);
+// Branch labels carry their peer IDs ("LON Campus vMX (Peer ID 140147)"); the
+// log names the branch "Branch With Peer ID 140147".
+for (const [id, label] of Object.entries(om.sourceBranches || {})) {
+  for (const peer of (String(label).match(/Peer ID ([\d, ]+)\)/) || [, ""])[1].split(/,\s*/).filter(Boolean)) addName(`Branch With Peer ID ${peer}`, id, "sourceBranches");
+}
 for (const [id, name] of Object.entries(data.sse_identity_map || {})) if (typeof name === "string") addName(name, id, "identityMap");
 const nameIndex = (catalog) => { const m = new Map(); for (const [id, label] of Object.entries(om[catalog] || {})) { const k = String(label).toLowerCase(); if (!m.has(k)) m.set(k, []); m.get(k).push(String(id)); } return m; };
 const categoryIds = nameIndex("contentCategories");
@@ -97,15 +102,18 @@ function answerFrom(event, pending, facts, notes) {
 }
 
 function connectionFor(event, types) {
-  if (types.includes("Network Tunnels")) return "tunnel";
+  if (types.includes("Network Tunnels") || types.includes("Branches")) return "tunnel";
+  if (types.includes("Anyconnect Roaming Client") || types.includes("Roaming Computers")) return "client";
   if (event.Type === "dns") return types.every(t => t === "Networks") ? "network" : "va";
-  if (event.Type === "firewall") return "tunnel"; // only path with a firewall stage
+  // Firewall traffic without a tunnel, branch or SD-WAN identity comes from
+  // Secure Client in VPN mode (AD users and computers on client addresses).
+  if (event.Type === "firewall") return types.some(t => /Viptela|Security Group/.test(t)) ? "tunnel" : "vpn";
   return "client";
 }
 const KIND_FOR_CATALOG = {
   sourceUsers: "identity", sourceGroups: "identity", sourceRoaming: "roaming", sourceSites: "site",
   sourceNetworks: "network", sourceTunnelGroups: "tunnel", sourceEndpointDevices: "computer",
-  sourceCatalystSdwan: "sdwan", sourceSecurityGroupTags: "sgt",
+  sourceCatalystSdwan: "sdwan", sourceSecurityGroupTags: "sgt", sourceBranches: "branch",
 };
 
 const EXPECT_STAGE = { dns: "dns", proxy: "web", firewall: "firewall" };
@@ -113,8 +121,9 @@ const results = [];
 const seen = new Map();
 for (const event of rows) {
   const key = [event.Type, event.Identities, event.Hostname || event.Destination, event["Destination IP"], event["Destination Port"], event.Protocol, event["Rule ID"], event.Categories, event.Application].join("|");
-  if (seen.has(key)) { seen.get(key).count++; continue; }
-  const res = { event, count: 1, notes: new Set() };
+  const weight = Number(event.__count) || 1; // --aggregate lines stand for many events
+  if (seen.has(key)) { seen.get(key).count += weight; continue; }
+  const res = { event, count: weight, notes: new Set() };
   seen.set(key, res);
   results.push(res);
   const expectedRule = event["Rule ID"] === undefined ? null : String(Math.round(event["Rule ID"]));
@@ -134,8 +143,16 @@ for (const event of rows) {
 
   // destination
   let host, port = "", protocol = "TCP", kind;
+  // The log names a private resource ("Intranet") but shows its resolved IP;
+  // a person would enter the resource's hostname.
+  const resource = event["Application Category"] === "Private Resource" && Object.values(data.sse_member_maps.privateResources || {})
+    .find(entry => entry && entry.name === event.Application);
+  const resourceHost = resource && (resource.members || []).map(member => String(member.value || "")).find(value => /[a-z]/i.test(value) && !value.includes("ztna.sse.cisco.io"));
   if (event.Type === "dns") { host = String(event.Destination).replace(/\.$/, "").toLowerCase(); kind = "domain"; }
-  else if (event.Type === "proxy") { host = String(event.Hostname || event.Destination).split(":")[0].toLowerCase(); port = String(event["Destination Port"] || "443"); kind = ip.parse(host) ? "ip" : "domain"; }
+  else if (event.Type === "proxy") {
+    const raw = String(event.Hostname || event.Destination).replace(/^data:/i, "");
+    host = (/:\/\//.test(raw) ? raw.split("://")[1] : raw).split(/[/:]/)[0].toLowerCase(); port = String(event["Destination Port"] || "443"); kind = ip.parse(host) ? "ip" : "domain"; }
+  else if (resourceHost) { host = resourceHost; port = event["Destination Port"] !== undefined ? String(Math.round(event["Destination Port"])) : ""; protocol = String(event.Protocol || "TCP").toUpperCase(); kind = "domain"; }
   else { host = String(event["Destination IP"]); port = event["Destination Port"] !== undefined ? String(Math.round(event["Destination Port"])) : ""; protocol = String(event.Protocol || "TCP").toUpperCase(); kind = "ip"; }
   const connection = connectionFor(event, types);
   const internalIp = event["Internal IP"] || event["Source IP"];
@@ -162,7 +179,14 @@ for (const event of rows) {
   while (true) {
     evaluation = model.evaluate(request, rules, lookups, Matcher);
     if (evaluation.error) break;
-    const pending = evaluation.stages.find(s => s.state === "needs-answer" && s.match.pending && s.match.pending.length);
+    // A provisional firewall match still carries the open questions; answer
+    // them only when the log shows the firewall knew the app or category.
+    // A Blocked firewall event was logged after inspection (e.g. IPS), so the
+    // application was known by then, provisional or not.
+    const firewallKnew = event.Application || split(event.Categories).some(name => name !== "Uncategorized") || String(event.Action || "Blocked").toLowerCase() === "blocked";
+    // Answer only for the layer the log recorded; answers for other layers
+    // would leak into it (facts apply to every stage).
+    const pending = evaluation.stages.find(s => s.stage.key === EXPECT_STAGE[event.Type] && (s.state === "needs-answer" || (s.provisional && firewallKnew)) && s.match.pending && s.match.pending.length);
     if (++rounds > 12) break;
     if (pending && investigated) { res.notes.add(`would still ask about ${pending.match.pending.map(p => p.field).join(", ")}`); break; }
     if (evaluation.threatCheck && investigated) { res.notes.add("would still ask about threats"); break; }
@@ -190,8 +214,13 @@ for (const event of rows) {
   res.gotRule = got;
   if (stage.state === "not-reached" || stage.state === "skipped") { res.status = "wrong-stage"; res.why = `${want} ${stage.state}: ${stage.reason}`; continue; }
   if (stage.state === "needs-answer") { res.status = "undetermined"; res.why = stage.match.reason; continue; }
-  if (got === expectedRule) {
-    // Every exported event was Blocked: the prediction must say so too.
+  const loggedBlocked = String(event.Action || "Blocked").toLowerCase() === "blocked";
+  if (got === expectedRule && !loggedBlocked) {
+    // An allowed event: same rule, and the checker must not predict a block.
+    if (stage.action === "block") { res.status = "over-blocked"; res.why = stage.security ? `predicted ${stage.security.category} block by ${stage.security.profile || stage.security.setting}` : "predicted a block"; }
+    else res.status = "match-allowed";
+  } else if (got === expectedRule) {
+    // A blocked event: the prediction must say so too.
     if (stage.action === "block") res.status = stage.security ? `match-blocked-by-${stage.security.profile ? "web-security-profile" : "dns-security"}` : "match-blocked-by-rule";
     else {
       const cause = logBlockCause(event);
@@ -206,7 +235,7 @@ for (const event of rows) {
 }
 
 // ---- report ----
-const total = rows.length;
+const total = rows.reduce((n, event) => n + (Number(event.__count) || 1), 0);
 const sum = f => results.filter(f).reduce((n, r) => n + r.count, 0);
 const byStatus = {};
 for (const r of results) { byStatus[r.status] = byStatus[r.status] || { scenarios: 0, events: 0 }; byStatus[r.status].scenarios++; byStatus[r.status].events += r.count; }

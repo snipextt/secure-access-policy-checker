@@ -478,7 +478,7 @@
         testInput.sourceSecurityGroupTagId, testInput.sourceCatalystSdwanId,
         testInput.sourceMobileDeviceId, testInput.sourceChromebookId,
         testInput.sourceZtnaClientId, testInput.sourceTunnelGroupId,
-        testInput.sourceNetworkDeviceId,
+        testInput.sourceBranchId, testInput.sourceNetworkDeviceId,
       ]).map(id => id && typeMap[String(id)]).filter(Boolean);
       selected = fromCatalogs.concat(flattenSelectedIds(testInput.identityTypeIds));
     } else {
@@ -489,7 +489,7 @@
           testInput.sourceRoamingId, testInput.sourceGroupId,
           testInput.sourceEndpointDeviceId, testInput.sourceNetworkId, testInput.sourceSiteId,
           testInput.sourceSecurityGroupTagId, testInput.sourceCatalystSdwanId,
-          testInput.sourceTunnelGroupId, testInput.sourceMobileDeviceId,
+          testInput.sourceTunnelGroupId, testInput.sourceBranchId, testInput.sourceMobileDeviceId,
           testInput.sourceChromebookId, testInput.sourceZtnaClientId,
           testInput.sourceNetworkDeviceId
         ]) :
@@ -1102,7 +1102,7 @@
     } = testInput;
     const hasSelected = (value) => flattenSelectedIds(value).length > 0;
     const hasSource = source.trim() !== "" || [
-      testInput.sourceIdentityIds,
+      testInput.sourceIdentityIds, testInput.sourceBranchId,
       sourceUserId, identityTypeIds, sourceGsuiteUserId, sourceGsuiteOuId, sourceRoamingId, sourceGroupId, sourceEndpointDeviceId,
       sourceNetworkId, sourceSiteId, sourceSecurityGroupTagId,
       sourceCatalystSdwanId, sourceTunnelGroupId,
@@ -1194,9 +1194,10 @@
         // A rule's destinations are alternatives: the request matches if it
         // hits any one of them. Verified against Activity Search: one rule
         // with a category and an application list blocked both a
-        // category-only domain and an app from the list. Private resource
-        // *type* narrows the other destinations instead.
-        const qualifiers = dstConds.filter((cond) => /private_resource_types/i.test(cond.attributeName || ""));
+        // category-only domain and an app from the list; a rule with
+        // resource groups, "all private apps" (private_resource_types) and a
+        // CIDR matched via its resource group.
+        const qualifiers = [];
         const isCatchAll = (cond) => cond.attributeValue === true && String(cond.attributeName || "").toLowerCase().endsWith(".all");
         let alternatives = dstConds.filter((cond) => !qualifiers.includes(cond));
         // "Any destination" only stands when it is the rule's only destination.
@@ -1323,8 +1324,21 @@
     if (stage !== "dns" && stage !== "web" && stage !== "firewall") return [];
     const ruledOut = testInput.ruledOut || {};
     const pending = [];
+    // At the firewall, a destination list with URL paths cannot be checked
+    // until the request is inspected. Plain domain entries are decided right
+    // away (Activity Search: lists with "reddit.com/r/cisco" or
+    // "bazaar.abuse.ch/browse" were logged provisionally on unrelated IPs; a
+    // list of "fo" and "aq" never was).
+    const firewallIp = stage === "firewall" && window.IPAddress.parse(String(testInput.destination || ""));
+    const memberMaps = (lookups && lookups.memberMaps) || {};
     for (const cond of rule.ruleConditions || rule.conditions || []) {
-      const field = classificationField(cond.attributeName);
+      let field = classificationField(cond.attributeName);
+      if (!field && firewallIp && /destination_list/i.test(cond.attributeName || "")) {
+        const lists = (Array.isArray(cond.attributeValue) ? cond.attributeValue : [cond.attributeValue]).map(String);
+        const hasPaths = lists.some(id => ((memberMaps.destinationLists || {})[id] || { members: [] }).members
+          .some(member => /^[^/]+\/./.test(String(member.value || "")) && !window.IPAddress.parseCidr(String(member.value || ""))));
+        if (hasPaths) field = "destinationListId";
+      }
       if (!field) continue;
       const values = conditionValues(cond, lookups).map(String);
       const yes = confirmedValues(testInput, field);

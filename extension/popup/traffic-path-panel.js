@@ -16,6 +16,7 @@
   const ICONS = {
     client: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="10.5" rx="1.5"/><path d="M2.5 18.5h19"/></svg>',
     va: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="6.5" rx="1.2"/><rect x="4" y="13.5" width="16" height="6.5" rx="1.2"/><path d="M7.5 7.25h.01M7.5 16.75h.01"/></svg>',
+    vpn: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="9.5" rx="1.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>',
     tunnel: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="8.5" width="6" height="7" rx="1.2"/><rect x="15.5" y="8.5" width="6" height="7" rx="1.2"/><path d="M8.5 10.5h7M8.5 13.5h7" stroke-dasharray="1.6 1.6"/></svg>',
     network: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.3 3.6 5.1 3.6 8.5s-1.2 6.2-3.6 8.5c-2.4-2.3-3.6-5.1-3.6-8.5s1.2-6.2 3.6-8.5z"/></svg>',
     check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
@@ -23,10 +24,10 @@
     warn: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5l8.5 15h-17z"/><path d="M12 10v4M12 16.8h.01"/></svg>',
     question: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.6a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.4M12 16.8h.01"/></svg>',
   };
-  const LAYER_LABELS = { client: ["DNS", "Web"], va: ["DNS"], network: ["DNS"], tunnel: ["Firewall", "Web"] };
+  const LAYER_LABELS = { client: ["DNS", "Web"], va: ["DNS"], vpn: ["Firewall", "Web"], network: ["DNS"], tunnel: ["Firewall", "Web"] };
   const SOURCE_NOUNS = {
     roaming: "roaming computers", identity: "users or groups", site: "sites", network: "networks", tunnel: "network tunnels",
-    computer: "AD computers", sdwan: "SD-WAN VPNs", sgt: "security group tags",
+    computer: "AD computers", sdwan: "SD-WAN VPNs", sgt: "security group tags", branch: "branches",
   };
 
   function icon(name, className) {
@@ -371,6 +372,7 @@
       port.disabled = protocol.value === "ICMP";
       if (!connection) destinationHint.textContent = "";
       else if (connection === "va" || connection === "network") destinationHint.textContent = "This path only carries DNS, so enter the domain being looked up.";
+      else if (connection === "vpn") destinationHint.textContent = "Enter an IP address to include the firewall. A domain checks Web (HTTPS).";
       else if (connection === "tunnel") destinationHint.textContent = "Enter an IP address to include the firewall. Branch DNS goes through a VA or registered network; check it with that connection.";
       else destinationHint.textContent = "A domain checks DNS then Web (HTTPS). A URL uses its own port.";
     }
@@ -437,6 +439,9 @@
     }
 
     // Results ---------------------------------------------------------------
+    function ruleActionOf(rule) {
+      return String(rule.ruleAction || rule.action || "").toLowerCase();
+    }
     function ruleTitle(rule) {
       return rule.ruleName || rule.name || "Unnamed rule";
     }
@@ -577,6 +582,9 @@
           body.append(node("span", "tp-stage-meta tp-stage-security", result.security.profile
             ? `${result.security.category}: blocked by security profile “${result.security.profile}”, although the rule allows it`
             : `${result.security.category}: blocked by the DNS security setting “${result.security.setting}” before any rule`));
+        }
+        if (result.provisional) {
+          body.append(node("span", "tp-stage-meta", `Allowed while the firewall identifies the application; ${ruleTitle(rule)} (${model.actionLabel(ruleActionOf(rule))}) decides once it knows.`));
         }
         const meta = [rulePriority(rule)];
         if (result.afterBlock) meta.push(`only if the ${result.afterBlock.label} block doesn't apply (e.g. ${result.afterBlock.label} doesn't see this user)`);

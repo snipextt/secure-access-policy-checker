@@ -1839,6 +1839,10 @@ const FULL_CATALOGS = [
   { key: "sourceSecurityGroupTags", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/security_group_tag", dataKey: "data", idKey: "id", labelKey: "label", paged: true, sourcePolicyTypeId: 54 },
   { key: "sourceCatalystSdwan", tokenKey: "mgmt_authz_token", path: "identity/v2/organizations/{orgId}/catalyst_sdwan", dataKey: "data", idKey: "id", labelKey: "label", paged: true, sourcePolicyTypeId: 52 },
   { key: "sourceTunnelGroups", tokenKey: "sse_token", host: "https://api.sse.cisco.com", path: "deployments/v2/msa/networkTunnelGroupsAndBranches?limit=100&offset=0&sortBy=name&sortOrder=asc", dataKey: "data", idKey: "id", labelKey: "name", sourcePolicyTypeId: 40, mapEntries: (items) => items.filter(entry => entry.type === "Network Tunnel Group").map(entry => ({ id: entry.id, label: entry.name })) },
+  // The same response lists SD-WAN branches (e.g. "RTP Campus vMX"). Activity
+  // Search logs them as "Branches" and rules match them by identity ID and by
+  // the Network Tunnels type (40), so they are their own source catalog.
+  { key: "sourceBranches", tokenKey: "sse_token", host: "https://api.sse.cisco.com", path: "deployments/v2/msa/networkTunnelGroupsAndBranches?limit=100&offset=0&sortBy=name&sortOrder=asc", dataKey: "data", idKey: "id", labelKey: "name", sourcePolicyTypeId: 40, mapEntries: (items) => items.filter(entry => entry.type !== "Network Tunnel Group").map(entry => ({ id: entry.id, label: entry.name })) },
   // Network/service objects were captured only as destination conditions.
   // The identity container response supplies these child URLs and type IDs;
   // load them so every dashboard source category has a real catalog state.
@@ -2744,7 +2748,37 @@ async function resolveFullCatalogs(orgId, tabId) {
       logEvent("catalog-fetch", "Catalog fetch failed", { catalog: catalog.key, error: err.message });
     }
   }));
+  await labelBranchPeers(maps, tabId);
   return maps;
+}
+
+// Activity Search names a branch "Branch With Peer ID 140147", while the
+// catalog calls it "LON Campus vMX". The tunnel-management API links the two
+// (as the dashboard overview loads it); add the peer IDs to each branch label
+// so either name finds it. Best-effort: the plain names stay on failure.
+async function labelBranchPeers(maps, tabId) {
+  const branches = maps.sourceBranches || {};
+  if (!Object.keys(branches).length) return;
+  try {
+    const tokenObj = await getFreshToken("sse_token", tabId);
+    if (!tokenObj) return;
+    const response = await fetch("https://api.sse-network-tunnel-mgmt.internal.umbrella.com/v1/branches/peers?limit=100", {
+      headers: { Authorization: `Bearer ${tokenObj.token}`, Accept: "application/json" },
+    });
+    if (!response.ok) { logEvent("catalog-fetch", "Branch peers non-OK", { status: response.status }); return; }
+    const peers = ((await response.json()) || {}).data || [];
+    const peerIdsByName = {};
+    for (const peer of peers) {
+      if (!peer || !peer.name || peer.peerId === undefined) continue;
+      (peerIdsByName[peer.name] = peerIdsByName[peer.name] || new Set()).add(String(peer.peerId));
+    }
+    for (const [id, name] of Object.entries(branches)) {
+      const ids = peerIdsByName[name];
+      if (ids && ids.size) branches[id] = `${name} (Peer ID ${[...ids].join(", ")})`;
+    }
+  } catch (err) {
+    logEvent("catalog-fetch", "Branch peers failed", { error: err.message });
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -31,6 +31,7 @@
     site: { label: "Site", catalogs: ["sourceSites"], inputKey: "sourceSiteId", placeholder: "Search sites" },
     network: { label: "Egress network (public IP)", catalogs: ["sourceNetworks"], inputKey: "sourceNetworkId", placeholder: "Search networks" },
     tunnel: { label: "Network tunnel", catalogs: ["sourceTunnelGroups"], inputKey: "sourceTunnelGroupId", placeholder: "Search network tunnels" },
+    branch: { label: "SD-WAN branch", catalogs: ["sourceBranches"], inputKey: "sourceBranchId", placeholder: "Search branches" },
     computer: { label: "AD computer", catalogs: ["sourceEndpointDevices"], inputKey: "sourceEndpointDeviceId", placeholder: "Search AD computers" },
     sdwan: { label: "SD-WAN VPN", catalogs: ["sourceCatalystSdwan"], inputKey: "sourceCatalystSdwanId", placeholder: "Search SD-WAN VPNs" },
     sgt: { label: "Security group tag", catalogs: ["sourceSecurityGroupTags"], inputKey: "sourceSecurityGroupTagId", placeholder: "Search security group tags" },
@@ -44,6 +45,7 @@
     sourceSites: "sourceSiteId",
     sourceNetworks: "sourceNetworkId",
     sourceTunnelGroups: "sourceTunnelGroupId",
+    sourceBranches: "sourceBranchId",
     sourceEndpointDevices: "sourceEndpointDeviceId",
     sourceCatalystSdwan: "sourceCatalystSdwanId",
     sourceSecurityGroupTags: "sourceSecurityGroupTagId",
@@ -60,6 +62,11 @@
       description: "DNS forwarded by a virtual appliance. The VA reports its site, the client's internal IP, and the AD user or computer.",
       sources: ["site", "internalIp", "identity", "computer", "network"],
     },
+    vpn: {
+      label: "Remote access VPN", layers: "Firewall + Web",
+      description: "Secure Client in VPN mode: all traffic goes to Secure Access. Traffic carries the AD user and computer and the VPN address.",
+      sources: ["identity", "computer", "internalIp"],
+    },
     network: {
       label: "Network DNS", layers: "DNS only",
       description: "DNS sent straight from a registered network's public IP. Secure Access sees only the network.",
@@ -68,7 +75,7 @@
     tunnel: {
       label: "Site-to-site tunnel", layers: "Firewall + Web",
       description: "Branch traffic sent through an IPsec tunnel. It can also carry the AD user or computer, SD-WAN VPN, and security group tag.",
-      sources: ["tunnel", "internalIp", "identity", "computer", "sdwan", "sgt"],
+      sources: ["tunnel", "branch", "internalIp", "identity", "computer", "sdwan", "sgt"],
     },
   };
 
@@ -80,6 +87,7 @@
   };
 
   const DNS_ONLY = ["va", "network"];
+  const NETWORK_TUNNELS_TYPE_ID = "40";
   const WEB_PORTS = ["80", "443"];
   const PROTOCOLS = ["TCP", "UDP", "ICMP"];
 
@@ -104,9 +112,10 @@
     const value = String(text || "").trim();
     if (!value) return { error: "Enter a destination: a domain, URL, or IP address." };
     if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) {
-      if (!/^https?:\/\//i.test(value)) return { error: "Only http:// and https:// URLs can be checked." };
+      // WebSockets (ws/wss) are web traffic on the same ports as http/https.
+      if (!/^(https?|wss?):\/\//i.test(value)) return { error: "Only http(s):// and ws(s):// URLs can be checked." };
       let url;
-      try { url = new URL(value); } catch (_) { return { error: "That URL could not be read." }; }
+      try { url = new URL(value.replace(/^ws(s?):/i, "http$1:")); } catch (_) { return { error: "That URL could not be read." }; }
       const host = url.hostname.replace(/^\[|\]$/g, "");
       const hostIsIp = !!ip.parse(host);
       if (!hostIsIp && !isHostname(host)) return { error: "The URL needs a domain or IP host." };
@@ -279,20 +288,21 @@
     const { connection, destination } = request;
     if (scope.scope === "private_network") {
       if (DNS_ONLY.includes(connection)) return { stages: [], error: `Private Access is not reached through ${CONNECTIONS[connection].label}. Choose Secure Client or Site-to-site tunnel.` };
-      // Branch traffic to an internal address is enforced by the firewall
-      // (Activity Search logs it as a firewall event under the private rules).
-      if (connection === "tunnel" && destination.kind === "ip") return { stages: [{ ...STAGES.firewall }] };
+      // Branch traffic to an internal address or private resource is enforced
+      // by the firewall (Activity Search logs it as a firewall event under the
+      // private rules).
+      if (connection === "tunnel" || connection === "vpn") return { stages: [{ ...STAGES.firewall }] };
       return { stages: [{ ...STAGES.private }] };
     }
     const isWebPort = destination.protocol === "TCP" && WEB_PORTS.includes(destination.port);
     const stages = [];
     const skipped = [];
     if (destination.kind === "domain" && connection !== "tunnel") stages.push({ ...STAGES.dns });
-    if (connection === "tunnel") {
+    if (connection === "tunnel" || connection === "vpn") {
       if (destination.kind === "ip") stages.push({ ...STAGES.firewall });
       else skipped.push({ ...STAGES.firewall, reason: "The firewall matches the destination IP. Enter the IP address to include it." });
     }
-    if (connection === "client" || connection === "tunnel") {
+    if (connection === "client" || connection === "tunnel" || connection === "vpn") {
       if (isWebPort) stages.push({ ...STAGES.web });
       else if (connection === "client") skipped.push({ ...STAGES.web, reason: `Secure Client sends only web traffic (TCP 80/443) to the web proxy; ${destination.protocol} ${destination.port || ""} is not inspected.`.replace(/ ;/, ";") });
     }
@@ -358,6 +368,14 @@
       destinationScope: scope.scope,
       trafficStage: stage.key === "private" ? "" : stage.key,
     };
+    // Everything on the tunnel connection arrives over a network tunnel, so
+    // it carries the Network Tunnels identity type (40) even when only SD-WAN
+    // VPN / security group identities are known. Activity Search logs such
+    // flows (identities "IOT_OT (VPN-10), IOT_OT (SGT-100)") under a rule on
+    // type 40.
+    if (request.connection === "tunnel") {
+      input.identityTypeIds = [...new Set([...(Array.isArray(base.identityTypeIds) ? base.identityTypeIds : base.identityTypeIds ? [base.identityTypeIds] : []).map(String), NETWORK_TUNNELS_TYPE_ID])];
+    }
     if (scope.privateResourceIds.length) input.privateResourceId = scope.privateResourceIds;
     if (scope.privateResourceGroupIds.length) input.privateResourceGroupId = scope.privateResourceGroupIds;
     if (stage.key === "dns") {
@@ -431,6 +449,18 @@
       }
       const input = stageInput(request, scope, groups, stage);
       const match = matcher.matchPolicy(rules, input, lookups);
+      // The firewall cannot classify the application or category from the
+      // first packets: it lets the flow through under the first rule whose
+      // source matches and decides once the application is identified.
+      // Activity Search logs these as Allowed under that rule, even for Block
+      // and Isolate rules (verified on a million-event export).
+      // Only TCP: the handshake carries no payload, while the first UDP
+      // packet already identifies the application (Activity Search: SD-WAN
+      // DNS on UDP 53 was not logged under an app-list rule).
+      if (match && match.indeterminate && stage.key === "firewall" && request.destination.protocol === "TCP" && match.pending && match.pending.length) {
+        results.push({ stage, state: "matched", match, action: "allow", provisional: true, conditional: uncertainBefore, afterBlock: blockedAt || null });
+        continue;
+      }
       if (match && match.indeterminate) {
         results.push({ stage, state: "needs-answer", match, conditional: uncertainBefore, afterBlock: blockedAt || null });
         if (!uncertainBefore) uncertainBefore = stage;
@@ -538,6 +568,7 @@
     applicationCategoryId: { noun: "application category", catalogs: ["applicationCategories"] },
     applicationListId: { noun: "application list", catalogs: ["applicationLists"] },
     categoryListId: { noun: "category list", catalogs: ["categoryLists"] },
+    destinationListId: { noun: "destination list", catalogs: ["destinationLists"] },
     appRiskProfileId: { noun: "app risk profile", catalogs: ["appRiskProfiles"] },
     geolocation: { noun: "location", catalogs: ["geolocations"] },
   };

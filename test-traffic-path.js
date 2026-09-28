@@ -82,7 +82,7 @@ test("connection limits sources", () => {
   assert.deepEqual(model.CONNECTIONS.client.sources, ["roaming", "identity"]);
   assert.deepEqual(model.CONNECTIONS.va.sources, ["site", "internalIp", "identity", "computer", "network"]);
   assert.deepEqual(model.CONNECTIONS.network.sources, ["network"]);
-  assert.deepEqual(model.CONNECTIONS.tunnel.sources, ["tunnel", "internalIp", "identity", "computer", "sdwan", "sgt"]);
+  assert.deepEqual(model.CONNECTIONS.tunnel.sources, ["tunnel", "branch", "internalIp", "identity", "computer", "sdwan", "sgt"]);
   // A site picked earlier is ignored once the connection is Secure Client.
   const request = build({ connection: "client", sources: { roaming: "sourceRoaming:9", site: "sourceSites:21" }, destination: "example.com" });
   assert.deepEqual(request.testInput, { sourceRoamingId: "9" });
@@ -121,7 +121,7 @@ test("stage plan per connection", () => {
   assert.equal(plan({ ...tunnel, destination: "203.0.113.10", port: "445" }), "firewall");
   assert.equal(plan({ ...tunnel, destination: "203.0.113.10" }), "firewall,web");
   assert.equal(plan({ ...tunnel, destination: "203.0.113.10", protocol: "ICMP" }), "firewall");
-  assert.equal(plan({ ...tunnel, destination: "hr.internal.example" }), "private");
+  assert.equal(plan({ ...tunnel, destination: "hr.internal.example" }), "firewall");
   // Branch traffic to internal IPs is logged as firewall events.
   assert.equal(plan({ ...tunnel, destination: "10.9.9.9" }), "firewall");
   assert.equal(plan({ connection: "client", sources: { roaming: "sourceRoaming:9" }, destination: "10.9.9.9" }), "private");
@@ -183,10 +183,17 @@ test("tunnel firewall: port rules match, categories apply too", () => {
   const social = rule("Block social", "block", [SRC_ALL, cond("umbrella.destination.category_ids", "INTERSECT", [28])]);
   const tunnel = { connection: "tunnel", sources: { tunnel: "sourceTunnelGroups:33", internalIp: "10.1.2.3" } };
   assert.deepEqual(states(run({ ...tunnel, destination: "203.0.113.10", port: "135" }, [rpc, social])), ["firewall:matched:Block RPC"]);
-  // Activity Search shows category-list blocks on firewall events, so a
-  // category rule is a question at the firewall as well as on the web.
+  // Until the application is identified, the firewall allows the flow under
+  // the first rule whose source matches (Activity Search logs Block rules as
+  // Allowed this way); the web layer still asks.
   const web = run({ ...tunnel, destination: "203.0.113.10" }, [rpc, social]);
-  assert.deepEqual(states(web), ["firewall:needs-answer", "web:needs-answer"]);
+  assert.deepEqual(states(web), ["firewall:matched:Block social", "web:needs-answer"]);
+  assert.equal(web.stages[0].action, "allow");
+  assert.equal(web.stages[0].provisional, true);
+  // Once the category is known, the firewall decides for real.
+  const known = run({ ...tunnel, destination: "203.0.113.10", facts: { contentCategoryId: { yes: ["28"], no: [], all: true } } }, [rpc, social]);
+  assert.equal(known.stages[0].action, "block");
+  assert.equal(known.stages[0].provisional, undefined);
 });
 
 test("firewall block stops web", () => {
@@ -330,6 +337,42 @@ test("Cisco Investigate lookup answers every question", () => {
 
   // A failed lookup leaves the questions in place.
   assert.deepEqual(model.factsFromLookup({ ok: false }, bundledLookups), {});
+});
+
+test("tunnel traffic carries the Network Tunnels type", () => {
+  // Activity Search: SD-WAN VPN + security group identities only, matched by a
+  // rule on identity type 40 (Network Tunnels).
+  const allBranches = rule("Secure DIA for all branches", "allow", [cond("umbrella.source.identity_type_ids", "INTERSECT", [40]), DST_ALL]);
+  const sdwanOnly = run({ connection: "tunnel", sources: { sdwan: "sourceCatalystSdwan:66", sgt: "sourceSecurityGroupTags:77" }, destination: "1.1.1.1", port: "53", protocol: "UDP" }, [allBranches]);
+  assert.deepEqual(states(sdwanOnly), ["firewall:matched:Secure DIA for all branches"]);
+  // Not on other connections.
+  const client = run({ connection: "client", sources: { roaming: "sourceRoaming:9" }, destination: "example.com" }, [allBranches]);
+  assert.deepEqual(states(client), ["dns:matched:Default Internet", "web:matched:Default Internet"]);
+});
+
+test("firewall timing: TCP is provisional, UDP decides; URL-path lists wait", () => {
+  // Activity Search (1M events): a Block rule on apps was logged as Allowed for
+  // TCP flows (handshake carries no payload), not for UDP 53; destination
+  // lists with URL paths were logged provisionally, plain domain lists not.
+  const apps = rule("Block Telnet and SSH", "block", [SRC_ALL, cond("umbrella.destination.application_ids", "INTERSECT", [6500911])]);
+  const tcp = run({ connection: "vpn", sources: { identity: "sourceUsers:7" }, destination: "104.208.203.90", port: "443", protocol: "TCP" }, [apps]);
+  assert.equal(tcp.stages[0].provisional, true);
+  assert.equal(tcp.stages[0].action, "allow");
+  assert.equal(tcp.stages[0].match.rule.ruleName, "Block Telnet and SSH");
+  const udp = run({ connection: "vpn", sources: { identity: "sourceUsers:7" }, destination: "1.1.1.1", port: "53", protocol: "UDP" }, [apps]);
+  assert.equal(udp.stages[0].state, "needs-answer");
+
+  const withLists = { ...lookups, memberMaps: { ...memberMaps, destinationLists: {
+    1: { name: "AUP Exceptions", members: [{ value: "reddit.com/r/cisco", kind: "fqdn" }] },
+    2: { name: "Geo", members: [{ value: "fo", kind: "fqdn" }, { value: "aq", kind: "fqdn" }] },
+  } } };
+  const byList = id => rule(`List ${id}`, "allow", [SRC_ALL, cond("umbrella.destination.destination_list_ids", "INTERSECT", [id])]);
+  const request = build({ connection: "vpn", sources: { identity: "sourceUsers:7" }, destination: "104.208.203.90", port: "443" });
+  const paths = model.evaluate(request, [byList(1), internetDefault], withLists, Matcher);
+  assert.equal(paths.stages[0].match.rule.ruleName, "List 1");
+  assert.equal(paths.stages[0].provisional, true);
+  const domains = model.evaluate(request, [byList(2), internetDefault], withLists, Matcher);
+  assert.equal(domains.stages[0].match.rule.ruleName, "Default Internet");
 });
 
 test("disabled rules are skipped", () => {
