@@ -2492,35 +2492,79 @@ function catalogHost(catalog) {
 //     Activity Search that categorization no longer lists)
 //   /get-casi-data?fqdn={host} → the cloud application ("TikTok")
 // One host per call (the bulk endpoint needs a higher Investigate tier).
-// Cached per host in storage.session (survives the worker going idle, cleared
-// with the browser session) so rechecks don't spend Investigate quota; the
-// Tier 1 license answers 403 once its rate limit is hit.
+// A 403 has two known causes, handled in order:
+//   1. a superseded token: ask the dashboard tab for the token it holds now
+//      and retry once (the dashboard's own calls use the latest token);
+//   2. throttling after a burst (seen after ~400 calls in 5 minutes; cleared
+//      by itself ~25 minutes later): pause lookups for a while so checks fall
+//      back to questions immediately instead of failing each time.
+// Results are cached for 24 hours in storage.local to spend as few calls as
+// possible; the URL classifier is only called when categorization lists no
+// threat.
 // ---------------------------------------------------------------------------
 var destinationLookupCache = new Map();
 var LOOKUP_CACHE_KEY = "psc_destination_lookups";
+var LOOKUP_TTL_MS = 24 * 60 * 60 * 1000;
+var INVESTIGATE_PAUSE_MS = 10 * 60 * 1000;
+var investigatePausedUntil = 0;
+
+async function investigateGet(path, token) {
+  return fetch(`https://investigate.umbrella.com${path}`, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } });
+}
+
+async function latestTabToken(tokenKey, tabId) {
+  const tab = await getMembershipTabId(tabId);
+  if (!tab) return null;
+  try {
+    const reply = await api.tabs.sendMessage(tab, { type: "REQUEST_TOKEN_CHECK", tokenKey });
+    if (reply && reply.token) {
+      // The dashboard is using this token right now, so it is the newest one
+      // regardless of when the page first saw it.
+      await storeToken(tokenKey, reply.token, "main-world-patch", Date.now(), { url: "investigate-retry" });
+      return reply.token;
+    }
+  } catch (_) {}
+  return null;
+}
 
 async function lookupDestination(host, tabId) {
   const name = host.trim().toLowerCase();
   if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(name)) return { ok: false, error: "not a domain" };
-  if (destinationLookupCache.has(name)) return destinationLookupCache.get(name);
-  try {
-    const stored = ((await api.storage.session.get(LOOKUP_CACHE_KEY))[LOOKUP_CACHE_KEY] || {})[name];
-    if (stored) { destinationLookupCache.set(name, stored); return stored; }
-  } catch (_) {}
+  const cached = destinationLookupCache.get(name);
+  if (cached && Date.now() - cached.at < LOOKUP_TTL_MS) return cached.result;
+  let stored = {};
+  try { stored = (await api.storage.local.get(LOOKUP_CACHE_KEY))[LOOKUP_CACHE_KEY] || {}; } catch (_) {}
+  if (stored[name] && Date.now() - stored[name].at < LOOKUP_TTL_MS) {
+    destinationLookupCache.set(name, stored[name]);
+    return stored[name].result;
+  }
+  if (Date.now() < investigatePausedUntil) return { ok: false, error: "Investigate paused after a refusal", retryAt: investigatePausedUntil };
+
   const tokenObj = await getFreshToken("mgmt_authz_token", tabId);
   if (!tokenObj) return { ok: false, error: "no token" };
-  const headers = { Authorization: `Bearer ${tokenObj.token}`, Accept: "application/json" };
+  let token = tokenObj.token;
   const encoded = encodeURIComponent(name);
-  const [categorization, casi, classifiers] = await Promise.all([
-    fetch(`https://investigate.umbrella.com/domains/categorization/${encoded}?taloscategories=true`, { headers }),
-    fetch(`https://investigate.umbrella.com/get-casi-data?fqdn=${encoded}`, { headers }).catch(() => null),
-    fetch(`https://investigate.umbrella.com/url/${encoded}/classifiers`, { headers }).catch(() => null),
-  ]);
+  const categorizationPath = `/domains/categorization/${encoded}?taloscategories=true`;
+  let categorization = await investigateGet(categorizationPath, token);
+  if (categorization.status === 403) {
+    const latest = await latestTabToken("mgmt_authz_token", tabId);
+    if (latest && latest !== token) {
+      token = latest;
+      categorization = await investigateGet(categorizationPath, token);
+      logEvent("destination-lookup", "retried with the dashboard's current token", { status: categorization.status });
+    }
+  }
   if (!categorization.ok) {
-    logEvent("destination-lookup", "categorization non-OK", { status: categorization.status });
+    if (categorization.status === 403) investigatePausedUntil = Date.now() + INVESTIGATE_PAUSE_MS;
+    logEvent("destination-lookup", "categorization non-OK", { status: categorization.status, pausedUntil: investigatePausedUntil });
     return { ok: false, error: `Investigate returned ${categorization.status}` };
   }
   const entry = ((await categorization.json()) || {})[name] || {};
+  const securityBits = (entry.security_categories || []).map(String);
+  const [casi, classifiers] = await Promise.all([
+    investigateGet(`/get-casi-data?fqdn=${encoded}`, token).catch(() => null),
+    securityBits.length ? null : investigateGet(`/url/${encoded}/classifiers`, token).catch(() => null),
+  ]);
   let app = null;
   if (casi && casi.ok) {
     try {
@@ -2536,15 +2580,16 @@ async function lookupDestination(host, tabId) {
     ok: true,
     host: name,
     contentBits: (entry.content_categories || []).map(String),
-    securityBits: (entry.security_categories || []).map(String),
+    securityBits,
     securityNames: securityNames.map(String),
     app,
   };
-  destinationLookupCache.set(name, result);
+  const record = { at: Date.now(), result };
+  destinationLookupCache.set(name, record);
   try {
-    const all = (await api.storage.session.get(LOOKUP_CACHE_KEY))[LOOKUP_CACHE_KEY] || {};
-    all[name] = result;
-    await api.storage.session.set({ [LOOKUP_CACHE_KEY]: all });
+    for (const [key, value] of Object.entries(stored)) if (!value || Date.now() - value.at >= LOOKUP_TTL_MS) delete stored[key];
+    stored[name] = record;
+    await api.storage.local.set({ [LOOKUP_CACHE_KEY]: stored });
   } catch (_) {}
   return result;
 }

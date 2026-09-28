@@ -474,7 +474,10 @@
       }
       const lookup = evaluation.destinationLookup;
       if (question && lookup && !lookup.ok && lookup.error !== "not a domain" && !Object.keys(facts).length) {
-        results.append(node("p", "tp-note tp-note-lookup", "Couldn't reach Cisco Investigate to classify this domain, so the checker needs your answer."));
+        const until = lookup.retryAt ? new Date(lookup.retryAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+        results.append(node("p", "tp-note tp-note-lookup", until
+          ? `Cisco Investigate refused the last lookup, so lookups are paused until ${until}. Answer below meanwhile.`
+          : "Couldn't reach Cisco Investigate to classify this domain, so the checker needs your answer."));
       }
       // With a question to answer, the question itself is the headline.
       if (question && outcome.status === "pending") results.append(questionCard(question, pending.match.rule));

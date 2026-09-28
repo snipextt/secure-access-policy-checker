@@ -46,6 +46,12 @@ const threatNames = new Set(Object.values((om.securityProfiles && om.securityPro
 // What the log says blocked an event, for events the checker cannot decide
 // from rules alone.
 function logBlockCause(event) {
+  // A scanned file (hash plus an antivirus/AMP verdict) is a file-level
+  // detection even when the event lists "Malware": only the proxy's scanner
+  // sees the file, no destination lookup can.
+  if (event["SHA256 Hash"] && (event["Antivirus Result"] || event["Cisco AMP Disposition"] === "MALICIOUS" || event.Filename)) {
+    return { kind: "content", name: `file inspection (${event["Antivirus Result"] || event["Cisco AMP Disposition"] || "scanned file"})` };
+  }
   const blocked = split(event["Blocked Categories"]);
   const threat = blocked.find(name => threatNames.has(name));
   if (threat) return { kind: "threat", name: threat };

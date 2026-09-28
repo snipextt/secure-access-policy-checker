@@ -46,6 +46,8 @@ node qa/dump-extension-data.mjs 9444 dump qa/data/extension-data.json   # from a
 node qa/replay-activity.mjs                            # prints accuracy per layer and rule
 ```
 
+By default the replay answers category, app and threat questions from what the log recorded. `--investigate=<lookups.json>` answers them only from Cisco Investigate lookups (`{ host: lookupDestination result }`, collected from the extension's service worker) to measure the fully automatic path. Blocks the log attributes to a scanned file, DLP, app controls or IPS are counted separately: they depend on content, not on the destination.
+
 ## Tests
 
 ```
