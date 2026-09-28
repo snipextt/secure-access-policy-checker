@@ -408,18 +408,9 @@ var hoverPointer = null;
 var attachedChips = new WeakSet();
 var currentHighlightEl = null;
 var triggeredDismissListener = null;
-// Recursive member popover state (see renderMemberPopover / showMemberPopover).
+// Member cascade data (see openMemberLevel).
 var currentMemberMaps = {};
 var currentLookups = {};
-var memberPopoverEl = null;
-var memberHideTimer = null;
-var memberHoverTimer = null;
-var memberDismissListener = null;
-var memberOpenKey = null;
-var memberRequestSeq = 0;
-var memberNavStack = [];
-var memberRootAnchor = null;
-var memberIgnoreDismissUntil = 0;
 
 // Cisco Hummingbird (hbr) token VALUES duplicated here as literals — this
 // stylesheet is injected into the live dashboard's own document (a separate
@@ -517,40 +508,74 @@ function ensureHoverPopoverStyle() {
     #sec-hover-popover .sec-hp-chip-key { color: #64748b; font-weight: 600; flex-shrink: 0; }
     #sec-hover-popover .sec-hp-chip-val { color: #0f172a; font-weight: 600; overflow-wrap: anywhere; word-break: break-word; }
 
-    /* Expandable source/destination group chips + recursive member popover */
+    /* Expandable group chips on the rule card + hover member cascade */
+    #sec-hover-popover .sec-hp-chip-text { min-width: 0; flex: 1; }
     #sec-hover-popover .sec-hp-chip.sec-hp-expandable {
-      cursor: pointer; border-color: #93c5fd; background: #eff6ff; color: #1e40af; font-weight: 600;
+      cursor: default; border-color: #bfdbfe; background: #f5f9ff; color: #0f172a;
+      transition: background-color .12s ease, border-color .12s ease, box-shadow .12s ease;
     }
-    #sec-hover-popover .sec-hp-chip.sec-hp-expandable:hover { background: #dbeafe; }
-    #sec-member-popover {
-      position: fixed; z-index: 2147483647; width: min(360px, calc(100vw - 32px));
-      max-height: min(420px, calc(100vh - 32px)); background: #fff; border: 1px solid #d8e0ea;
-      border-left: 4px solid #2563eb; border-radius: 0; box-shadow: 0 18px 42px rgba(15,23,42,0.20);
+    #sec-hover-popover .sec-hp-chip.sec-hp-expandable:hover,
+    #sec-hover-popover .sec-hp-chip.sec-hp-expandable.sec-open {
+      background: #e8f1ff; border-color: #60a5fa; box-shadow: inset 3px 0 0 #2563eb;
+    }
+    .sec-mp-chevron {
+      flex: none; width: 7px; height: 7px; margin: 0 2px 0 8px;
+      border-top: 1.5px solid currentColor; border-right: 1.5px solid currentColor;
+      transform: rotate(45deg); color: #64748b; transition: transform .12s ease, color .12s ease;
+    }
+    .sec-open > .sec-mp-chevron, .sec-mp-expandable:hover > .sec-mp-chevron,
+    .sec-hp-expandable:hover > .sec-mp-chevron { color: #2563eb; transform: translateX(2px) rotate(45deg); }
+    .sec-member-panel {
+      position: fixed; z-index: 2147483647; width: min(320px, calc(100vw - 32px));
+      max-height: min(440px, calc(100vh - 24px)); display: flex; flex-direction: column;
+      background: #fff; border: 1px solid #d8e0ea; border-radius: 0;
+      box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 16px 40px rgba(15,23,42,.18);
       font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      font-weight: 400; font-size: 13px; color: #1e293b; display: none; overflow: auto;
+      font-size: 13px; color: #1e293b; opacity: 0; transform: translateX(-4px);
+      transition: opacity .12s ease, transform .12s ease;
     }
-    #sec-member-popover.sec-member-visible { display: block; }
-    #sec-member-popover .sec-mp-header {
-      background: linear-gradient(135deg, #eff6ff, #dbeafe); color: #0f172a; font-weight: 700;
-      font-size: 13px; padding: 10px 12px; border-bottom: 1px solid #dbe5f0; word-break: break-word;
-      display: flex; align-items: center; gap: 8px;
+    .sec-member-panel[data-dir="left"] { transform: translateX(4px); }
+    .sec-member-panel.sec-member-visible { opacity: 1; transform: none; }
+    .sec-member-panel .sec-mp-header {
+      display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+      padding: 10px 12px 8px; border-bottom: 1px solid #edf1f6;
     }
-    #sec-member-popover .sec-mp-back {
-      flex-shrink: 0; border: 0; background: transparent; color: #1e40af; cursor: pointer;
-      font: inherit; font-weight: 700; font-size: 12px; padding: 0 2px 0 0;
+    .sec-member-panel .sec-mp-title { min-width: 0; color: #0f172a; font-weight: 650; overflow-wrap: anywhere; }
+    .sec-member-panel .sec-mp-count { flex: none; color: #64748b; font-size: 11px; font-variant-numeric: tabular-nums; }
+    .sec-member-panel .sec-mp-filter {
+      margin: 8px 10px 2px; height: 30px; padding: 4px 8px; border: 1px solid #d8e0ea; border-radius: 0;
+      font-family: inherit; font-size: 12px; color: #0f172a; background: #f8fafc; outline: none;
     }
-    #sec-member-popover .sec-mp-back:hover { text-decoration: underline; }
-    #sec-member-popover .sec-mp-title { min-width: 0; }
-    #sec-member-popover .sec-mp-list { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 12px; }
-    #sec-member-popover .sec-mp-chip {
-      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0; padding: 6px 9px;
-      font-size: 12px; color: #334155; overflow-wrap: anywhere; word-break: break-word;
+    .sec-member-panel .sec-mp-filter:focus { border-color: #2563eb; background: #fff; box-shadow: 0 0 0 2px rgba(37,99,235,.15); }
+    .sec-member-panel .sec-mp-list { overflow-y: auto; padding: 4px 0 6px; overscroll-behavior: contain; }
+    .sec-member-panel .sec-mp-row {
+      display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 5px 12px;
+      color: #1e293b; outline: none;
     }
-    #sec-member-popover .sec-mp-chip.sec-mp-expandable {
-      cursor: pointer; border-color: #93c5fd; background: #eff6ff; color: #1e40af; font-weight: 600;
+    .sec-member-panel .sec-mp-row[hidden] { display: none; }
+    .sec-member-panel .sec-mp-row:hover { background: #f5f7fa; }
+    .sec-member-panel .sec-mp-expandable:hover, .sec-member-panel .sec-mp-expandable.sec-open {
+      background: #e8f1ff; box-shadow: inset 3px 0 0 #2563eb;
     }
-    #sec-member-popover .sec-mp-chip.sec-mp-expandable:hover { background: #dbeafe; }
-    #sec-member-popover .sec-mp-empty { color: #64748b; font-style: italic; font-size: 12px; padding: 4px; }
+    .sec-member-panel .sec-mp-row:focus-visible,
+    #sec-hover-popover .sec-hp-expandable:focus-visible { outline: 2px solid #2563eb; outline-offset: -2px; }
+    .sec-member-panel .sec-mp-label { flex: 1; min-width: 0; overflow-wrap: anywhere; line-height: 1.35; }
+    .sec-member-panel .sec-mp-tag {
+      flex: none; padding: 1px 6px; background: #f1f5f9; color: #64748b;
+      font-size: 10px; font-weight: 600; letter-spacing: .02em;
+    }
+    .sec-member-panel .sec-mp-empty { padding: 10px 12px; color: #64748b; font-size: 12px; }
+    .sec-member-panel .sec-mp-error { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 10px 12px 12px; color: #475569; font-size: 12px; line-height: 1.45; }
+    .sec-member-panel .sec-mp-retry {
+      min-height: 28px; padding: 3px 10px; border: 1px solid #cbd5e1; border-radius: 0; background: #fff;
+      color: #0f172a; font: 600 12px Inter, system-ui, sans-serif; cursor: pointer;
+    }
+    .sec-member-panel .sec-mp-retry:hover { border-color: #0f172a; }
+    .sec-member-panel .sec-mp-retry:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+    .sec-member-panel .sec-mp-skel { height: 22px; margin: 6px 12px; width: auto; }
+    @media (prefers-reduced-motion: reduce) {
+      .sec-member-panel, .sec-mp-chevron, #sec-hover-popover .sec-hp-chip.sec-hp-expandable { transition: none; }
+    }
     @keyframes sec-skel {
       0% { background-position: 100% 0; }
       100% { background-position: -100% 0; }
@@ -561,12 +586,13 @@ function ensureHoverPopoverStyle() {
       animation: sec-skel 1.1s ease-in-out infinite;
       border: 1px solid #e2e8f0;
     }
-    #sec-hover-popover .sec-hp-skel,
-    #sec-member-popover .sec-mp-skel {
+    #sec-hover-popover .sec-hp-status { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: #475569; line-height: 1.45; }
+    #sec-hover-popover .sec-hp-status strong { color: #0f172a; font-size: 13px; font-weight: 650; }
+    #sec-hover-popover .sec-hp-status-stalled strong { color: #9a3412; }
+    #sec-hover-popover .sec-hp-skel {
       height: 28px; width: 100%; box-sizing: border-box;
     }
-    #sec-hover-popover .sec-hp-skel-title,
-    #sec-member-popover .sec-mp-skel-title {
+    #sec-hover-popover .sec-hp-skel-title {
       height: 14px; width: 42%; margin-bottom: 2px;
     }
   `;
@@ -586,8 +612,8 @@ function getHoverPopoverEl() {
     hoverPopoverEl.addEventListener("mouseenter", () => clearTimeout(hoverHideTimer));
     hoverPopoverEl.addEventListener("mouseleave", (event) => {
       const next = event.relatedTarget;
-      if (!next && memberPopoverEl && memberPopoverEl.classList.contains("sec-member-visible")) return;
-      if (memberPopoverEl && next && memberPopoverEl.contains(next)) return;
+      if (!next && memberLevels.length) return;
+      if (isInsideMemberUi(next)) return;
       scheduleHideHoverPopover();
     });
   }
@@ -628,41 +654,331 @@ function positionHoverPopover(popover, anchor) {
 }
 
 // ---------------------------------------------------------------------------
-// Recursive member popover — click a source/destination group to expand its
-// members. Nested groups expand the same way, to arbitrary depth. Driven
-// from the dashboard hover popover's expandable condition chips (see
-// renderConditionGroup). A single reused #sec-member-popover is re-targeted
-// per click and stays open until the user clicks elsewhere.
+// Member cascade — hover a group/list chip on the rule card and its members
+// fly out beside it; hover a nested group inside that panel and the next
+// level flies out beside that one, to any depth (like OS menus). Each level
+// is its own panel, so opening a deeper level never rebuilds the row the
+// pointer is on. Click / Enter / → open immediately for touch and keyboard.
+// Everything closes when the pointer leaves the card and all panels.
 // ---------------------------------------------------------------------------
 
-function hideMemberPopover() {
-  if (memberPopoverEl) memberPopoverEl.classList.remove("sec-member-visible");
-  memberOpenKey = null;
-  memberNavStack = [];
-  memberRootAnchor = null;
-  if (memberDismissListener) {
-    document.removeEventListener("mousedown", memberDismissListener, true);
-    memberDismissListener = null;
+var MEMBER_OPEN_DELAY_MS = 140;
+var MEMBER_FILTER_THRESHOLD = 10;
+var memberLevels = [];
+var memberIntentTimer = null;
+var memberOutsideListener = null;
+
+function memberSurfaces() {
+  return [hoverPopoverEl].concat(memberLevels.map((level) => level.el)).filter(Boolean);
+}
+
+function isInsideMemberUi(node) {
+  return Boolean(node) && memberSurfaces().some((el) => el.contains(node));
+}
+
+function closeMemberLevels(fromDepth) {
+  while (memberLevels.length > fromDepth) {
+    const level = memberLevels.pop();
+    level.el.remove();
+    if (level.anchor) {
+      level.anchor.classList.remove("sec-open");
+      level.anchor.setAttribute("aria-expanded", "false");
+    }
+  }
+  if (!memberLevels.length && memberOutsideListener) {
+    document.removeEventListener("mousedown", memberOutsideListener, true);
+    memberOutsideListener = null;
   }
 }
 
-function getMemberPopoverEl() {
-  if (!memberPopoverEl) {
-    memberPopoverEl = document.createElement("div");
-    memberPopoverEl.id = "sec-member-popover";
-    document.body.appendChild(memberPopoverEl);
-    memberPopoverEl.addEventListener("mouseenter", () => clearTimeout(hoverHideTimer));
-    memberPopoverEl.addEventListener("mouseleave", (event) => {
-      const next = event.relatedTarget;
-      // innerHTML rebuild detaches the hovered chip and fires mouseleave with
-      // no relatedTarget — that must not close the just-opened nested view.
-      if (!next) return;
-      if (hoverPopoverEl && hoverPopoverEl.contains(next)) return;
-      if (memberPopoverEl.contains(next)) return;
-      scheduleHideHoverPopover();
-    });
+function hideMemberPopover() {
+  clearTimeout(memberIntentTimer);
+  closeMemberLevels(0);
+}
+
+// Hover intent: a short delay so sweeping the pointer across rows does not
+// flash every group open. `open` null means "close anything deeper".
+function scheduleMemberIntent(depth, open) {
+  clearTimeout(memberIntentTimer);
+  memberIntentTimer = setTimeout(() => {
+    if (open) open();
+    else closeMemberLevels(depth);
+  }, MEMBER_OPEN_DELAY_MS);
+}
+
+function positionMemberLevel(level) {
+  const el = level.el;
+  if (!level.anchor || !level.anchor.isConnected) return;
+  const margin = 12;
+  const gap = 6;
+  const anchorRect = level.anchor.getBoundingClientRect();
+  const container = level.anchor.closest(".sec-member-panel, #sec-hover-popover");
+  const box = container ? container.getBoundingClientRect() : anchorRect;
+  const { width, height } = el.getBoundingClientRect();
+  // Panels already on screen (the card and shallower levels) must stay
+  // readable, so a side only counts if the new panel clears all of them.
+  const ancestors = memberSurfaces().filter((surface) => surface !== el).map((surface) => surface.getBoundingClientRect());
+  const clears = (left) => ancestors.every((rect) => left >= rect.right || left + width <= rect.left);
+  const rightLeft = box.right + gap;
+  const leftLeft = box.left - gap - width;
+  const fits = {
+    right: rightLeft + width <= window.innerWidth - margin && clears(rightLeft),
+    left: leftLeft >= margin && clears(leftLeft),
+  };
+  const other = level.dir === "right" ? "left" : "right";
+  const chosen = fits[level.dir] ? level.dir : fits[other] ? other : null;
+  let left;
+  let top = anchorRect.top - 9;
+  if (chosen) {
+    level.dir = chosen;
+    left = chosen === "right" ? rightLeft : leftLeft;
+  } else {
+    // No clear side: overlap the parent panel but drop below the row that
+    // opened this level so it stays visible.
+    left = level.dir === "right" ? rightLeft - width / 2 : leftLeft + width / 2;
+    top = anchorRect.bottom + 4;
   }
-  return memberPopoverEl;
+  left = Math.max(margin, Math.min(left, window.innerWidth - margin - width));
+  top = Math.max(margin, Math.min(top, window.innerHeight - margin - height));
+  const dir = level.dir;
+  el.style.left = `${left}px`;
+  el.style.top = `${top}px`;
+  el.dataset.dir = dir;
+}
+
+function memberTag(member) {
+  const kind = member && member.kind;
+  if (kind === "identityGroups" || kind === "networkObjectGroups" || kind === "serviceObjectGroups" || kind === "privateResourceGroups") return "Group";
+  if (kind === "networkObjects") return "Object";
+  if (kind === "serviceObjects" || kind === "service") return "Service";
+  if (kind === "privateResources") return "Resource";
+  if (kind === "application") return "App";
+  if (kind === "category") return "Category";
+  const value = member && member.value !== undefined ? String(member.value).trim() : "";
+  if (value) {
+    if (/^[0-9a-f.:]+\/\d+$/i.test(value)) return "Range";
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(value) || (/^[0-9a-f:]+$/i.test(value) && value.includes(":"))) return "IP";
+    return "Domain";
+  }
+  return "";
+}
+
+function isExpandableMember(member, memberMaps) {
+  if (!member || member.id === undefined || !isExpandableKind(member.kind)) return false;
+  const entry = memberMaps[member.kind] && memberMaps[member.kind][String(member.id)];
+  // A cached empty object or leaf-only record has nothing to show.
+  if (entry && entry.resolved && Array.isArray(entry.members) && entry.members.length === 0) return false;
+  return true;
+}
+
+function renderMemberLevel(level, title, members, memberMaps, lookups, loading) {
+  const el = level.el;
+  el.replaceChildren();
+  el.setAttribute("aria-busy", loading ? "true" : "false");
+  const header = document.createElement("div");
+  header.className = "sec-mp-header";
+  const titleEl = document.createElement("span");
+  titleEl.className = "sec-mp-title";
+  titleEl.textContent = title;
+  header.appendChild(titleEl);
+  if (!loading) {
+    const count = document.createElement("span");
+    count.className = "sec-mp-count";
+    count.textContent = `${members.length} ${members.length === 1 ? "member" : "members"}`;
+    header.appendChild(count);
+  }
+  el.appendChild(header);
+
+  const list = document.createElement("div");
+  list.className = "sec-mp-list";
+  list.setAttribute("role", "list");
+
+  if (loading) {
+    for (let i = 0; i < 4; i++) {
+      const row = document.createElement("div");
+      row.className = "sec-mp-skel sec-skel";
+      list.appendChild(row);
+    }
+    el.appendChild(list);
+    return;
+  }
+  if (!members.length) {
+    const empty = document.createElement("div");
+    empty.className = "sec-mp-empty";
+    empty.textContent = "This group is empty.";
+    list.appendChild(empty);
+    el.appendChild(list);
+    return;
+  }
+
+  const rows = members.map((member) => {
+    const expandable = isExpandableMember(member, memberMaps);
+    const label = resolveMemberLabel(member, memberMaps, lookups) || "Unnamed member";
+    const row = document.createElement("div");
+    row.className = "sec-mp-row" + (expandable ? " sec-mp-expandable" : "");
+    row.setAttribute("role", "listitem");
+    const text = document.createElement("span");
+    text.className = "sec-mp-label";
+    text.textContent = label;
+    row.appendChild(text);
+    const tag = memberTag(member);
+    if (tag) {
+      const tagEl = document.createElement("span");
+      tagEl.className = "sec-mp-tag";
+      tagEl.textContent = tag;
+      row.appendChild(tagEl);
+    }
+    if (expandable) {
+      const chevron = document.createElement("span");
+      chevron.className = "sec-mp-chevron";
+      chevron.setAttribute("aria-hidden", "true");
+      row.appendChild(chevron);
+      row.tabIndex = 0;
+      row.setAttribute("aria-haspopup", "true");
+      row.setAttribute("aria-expanded", "false");
+      const open = () => openMemberLevel(level.depth + 1, row, label, member.kind, member.id, memberMaps, lookups);
+      row.addEventListener("mouseenter", () => scheduleMemberIntent(level.depth + 1, open));
+      row.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        clearTimeout(memberIntentTimer);
+        open();
+      });
+      row.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " " || event.key === "ArrowRight") {
+          event.preventDefault();
+          open();
+          const next = memberLevels[level.depth + 1];
+          if (next) setTimeout(() => { const first = next.el.querySelector(".sec-mp-row[tabindex]"); if (first) first.focus(); }, 0);
+        }
+      });
+    } else {
+      row.addEventListener("mouseenter", () => scheduleMemberIntent(level.depth + 1, null));
+    }
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" || event.key === "ArrowLeft") {
+        event.preventDefault();
+        const anchor = level.anchor;
+        closeMemberLevels(level.depth);
+        if (anchor && anchor.focus) anchor.focus();
+      }
+    });
+    row.dataset.search = label.toLowerCase();
+    return row;
+  });
+
+  if (members.length > MEMBER_FILTER_THRESHOLD) {
+    const filter = document.createElement("input");
+    filter.type = "search";
+    filter.className = "sec-mp-filter";
+    filter.placeholder = `Filter ${members.length} members`;
+    filter.setAttribute("aria-label", "Filter members");
+    filter.addEventListener("input", () => {
+      const query = filter.value.trim().toLowerCase();
+      closeMemberLevels(level.depth + 1);
+      rows.forEach((row) => { row.hidden = Boolean(query) && !row.dataset.search.includes(query); });
+    });
+    filter.addEventListener("keydown", (event) => event.stopPropagation());
+    el.appendChild(filter);
+  }
+  rows.forEach((row) => list.appendChild(row));
+  el.appendChild(list);
+}
+
+function renderMemberError(level, title, retry) {
+  const el = level.el;
+  el.replaceChildren();
+  el.setAttribute("aria-busy", "false");
+  const header = document.createElement("div");
+  header.className = "sec-mp-header";
+  const titleEl = document.createElement("span");
+  titleEl.className = "sec-mp-title";
+  titleEl.textContent = title;
+  header.appendChild(titleEl);
+  const body = document.createElement("div");
+  body.className = "sec-mp-error";
+  body.setAttribute("role", "status");
+  const text = document.createElement("span");
+  text.textContent = "Couldn't load the members. Your dashboard session may have expired.";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "sec-mp-retry";
+  button.textContent = "Try again";
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    retry();
+  });
+  body.append(text, button);
+  el.append(header, body);
+}
+
+function openMemberLevel(depth, anchor, title, kind, id, memberMaps, lookups) {
+  const existing = memberLevels[depth];
+  if (existing && existing.anchor === anchor && existing.kind === kind && existing.id === String(id)) {
+    closeMemberLevels(depth + 1);
+    return;
+  }
+  closeMemberLevels(depth);
+  if (!anchor || !anchor.isConnected) return;
+  clearTimeout(hoverHideTimer);
+  ensureHoverPopoverStyle();
+
+  const el = document.createElement("div");
+  el.className = "sec-member-panel";
+  el.setAttribute("role", "group");
+  el.setAttribute("aria-label", title || "Members");
+  el.addEventListener("mouseenter", () => clearTimeout(hoverHideTimer));
+  el.addEventListener("mouseleave", (event) => {
+    if (isInsideMemberUi(event.relatedTarget)) return;
+    scheduleHideHoverPopover();
+  });
+  document.body.appendChild(el);
+
+  const parent = memberLevels[depth - 1];
+  const level = { el, depth, kind, id: String(id), anchor, dir: parent ? parent.dir : "right" };
+  memberLevels.push(level);
+  anchor.classList.add("sec-open");
+  anchor.setAttribute("aria-expanded", "true");
+
+  if (!memberOutsideListener) {
+    memberOutsideListener = (event) => {
+      const path = typeof event.composedPath === "function" ? event.composedPath() : [event.target];
+      if (path.some((node) => node && node.nodeType === 1 && isInsideMemberUi(node))) return;
+      hideMemberPopover();
+    };
+    document.addEventListener("mousedown", memberOutsideListener, true);
+  }
+
+  const cached = memberMaps[kind] && memberMaps[kind][String(id)];
+  const header = title || (cached && cached.name) || "Members";
+  const ready = hasCachedMembers(memberMaps, kind, id);
+  renderMemberLevel(level, header, ready ? cached.members : [], memberMaps, lookups, !ready);
+  positionMemberLevel(level);
+  requestAnimationFrame(() => el.classList.add("sec-member-visible"));
+  if (ready) return;
+
+  loadMemberLevel(level, header, title, memberMaps, lookups);
+}
+
+function loadMemberLevel(level, header, title, memberMaps, lookups) {
+  const { depth, kind, id } = level;
+  requestMembers(kind, id, (response) => {
+    if (memberLevels[depth] !== level) return;
+    if (!response || (response.ok === false && !(response.members && response.members.length))) {
+      renderMemberError(level, header, () => {
+        renderMemberLevel(level, header, [], memberMaps, lookups, true);
+        loadMemberLevel(level, header, title, memberMaps, lookups);
+      });
+      positionMemberLevel(level);
+      return;
+    }
+    const resolved = (response && response.members) || [];
+    const name = title || resolveMemberLabel({ id, kind }, memberMaps, lookups) || (response && response.name) || header;
+    persistMemberFrame(kind, id, name, resolved, memberMaps);
+    renderMemberLevel(level, name, resolved, memberMaps, lookups, false);
+    positionMemberLevel(level);
+  });
 }
 
 function lookupName(map, id) {
@@ -760,154 +1076,10 @@ function requestMembers(kind, id, callback) {
   });
 }
 
-function memberFrameKey(depth, kind, id) {
-  return `${depth}:${kind}:${id}`;
-}
-
 function persistMemberFrame(kind, id, title, members, memberMaps) {
   if (!memberMaps[kind]) memberMaps[kind] = {};
   memberMaps[kind][String(id)] = { name: title, members: members || [] };
   currentMemberMaps = memberMaps;
-}
-
-function popMemberNav() {
-  if (memberNavStack.length <= 1) {
-    hideMemberPopover();
-    return;
-  }
-  memberNavStack.pop();
-  const frame = memberNavStack[memberNavStack.length - 1];
-  memberOpenKey = memberFrameKey(memberNavStack.length, frame.kind, frame.id);
-  memberRequestSeq += 1;
-  renderMemberPopover(frame.title, frame.members, frame.memberMaps, frame.lookups, false);
-  showMemberPopover(memberRootAnchor);
-}
-
-function renderMemberPopover(headerTitle, members, memberMaps, lookups, loading) {
-  const pop = getMemberPopoverEl();
-  pop.innerHTML = "";
-  const header = document.createElement("div");
-  header.className = "sec-mp-header";
-  if (memberNavStack.length > 1) {
-    const back = document.createElement("button");
-    back.type = "button";
-    back.className = "sec-mp-back";
-    back.textContent = "‹ Back";
-    back.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      clearTimeout(hoverHideTimer);
-      popMemberNav();
-    });
-    header.appendChild(back);
-  }
-  const titleEl = document.createElement("span");
-  titleEl.className = "sec-mp-title";
-  titleEl.textContent = headerTitle;
-  header.appendChild(titleEl);
-  pop.appendChild(header);
-
-  const list = document.createElement("div");
-  list.className = "sec-mp-list";
-
-  if (loading) {
-    for (let i = 0; i < 4; i++) {
-      const row = document.createElement("div");
-      row.className = "sec-mp-skel sec-skel";
-      list.appendChild(row);
-    }
-  } else if (!members || members.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "sec-mp-empty";
-    empty.textContent = "No members resolved for this group.";
-    list.appendChild(empty);
-  } else {
-    for (const m of members) {
-      const childEntry = memberMaps[m.kind] && memberMaps[m.kind][String(m.id)];
-      const nested = Boolean(isExpandableKind(m.kind) || (childEntry && childEntry.members && childEntry.members.length));
-      const chip = document.createElement("div");
-      chip.className = "sec-mp-chip" + (nested ? " sec-mp-expandable" : "");
-      const label = resolveMemberLabel(m, memberMaps, lookups) || "Unnamed member";
-      chip.textContent = label + (nested ? "  ›" : "");
-      if (nested) {
-        chip.addEventListener("click", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          clearTimeout(hoverHideTimer);
-          openMemberPopover(memberRootAnchor || chip, resolveMemberLabel(m, memberMaps, lookups), m.kind, m.id, memberMaps, lookups, { nested: true });
-        });
-      }
-      list.appendChild(chip);
-    }
-  }
-  pop.appendChild(list);
-}
-
-function showMemberPopover(anchorEl) {
-  const pop = getMemberPopoverEl();
-  const pin = (memberRootAnchor && memberRootAnchor.isConnected ? memberRootAnchor : null) || anchorEl;
-  if (pin && pin.isConnected) memberRootAnchor = pin;
-  const rect = memberRootAnchor && memberRootAnchor.isConnected
-    ? memberRootAnchor.getBoundingClientRect()
-    : { right: 16, top: 16 };
-  pop.classList.add("sec-member-visible");
-  positionHoverPopover(pop, { x: rect.right, y: rect.top });
-  if (!memberDismissListener) {
-    memberDismissListener = (event) => {
-      if (Date.now() < memberIgnoreDismissUntil) return;
-      const path = typeof event.composedPath === "function" ? event.composedPath() : [];
-      const hit = (el) => el && (el === memberPopoverEl || el === hoverPopoverEl
-        || (el.classList && (el.classList.contains("sec-hp-expandable") || el.classList.contains("sec-mp-expandable") || el.classList.contains("sec-mp-back")))
-        || (memberPopoverEl && memberPopoverEl.contains(el))
-        || (hoverPopoverEl && hoverPopoverEl.contains(el)));
-      if (path.some(hit) || hit(event.target)) return;
-      hideMemberPopover();
-    };
-    document.addEventListener("mousedown", memberDismissListener, true);
-  }
-}
-
-function openMemberPopover(anchorEl, title, kind, id, memberMaps, lookups, opts) {
-  const nested = Boolean(opts && opts.nested);
-  const visible = Boolean(memberPopoverEl && memberPopoverEl.classList.contains("sec-member-visible") && memberNavStack.length);
-  const nextDepth = nested && visible ? memberNavStack.length + 1 : 1;
-  const key = memberFrameKey(nextDepth, kind, id);
-  if (!nested && visible && memberOpenKey === key) {
-    hideMemberPopover();
-    return;
-  }
-  if (nested && visible && memberOpenKey === key) return;
-  clearTimeout(hoverHideTimer);
-  memberIgnoreDismissUntil = Date.now() + 400;
-  if (!nested || !visible) {
-    memberNavStack = [];
-    if (anchorEl && anchorEl.isConnected) memberRootAnchor = anchorEl;
-  }
-  const cached = memberMaps[kind] && memberMaps[kind][String(id)];
-  const header = title || (cached && cached.name) || "Group members";
-  const alreadyResolved = hasCachedMembers(memberMaps, kind, id);
-  const members = alreadyResolved ? cached.members : (cached && cached.members) || [];
-  memberNavStack.push({ kind, id, title: header, members, memberMaps, lookups });
-  memberOpenKey = memberFrameKey(memberNavStack.length, kind, id);
-  renderMemberPopover(header, members, memberMaps, lookups, !alreadyResolved);
-  showMemberPopover(memberRootAnchor || anchorEl);
-  if (alreadyResolved) return;
-  const seq = ++memberRequestSeq;
-  const openKey = memberOpenKey;
-  requestMembers(kind, id, (response) => {
-    if (seq !== memberRequestSeq || memberOpenKey !== openKey) return;
-    const resolved = (response && response.members) || [];
-    const resolvedName = resolveMemberLabel({ id, kind }, memberMaps, lookups);
-    const name = title || resolvedName || (response && response.name) || header;
-    persistMemberFrame(kind, id, name, resolved, memberMaps);
-    const frame = memberNavStack[memberNavStack.length - 1];
-    if (frame && String(frame.id) === String(id) && frame.kind === kind) {
-      frame.title = name;
-      frame.members = resolved;
-    }
-    renderMemberPopover(name, resolved, memberMaps, lookups, false);
-    showMemberPopover(memberRootAnchor || anchorEl);
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1615,15 +1787,34 @@ function renderHoverPopoverContent(popover, ruleName, rule, findings, matchSumma
         if (!line) continue;
         const chip = document.createElement("span");
         chip.className = "sec-hp-chip" + (item ? " sec-hp-expandable" : "");
-        chip.textContent = line + (item ? "  ▾" : "");
+        const chipText = document.createElement("span");
+        chipText.className = "sec-hp-chip-text";
+        chipText.textContent = line;
+        chip.appendChild(chipText);
         if (item) {
-          chip.title = "Click to expand members";
+          const chevron = document.createElement("span");
+          chevron.className = "sec-mp-chevron";
+          chevron.setAttribute("aria-hidden", "true");
+          chip.appendChild(chevron);
+          chip.tabIndex = 0;
+          chip.setAttribute("aria-haspopup", "true");
+          chip.setAttribute("aria-expanded", "false");
+          const open = () => openMemberLevel(0, chip, line, item.kind, item.id, currentMemberMaps, currentLookups);
+          chip.addEventListener("mouseenter", () => scheduleMemberIntent(0, open));
           chip.addEventListener("click", (event) => {
             event.preventDefault();
             event.stopPropagation();
-            clearTimeout(hoverHideTimer);
-            openMemberPopover(chip, line, item.kind, item.id, currentMemberMaps, currentLookups);
+            clearTimeout(memberIntentTimer);
+            open();
           });
+          chip.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " " || event.key === "ArrowRight") {
+              event.preventDefault();
+              open();
+            }
+          });
+        } else {
+          chip.addEventListener("mouseenter", () => scheduleMemberIntent(0, null));
         }
         chipsWrap.appendChild(chip);
       }
@@ -1764,7 +1955,10 @@ function showPopoverForRule(anchorEl, ruleName, testMatchReasons, autoHideMs) {
     reveal();
   }
 
-  loadRulesAndFindings((rules, findings) => {
+  const requestKey = ++hoverRequestSeq;
+  let attempts = 0;
+  const load = () => loadRulesAndFindings((rules, findings) => {
+    if (requestKey !== hoverRequestSeq) return; // a newer hover took over
     // Enrich the already-visible popover with rule details if available
     const lowerName = ruleName.toLowerCase();
     const rule = rules.find(r => (r.name || "").trim().toLowerCase() === lowerName);
@@ -1784,13 +1978,23 @@ function showPopoverForRule(anchorEl, ruleName, testMatchReasons, autoHideMs) {
     if (!isTriggered) {
       // Hover-only: only show after data loads
       if (rules.length === 0 && findings.length === 0) {
-        renderHoverPopoverContent(popover, ruleName, null, null, null, testMatchReasons, hoverSide);
+        // Rules are still being read (first load after sign-in). Keep the
+        // card in a loading state and retry until they arrive.
+        attempts += 1;
+        const stalled = attempts * HOVER_RETRY_MS >= HOVER_STALL_MS;
+        renderHoverStatus(popover, ruleName, stalled ? "stalled" : "loading");
         reveal();
+        if (!stalled) {
+          setTimeout(() => {
+            if (requestKey === hoverRequestSeq && popover.classList.contains("sec-hover-visible")) load();
+          }, HOVER_RETRY_MS);
+        }
         return;
       }
 
       if (!rule) {
-        renderHoverPopoverContent(popover, ruleName, null, ruleFindings, null, testMatchReasons, hoverSide);
+        if (ruleFindings.length) renderHoverPopoverContent(popover, ruleName, null, ruleFindings, null, testMatchReasons, hoverSide);
+        else renderHoverStatus(popover, ruleName, "missing");
         reveal();
         return;
       }
@@ -1821,6 +2025,47 @@ function showPopoverForRule(anchorEl, ruleName, testMatchReasons, autoHideMs) {
       reveal();
     });
   });
+  load();
+}
+
+// Card states while the rule itself is not available. Never an empty card:
+// say what is happening and what (if anything) the user can do.
+var HOVER_RETRY_MS = 1500;
+var HOVER_STALL_MS = 20000;
+var hoverRequestSeq = 0;
+var HOVER_STATUS_COPY = {
+  loading: ["Loading your policy…", "Rule details appear here as soon as the rules are read from the dashboard."],
+  stalled: ["Policy data hasn't loaded", "The checker reads rules with your dashboard sign-in. Reload this page; if it keeps happening, sign in again."],
+  missing: ["Not in the loaded data yet", "This rule may be new. The checker picks it up when the page reloads."],
+};
+
+function renderHoverStatus(popover, ruleName, state) {
+  hideMemberPopover();
+  popover.removeAttribute("data-action");
+  popover.replaceChildren();
+  const header = document.createElement("div");
+  header.className = "sec-hp-header";
+  header.textContent = ruleName;
+  const body = document.createElement("div");
+  body.className = "sec-hp-body";
+  const copy = HOVER_STATUS_COPY[state] || HOVER_STATUS_COPY.loading;
+  const status = document.createElement("div");
+  status.className = `sec-hp-status sec-hp-status-${state}`;
+  status.setAttribute("role", "status");
+  const title = document.createElement("strong");
+  title.textContent = copy[0];
+  const text = document.createElement("span");
+  text.textContent = copy[1];
+  status.append(title, text);
+  body.appendChild(status);
+  if (state === "loading") {
+    for (let i = 0; i < 3; i++) {
+      const row = document.createElement("div");
+      row.className = "sec-hp-skel sec-skel";
+      body.appendChild(row);
+    }
+  }
+  popover.append(header, body);
 }
 
 function policyConditionCells() {

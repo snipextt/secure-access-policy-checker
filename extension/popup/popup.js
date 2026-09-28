@@ -152,10 +152,60 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     );
 
-    // 2. Tab 2: Single Rules List
+    testerHandle.setData({ rulesCount: rules.length, catalogs: objectMaps || {}, context: isEmbeddedInPage() ? "dashboard" : "toolbar" });
+
+    // 2. Tab 2: Single Rules List — never an empty list while rules load.
+    if (!rules.length) {
+      renderRulesPlaceholder();
+      return;
+    }
     auditHandle = window.PopupSections.buildRulesList(rulesRoot);
     auditHandle.update(rules, findings, identityMap || {}, objectMap || {}, objectMaps || {}, identityTypeMap || {});
   }
+
+  // Loading vs stalled state for the Rules tab while no rules are stored.
+  let dataStalled = false;
+  function renderRulesPlaceholder() {
+    if (!dataStalled) {
+      showAnalyzing("Loading your policy rules…");
+      return;
+    }
+    rulesRoot.replaceChildren();
+    const box = document.createElement("div");
+    box.className = "psc-rules-stalled";
+    box.setAttribute("role", "status");
+    const title = document.createElement("strong");
+    title.textContent = "Policy data hasn't loaded";
+    const text = document.createElement("p");
+    text.textContent = isEmbeddedInPage()
+      ? "The checker reads your rules with the dashboard's sign-in. Reload the policy page; if it keeps happening, sign in again."
+      : "Open the Secure Access dashboard's policy page so the checker can read your rules.";
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.textContent = "Try again";
+    retry.addEventListener("click", () => {
+      dataStalled = false;
+      testerHandle && testerHandle.setData({ stalled: false });
+      renderRulesPlaceholder();
+      triggerRefresh();
+      scheduleStallCheck();
+    });
+    box.append(title, text, retry);
+    rulesRoot.appendChild(box);
+  }
+
+  const STALL_AFTER_MS = 25000;
+  let stallTimer = null;
+  function scheduleStallCheck() {
+    clearTimeout(stallTimer);
+    stallTimer = setTimeout(() => {
+      if (currentRules.length) return;
+      dataStalled = true;
+      if (testerHandle) testerHandle.setData({ stalled: true });
+      renderRulesPlaceholder();
+    }, STALL_AFTER_MS);
+  }
+  scheduleStallCheck();
 
   // ---------------------------------------------------------------------------
   // Org-ID handshake — needed when popup is embedded in content-script.js's
@@ -206,9 +256,9 @@ document.addEventListener("DOMContentLoaded", () => {
   function showAnalyzing(msg) {
     const text = msg || "Analyzing policies\u2026";
     rulesRoot.innerHTML = `
-      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
-                  padding:40px 20px;color:#94a3b8;font-size:14px;gap:12px;">
-        <div style="width:28px;height:28px;border:3px solid #334155;border-top-color:#60a5fa;
+      <div role="status" style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+                  padding:48px 20px;color:#64748b;font-size:13px;gap:12px;">
+        <div style="width:22px;height:22px;border:2px solid #e2e8f0;border-top-color:#0f172a;
                     border-radius:50%;animation:psc-spin 0.8s linear infinite;"></div>
         <span>${text}</span>
       </div>
@@ -277,9 +327,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const resolvingBar = document.createElement("div");
     resolvingBar.id = "psc-resolving-bar";
-    resolvingBar.style.cssText = "background:#1e293b;color:#60a5fa;padding:8px 16px;font-size:12px;" +
-      "text-align:center;border-bottom:1px solid #334155;";
-    resolvingBar.textContent = `⏳ Loading ${missingCatalogs.length} catalog${missingCatalogs.length === 1 ? "" : "s"}… unavailable catalogs remain usable as unavailable fields.`;
+    resolvingBar.setAttribute("role", "status");
+    resolvingBar.style.cssText = "background:#f8fafc;color:#475569;padding:8px 16px;font-size:12px;" +
+      "border-bottom:1px solid #e2e8f0;";
+    resolvingBar.textContent = `Still loading ${missingCatalogs.length} identity or object list${missingCatalogs.length === 1 ? "" : "s"}. Names fill in as they arrive.`;
     rulesRoot.prepend(resolvingBar);
     return "partial";
   }

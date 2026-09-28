@@ -2013,26 +2013,34 @@ const MEMBERSHIP_CONFIG = {
     wrapper: ["data", "items", "results"], idField: "id", nameField: ["name", "label"],
     memberFields: ["objects", "objectIds", "networkObjectIds"],
     groupFields: ["groups"],
-    url: (o) => `https://api.sse.cisco.com/policies/v2/objects/networkObjectGroups?offset=0&limit=100`,
+    // Returns 400 without ?ids= (see OBJECT_ENDPOINTS).
+    url: (o, ids) => `https://api.sse.cisco.com/policies/v2/objects/networkObjectGroups?ids=${(ids || []).map(encodeURIComponent).join(",")}`,
+    needsIds: true,
   },
   networkObjects: {
     tokenKey: "sse_token", leafKind: "address",
     wrapper: ["data", "items", "results"], idField: "id", nameField: ["name", "label"],
     memberFields: [],
-    url: (o) => `https://api.sse.cisco.com/policies/v2/objects/networkObjects?offset=0&limit=100`,
+    // Returns 400 without ?ids= (see OBJECT_ENDPOINTS).
+    url: (o, ids) => `https://api.sse.cisco.com/policies/v2/objects/networkObjects?ids=${(ids || []).map(encodeURIComponent).join(",")}`,
+    needsIds: true,
   },
   serviceObjectGroups: {
     tokenKey: "sse_token", leafKind: "serviceObjects",
     wrapper: ["data", "items", "results"], idField: "id", nameField: ["name", "label"],
     memberFields: ["objects", "serviceObjects", "serviceObjectIds"],
     groupFields: ["groups"],
-    url: (o) => `https://api.sse.cisco.com/policies/v2/objects/serviceObjectGroups?offset=0&limit=100`,
+    // Returns 400 without ?ids= (see OBJECT_ENDPOINTS).
+    url: (o, ids) => `https://api.sse.cisco.com/policies/v2/objects/serviceObjectGroups?ids=${(ids || []).map(encodeURIComponent).join(",")}`,
+    needsIds: true,
   },
   serviceObjects: {
     tokenKey: "sse_token", leafKind: "service",
     wrapper: ["data", "items", "results"], idField: "id", nameField: ["name", "label"],
     memberFields: [],
-    url: (o) => `https://api.sse.cisco.com/policies/v2/objects/serviceObjects?offset=0&limit=100`,
+    // Returns 400 without ?ids= (see OBJECT_ENDPOINTS).
+    url: (o, ids) => `https://api.sse.cisco.com/policies/v2/objects/serviceObjects?ids=${(ids || []).map(encodeURIComponent).join(",")}`,
+    needsIds: true,
   },
   destinationLists: {
     tokenKey: "opendns_token", leafKind: "fqdn",
@@ -2315,12 +2323,13 @@ async function fetchMembersById(kind, id, orgId, tabId, existing) {
 // its kind; any member that is itself a known group type is pushed onto the
 // next frontier so the popover can drill arbitrarily deep. `visited` prevents
 // cycles / re-fetches; MAX_DEPTH is a safety bound.
-async function fetchMembershipKind(kind, orgId, tabId, existingMaps) {
+async function fetchMembershipKind(kind, orgId, tabId, existingMaps, ids) {
   const cfg = MEMBERSHIP_CONFIG[kind];
   if (!cfg) return existingMaps[kind] || {};
+  if (cfg.needsIds && !(ids && ids.length)) return existingMaps[kind] || {};
   const tokenObj = await getFreshToken(cfg.tokenKey, tabId);
   if (!tokenObj) { logEvent("membership", "no token", { kind }); return existingMaps[kind] || {}; }
-  const response = await fetch(cfg.url(orgId), {
+  const response = await fetch(cfg.url(orgId, ids), {
     headers: { Authorization: `Bearer ${tokenObj.token}`, Accept: "application/json" },
   });
   if (!response.ok) { logEvent("membership", "non-OK", { kind, status: response.status }); return existingMaps[kind] || {}; }
@@ -2349,7 +2358,7 @@ async function resolveOneMembership(kind, id, orgId, tabId) {
     if (needsPerIdMembers(kind)) {
       entry = await fetchMembersById(kind, id, orgId, liveTabId, maps[kind] && maps[kind][String(id)]);
     } else {
-      const kindMap = await fetchMembershipKind(kind, orgId, tabId, maps);
+      const kindMap = await fetchMembershipKind(kind, orgId, tabId, maps, [String(id)]);
       maps[kind] = kindMap;
       entry = getCachedMembers(maps, kind, id);
     }
@@ -2403,7 +2412,7 @@ async function resolveMembership(orgId, tabId, rules) {
           }
           return;
         }
-        const kindMap = await fetchMembershipKind(key, orgId, tabId, memberMaps);
+        const kindMap = await fetchMembershipKind(key, orgId, tabId, memberMaps, byKind[key]);
         memberMaps[key] = Object.assign({}, memberMaps[key] || {}, kindMap);
         for (const id of byKind[key]) {
           const entry = getCachedMembers(memberMaps, key, id);
@@ -2612,7 +2621,9 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const tabId = await getMembershipTabId(msg.tabId || (sender && sender.tab && sender.tab.id));
         const fresh = await resolveOneMembership(kind, id, orgId, tabId);
         sendResponse({
-          ok: true,
+          // resolved:false means the fetch failed (token, network, API), not
+          // an empty group — let the page show a retry instead of "empty".
+          ok: fresh.resolved !== false,
           name: fresh.name || id,
           members: fresh.members || [],
           cached: false,

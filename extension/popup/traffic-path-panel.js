@@ -12,6 +12,25 @@
 
   const DRAFT_KEY = "psc.policyChecker.draft.v2";
 
+  // Static inline icons (constant strings, never user data).
+  const ICONS = {
+    client: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="10.5" rx="1.5"/><path d="M2.5 18.5h19"/></svg>',
+    va: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="6.5" rx="1.2"/><rect x="4" y="13.5" width="16" height="6.5" rx="1.2"/><path d="M7.5 7.25h.01M7.5 16.75h.01"/></svg>',
+    tunnel: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="8.5" width="6" height="7" rx="1.2"/><rect x="15.5" y="8.5" width="6" height="7" rx="1.2"/><path d="M8.5 10.5h7M8.5 13.5h7" stroke-dasharray="1.6 1.6"/></svg>',
+    check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+    block: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M6.5 17.5l11-11"/></svg>',
+    warn: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5l8.5 15h-17z"/><path d="M12 10v4M12 16.8h.01"/></svg>',
+    question: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.6a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.4M12 16.8h.01"/></svg>',
+  };
+  const LAYER_LABELS = { client: ["DNS", "Web"], va: ["DNS"], tunnel: ["DNS", "Firewall", "Web"] };
+  const SOURCE_NOUNS = { roaming: "roaming computers", identity: "users or groups", site: "sites", network: "networks", tunnel: "network tunnels" };
+
+  function icon(name, className) {
+    const span = node("span", className || "tp-icon");
+    span.innerHTML = ICONS[name] || "";
+    return span;
+  }
+
   function node(tag, className, text) {
     const element = document.createElement(tag);
     if (className) element.className = className;
@@ -22,7 +41,15 @@
   // ---------------------------------------------------------------------------
   // Searchable picker over one or more catalogs
   // ---------------------------------------------------------------------------
-  function createPicker({ id, placeholder, getOptions, onChange }) {
+  // Catalog labels often look like "Carol Freeman (carol.freeman@corp.org)";
+  // show the name first and the detail muted underneath.
+  function splitLabel(label) {
+    const match = String(label).match(/^(.*\S)\s+\(([^()]+)\)$/);
+    return match ? { primary: match[1], secondary: match[2] } : { primary: String(label), secondary: "" };
+  }
+
+  // getStatus() → { state: "loading" | "ready", noun: "roaming computers" }
+  function createPicker({ id, placeholder, getOptions, getStatus, onChange }) {
     const MAX_VISIBLE = 60;
     const wrap = node("div", "tp-picker");
     const input = node("input", "tp-input tp-picker-input");
@@ -63,10 +90,17 @@
         : all;
       shown = filtered.slice(0, MAX_VISIBLE);
       list.replaceChildren();
-      if (!all.length) {
-        list.append(node("li", "tp-picker-empty", "Nothing loaded yet. Open the dashboard policy page to refresh."));
+      const status = getStatus();
+      if (!all.length && status.state === "loading") {
+        const loading = node("li", "tp-picker-loading");
+        loading.setAttribute("role", "status");
+        loading.append(node("span", "tp-spinner"), node("span", "", `Loading ${status.noun}…`));
+        list.append(loading);
+        for (let i = 0; i < 3; i++) list.append(node("li", "tp-picker-skeleton"));
+      } else if (!all.length) {
+        list.append(node("li", "tp-picker-empty", `No ${status.noun} in this organization.`));
       } else if (!shown.length) {
-        list.append(node("li", "tp-picker-empty", "No matches"));
+        list.append(node("li", "tp-picker-empty", `No ${status.noun} match “${input.value.trim()}”.`));
       }
       shown.forEach((option, index) => {
         const item = node("li", "tp-picker-option");
@@ -74,7 +108,11 @@
         item.setAttribute("role", "option");
         item.setAttribute("aria-selected", String(option.value === value));
         if (index === active) item.classList.add("is-active");
-        item.append(node("span", "tp-picker-label", option.label));
+        const parts = splitLabel(option.label);
+        const text = node("span", "tp-picker-text");
+        text.append(node("span", "tp-picker-label", parts.primary));
+        if (parts.secondary) text.append(node("span", "tp-picker-detail", parts.secondary));
+        item.append(text);
         if (option.badge) item.append(node("span", "tp-picker-badge", option.badge));
         item.addEventListener("mousedown", event => {
           event.preventDefault();
@@ -131,6 +169,7 @@
         choose(option || null, true);
       },
       refresh() {
+        if (!list.hidden) render();
         if (!value) return;
         const option = getOptions().find(item => item.value === value);
         if (option) { selectedLabel = option.label; if (document.activeElement !== input) input.value = option.label; }
@@ -153,12 +192,18 @@
     const panel = node("section", "tp-panel");
     panel.id = "tp-panel";
     const header = node("header", "tp-header");
-    const titleWrap = node("div", "tp-title-wrap");
-    titleWrap.append(node("h1", "tp-title", "Policy Checker"), node("p", "tp-subtitle", "Predict which rule a request hits at each enforcement point."));
+    header.append(node("p", "tp-subtitle", "Predict which rule a request hits at each enforcement point."));
     const reset = node("button", "tp-reset", "Reset");
     reset.type = "button";
-    header.append(titleWrap, reset);
+    header.append(reset);
     panel.append(header);
+
+    // Policy data status: shown until rules and catalogs are in.
+    const dataStatus = node("div", "tp-data-status");
+    dataStatus.setAttribute("role", "status");
+    dataStatus.hidden = true;
+    panel.append(dataStatus);
+    let dataState = { rulesCount: null, loading: true, stalled: false, context: "dashboard" };
 
     const form = node("form", "tp-form");
     form.noValidate = true;
@@ -176,7 +221,11 @@
       radio.value = key;
       radios[key] = radio;
       const body = node("span", "tp-connection-body");
-      body.append(node("span", "tp-connection-name", config.label), node("span", "tp-connection-layers", config.layers));
+      const top = node("span", "tp-connection-top");
+      top.append(icon(key, "tp-connection-icon"), icon("check", "tp-connection-check"));
+      const layers = node("span", "tp-connection-layers");
+      (LAYER_LABELS[key] || []).forEach(layer => layers.append(node("span", "tp-layer", layer)));
+      body.append(top, node("span", "tp-connection-name", config.label), layers);
       label.append(radio, body);
       cards.append(label);
       radio.addEventListener("change", () => setConnection(key, true));
@@ -221,7 +270,14 @@
         pickers[kind] = { element: input, input, get value() { return input.value.trim(); }, set(v) { input.value = v || ""; }, refresh() {} };
         field.append(input);
       } else {
-        const picker = createPicker({ id: `tp-src-${kind}`, placeholder: source.placeholder, getOptions: () => catalogOptions(kind), onChange: changed });
+        const picker = createPicker({
+          id: `tp-src-${kind}`, placeholder: source.placeholder, onChange: changed,
+          getOptions: () => catalogOptions(kind),
+          getStatus: () => ({
+            noun: SOURCE_NOUNS[kind] || "items",
+            state: source.catalogs.some(key => !Object.prototype.hasOwnProperty.call(activeCatalogs, key)) && !dataState.stalled ? "loading" : "ready",
+          }),
+        });
         pickers[kind] = picker;
         field.append(picker.element);
       }
@@ -353,6 +409,7 @@
         return;
       }
       error.textContent = "";
+      if (!dataState.rulesCount) return;
       const seq = ++runSeq;
       run.disabled = true;
       run.textContent = "Checking…";
@@ -369,8 +426,8 @@
       } catch (cause) {
         if (seq === runSeq) error.textContent = `Could not check policies: ${cause && cause.message ? cause.message : cause}`;
       } finally {
-        run.disabled = false;
         run.textContent = "Check policy";
+        syncRunButton();
       }
     }
 
@@ -396,7 +453,8 @@
         ? `${ruleTitle(outcome.rule)} · ${rulePriority(outcome.rule)}`
         : outcome.status === "pending" ? "Answer the question below to finish the check." : "Default rules should always match. Refresh the dashboard data and try again.";
       bannerCopy.append(node("span", "tp-outcome-rule", summary));
-      banner.append(node("span", "tp-outcome-dot"), bannerCopy);
+      const outcomeIcon = { allow: "check", block: "block", warn: "warn", isolate: "warn", pending: "question" }[outcome.status] || "question";
+      banner.append(icon(outcomeIcon, "tp-outcome-icon"), bannerCopy);
       const highlightable = stages.filter(result => result.state === "matched");
       if (highlightable.length) {
         const show = node("button", "tp-secondary", "Show on page");
@@ -446,6 +504,9 @@
         details.append(reasons);
       }
       results.append(details);
+      results.classList.remove("tp-enter");
+      void results.offsetWidth;
+      results.classList.add("tp-enter");
     }
 
     // Matcher reasons are written for debugging ("umbrella.destination.
@@ -479,8 +540,12 @@
     }
 
     function stageRow(result) {
-      const row = node("li", `tp-stage tp-stage-${result.state}`);
-      row.append(node("span", "tp-stage-name", result.stage.label));
+      const row = node("li", `tp-stage tp-stage-${result.state}${result.state === "matched" ? ` tp-stage-${result.action}` : ""}`);
+      const markerIcon = result.state === "matched"
+        ? ({ allow: "check", block: "block", warn: "warn", isolate: "warn" }[result.action] || "question")
+        : result.state === "needs-answer" ? "question" : null;
+      const marker = markerIcon ? icon(markerIcon, "tp-stage-marker") : node("span", "tp-stage-marker");
+      row.append(marker, node("span", "tp-stage-name", result.stage.label));
       const body = node("div", "tp-stage-body");
       if (result.state === "matched") {
         const rule = result.match.rule;
@@ -588,6 +653,50 @@
     }
     restore();
 
+    // Data readiness -------------------------------------------------------
+    function syncRunButton() {
+      run.disabled = !dataState.rulesCount;
+      run.title = dataState.rulesCount ? "" : "Waiting for policy rules to load";
+    }
+
+    function renderDataStatus() {
+      const missing = Object.values(model.SOURCES).flatMap(source => source.catalogs || [])
+        .filter(key => !Object.prototype.hasOwnProperty.call(activeCatalogs, key));
+      dataStatus.replaceChildren();
+      dataStatus.className = "tp-data-status";
+      let title = "";
+      let detail = "";
+      if (dataState.stalled && !dataState.rulesCount) {
+        dataStatus.classList.add("is-stalled");
+        title = "Policy data hasn't loaded";
+        detail = dataState.context === "dashboard"
+          ? "The checker reads your rules with the dashboard's sign-in. Reload the policy page; if it keeps happening, sign in again."
+          : "Open the Secure Access dashboard's policy page so the checker can read your rules.";
+      } else if (!dataState.rulesCount) {
+        title = "Loading your policy…";
+        detail = "Reading rules and identities from the dashboard. You can fill in the form meanwhile.";
+      } else if (missing.length && !dataState.stalled) {
+        title = `Loaded ${dataState.rulesCount} rules`;
+        detail = "Still loading identity lists. Pickers fill in as they arrive.";
+        dataStatus.classList.add("is-quiet");
+      }
+      dataStatus.hidden = !title;
+      if (title) {
+        if (!dataState.stalled) dataStatus.append(node("span", "tp-spinner"));
+        const copy = node("span", "tp-data-copy");
+        copy.append(node("strong", "", title), node("span", "", detail));
+        dataStatus.append(copy);
+      }
+      syncRunButton();
+    }
+
+    // { rulesCount, catalogs, stalled, context: "dashboard" | "toolbar" }
+    function setData(next) {
+      dataState = { ...dataState, ...next };
+      if (next.catalogs) updateCatalogs(next.catalogs);
+      else renderDataStatus();
+    }
+
     function updateCatalogs(nextCatalogs) {
       activeCatalogs = nextCatalogs || {};
       let draft = null;
@@ -596,9 +705,11 @@
         if (!picker.value && draft && draft.sources && draft.sources[kind]) picker.set(draft.sources[kind]);
         else picker.refresh();
       }
+      renderDataStatus();
     }
+    renderDataStatus();
 
-    return { panel, updateCatalogs, get lastEvaluation() { return lastEvaluation; } };
+    return { panel, updateCatalogs, setData, get lastEvaluation() { return lastEvaluation; } };
   }
 
   root.TrafficPathPanel = { create };
