@@ -9,6 +9,9 @@ async function main() {
   let requests = 0;
   let tokenChecks = 0;
   let fetches = 0;
+  const fetchCalls = [];
+  let webRequestListener;
+  let webRequestFilter;
   const stored = {};
   const addListener = { addListener() {} };
   const chrome = {
@@ -28,14 +31,19 @@ async function main() {
       },
     },
     alarms: { onAlarm: addListener, create() {}, async get() {} },
-    webRequest: { onBeforeSendHeaders: addListener },
+    webRequest: {
+      onBeforeSendHeaders: {
+        addListener(listener, filter) { webRequestListener = listener; webRequestFilter = filter; },
+      },
+    },
     scripting: { async executeScript() {} },
   };
   const sandbox = {
     chrome, console, Date, Map, Set, Promise, URL, setTimeout, clearTimeout,
     importScripts() {}, SecDebugLog: { logEvent() {}, redactToken() { return {}; } },
-    async fetch() {
+    async fetch(url, options) {
       fetches++;
+      fetchCalls.push({ url, authorization: options?.headers?.Authorization });
       return {
         ok: true, status: 200,
         async json() { return { "example.com": { content_categories: [], security_categories: ["1"] } }; },
@@ -46,12 +54,22 @@ async function main() {
   sandbox.self = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync("extension/background/service-worker.js", "utf8"), sandbox);
+  assert.equal(vm.runInContext('tokenKeyForUrl("https://investigate.umbrella.com/domains/categorization/google.com")', sandbox), "mgmt_authz_token");
+  assert.ok(webRequestFilter.urls.includes("https://investigate.umbrella.com/*"));
   const result = await vm.runInContext('lookupDestination("example.com")', sandbox);
   assert.equal(result.ok, true);
   assert.ok(requests >= 1);
   assert.equal(tokenChecks, 1);
   assert.equal(fetches, 2);
-  console.log("destination lookup recovers a token without a sender tab: passed");
+  assert.ok(fetchCalls[0].url.startsWith("https://investigate.umbrella.com/domains/categorization/example.com"));
+  assert.equal(fetchCalls[0].authorization, "Bearer fixture-token");
+  webRequestListener({
+    url: "https://investigate.umbrella.com/domains/categorization/google.com",
+    requestHeaders: [{ name: "Authorization", value: "Bearer ui-token" }],
+  });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(stored.mgmt_authz_token.token, "ui-token");
+  console.log("Investigate lookup uses the UI endpoint and captures its management token: passed");
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; });

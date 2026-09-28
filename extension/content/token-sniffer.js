@@ -42,7 +42,7 @@
 // =============================================================================
 (function () {
   const HOST_TOKEN_MAP = [
-    { pattern: /^https:\/\/management\.api\.umbrella\.com\//, tokenKey: "mgmt_authz_token" },
+    { pattern: /^https:\/\/(management\.api\.umbrella\.com|investigate\.umbrella\.com)\//, tokenKey: "mgmt_authz_token" },
     { pattern: /^https:\/\/api\.opendns\.com\//, tokenKey: "opendns_token" },
     // Checked last: broadest pattern, and management.api.umbrella.com would
     // also match a naive /umbrella\.com/ regex, so host-specific entries

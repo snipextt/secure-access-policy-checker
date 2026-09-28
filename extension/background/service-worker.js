@@ -133,7 +133,7 @@ const TOKEN_REGISTRY = {
 // management.api.umbrella.com would also match a naive /umbrella\.com/-style
 // regex.
 const TOKEN_HOST_MAP = [
-  { pattern: /^https:\/\/management\.api\.umbrella\.com\//, tokenKey: "mgmt_authz_token" },
+  { pattern: /^https:\/\/(management\.api\.umbrella\.com|investigate\.umbrella\.com)\//, tokenKey: "mgmt_authz_token" },
   { pattern: /^https:\/\/api\.opendns\.com\//, tokenKey: "opendns_token" },
   { pattern: /^https:\/\/(api\.sse\.cisco\.com|api\.umbrella\.com)\//, tokenKey: "sse_token" },
 ];
@@ -416,6 +416,7 @@ api.webRequest.onBeforeSendHeaders.addListener(
       "https://api.sse.cisco.com/*",
       "https://api.umbrella.com/*",
       "https://management.api.umbrella.com/*",
+      "https://investigate.umbrella.com/*",
       "https://api.opendns.com/*",
     ],
   },
