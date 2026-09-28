@@ -155,9 +155,10 @@ async function storeToken(tokenKey, token, source, capturedAt, meta) {
   const result = await ST.get(tokenKey);
   const existing = result[tokenKey]; // { token, capturedAt, source } | undefined
 
-  if (existing && existing.capturedAt >= capturedAt) {
-    logEvent("token-capture", "Ignored (existing stored token is same age or newer)", {
+  if (existing && (existing.token === token || existing.capturedAt >= capturedAt)) {
+    logEvent("token-capture", "Ignored (existing token is identical or same age or newer)", {
       tokenKey, source, capturedAt, existingSource: existing.source, existingCapturedAt: existing.capturedAt,
+      sameToken: existing.token === token,
     });
     return;
   }

@@ -69,7 +69,14 @@ async function main() {
   });
   await new Promise(resolve => setTimeout(resolve, 0));
   assert.equal(stored.mgmt_authz_token.token, "ui-token");
-  console.log("Investigate lookup uses the UI endpoint and captures its management token: passed");
+
+  vm.runInContext('_scheduleFetch = () => { globalThis.scheduledFetches = (globalThis.scheduledFetches || 0) + 1; }', sandbox);
+  const newerCapture = Date.now() + 1000;
+  await vm.runInContext(`storeToken("mgmt_authz_token", "duplicate-token", "test", ${newerCapture})`, sandbox);
+  await vm.runInContext(`storeToken("mgmt_authz_token", "duplicate-token", "test", ${newerCapture + 1000})`, sandbox);
+  assert.equal(stored.mgmt_authz_token.capturedAt, newerCapture);
+  assert.equal(vm.runInContext('scheduledFetches', sandbox), 1);
+  console.log("Investigate lookup and identical-token recapture behavior: passed");
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; });
