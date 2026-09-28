@@ -104,7 +104,7 @@
     return (
       /dashboard\.sse\.cisco\.com\/token(?:\?|$)/.test(url) ||
       /dashboard\.sse\.cisco\.com\/piamtoken(?:\?|$)/.test(url) ||
-      /\/auth\/v2\/jwt-bearer\/token(?:\?|$)/.test(url)
+      /\/auth\/v2\/(?:oauth2\/)?jwt-bearer\/token(?:\?|$)/.test(url)
     );
   }
 
@@ -125,7 +125,7 @@
       // from request headers by the existing maybeCapture() path.
 
       // POST .../jwt-bearer/token → Management JWT or SSE admin JWT
-      if (/\/auth\/v2\/jwt-bearer\/token(?:\?|$)/.test(url) && body.access_token) {
+      if (/\/auth\/v2\/(?:oauth2\/)?jwt-bearer\/token(?:\?|$)/.test(url) && body.access_token) {
         if (/management\.api\.umbrella\.com/.test(url)) {
           relay("mgmt_authz_token", body.access_token);
         } else if (/api\.sse\.cisco\.com/.test(url)) {
