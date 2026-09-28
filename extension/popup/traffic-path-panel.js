@@ -446,6 +446,8 @@
       const { outcome, stages, scope, groups } = evaluation;
       const hostLabel = request.destination.host;
 
+      const pending = stages.find(result => result.state === "needs-answer");
+      const question = pending && model.questionFor(pending, hostLabel, evaluation.lookups || activeCatalogs);
       const banner = node("div", `tp-outcome tp-outcome-${outcome.status}`);
       const bannerCopy = node("div", "tp-outcome-copy");
       bannerCopy.append(node("strong", "tp-outcome-title", outcome.title));
@@ -462,19 +464,20 @@
         show.addEventListener("click", () => onHighlight(highlightTargets(highlightable), summaryFor(request, evaluation)));
         banner.append(show);
       }
-      results.append(banner);
+      // With a question to answer, the question itself is the headline.
+      if (question && outcome.status === "pending") results.append(questionCard(question, pending.match.rule));
+      else {
+        results.append(banner);
+        if (question) results.append(questionCard(question, pending.match.rule));
+        else if (pending) results.append(node("p", "tp-note", pending.match.reason));
+      }
+      const answers = answersStrip(hostLabel, evaluation);
+      if (answers) results.append(answers);
 
       const flow = node("ol", "tp-flow");
       flow.setAttribute("aria-label", "Enforcement stages");
       for (const result of stages) flow.append(stageRow(result));
       results.append(flow);
-
-      const pending = stages.find(result => result.state === "needs-answer");
-      if (pending) {
-        const question = model.questionFor(pending, hostLabel, evaluation.lookups || activeCatalogs);
-        if (question) results.append(questionCard(question));
-        else results.append(node("p", "tp-note", pending.match.reason));
-      }
 
       const details = node("details", "tp-details");
       details.append(node("summary", "", "What was checked"));
@@ -558,7 +561,9 @@
         if (result.webProfileId) body.append(node("span", "tp-stage-meta", "Security profile controls on this rule can still block content."));
       } else {
         const text = result.state === "needs-answer"
-          ? ["Needs a detail", `${ruleTitle(result.match.rule)} (${rulePriority(result.match.rule)}) depends on ${result.match.pending && result.match.pending.length ? "what the destination is" : "the traffic port or protocol"}.`]
+          ? ["Waiting on your answer", result.match.pending && result.match.pending.length
+            ? `Decided by ${ruleTitle(result.match.rule)} (${rulePriority(result.match.rule)}) or a later rule.`
+            : `${ruleTitle(result.match.rule)} (${rulePriority(result.match.rule)}) depends on the traffic port or protocol.`]
           : result.state === "no-match" ? ["No rule matched", "No loaded rule covers this stage."]
             : result.state === "not-reached" ? ["Not reached", result.reason]
               : ["Not evaluated", result.reason || ""];
@@ -570,37 +575,80 @@
       return row;
     }
 
-    function questionCard(question) {
+    function questionCard(question, rule) {
       const card = node("form", "tp-question");
-      card.append(node("strong", "tp-question-title", question.prompt));
-      card.append(node("p", "tp-question-why", `“${question.ruleName}” is evaluated before any later rule and depends on this. Tick everything that applies, or none.`));
+      card.setAttribute("aria-labelledby", "tp-question-title");
+      const head = node("div", "tp-question-head");
+      const title = node("strong", "tp-question-title", question.prompt);
+      title.id = "tp-question-title";
+      head.append(icon("question", "tp-question-icon"), title);
+      card.append(head);
+      const why = node("p", "tp-question-why");
+      why.append(node("b", "", ruleTitle(rule)), document.createTextNode(` (${rulePriority(rule)}) comes first and only applies if it's one of these. Pick all that apply.`));
+      card.append(why);
+      const boxes = [];
       for (const group of question.groups) {
         const set = node("fieldset", "tp-question-group");
-        const legend = node("legend", "", group.noun.charAt(0).toUpperCase() + group.noun.slice(1));
-        set.append(legend);
+        if (question.groups.length > 1) set.append(node("legend", "", group.noun.charAt(0).toUpperCase() + group.noun.slice(1)));
+        else set.setAttribute("aria-label", group.noun);
+        const chips = node("div", "tp-choice-list");
         for (const option of group.options) {
-          const label = node("label", "tp-option");
-          const box = node("input", "");
+          const label = node("label", "tp-choice");
+          const box = node("input", "tp-choice-box");
           box.type = "checkbox";
           box.value = option.id;
-          const copy = node("span", "tp-option-copy");
-          copy.append(node("span", "", option.label));
-          if (option.hint) copy.append(node("span", "tp-option-hint", option.hint));
-          label.append(box, copy);
-          set.append(label);
+          boxes.push(box);
+          const copy = node("span", "tp-choice-copy");
+          copy.append(node("span", "tp-choice-label", option.label));
+          if (option.hint) copy.append(node("span", "tp-choice-hint", option.hint));
+          label.append(box, icon("check", "tp-choice-check"), copy);
+          chips.append(label);
         }
+        set.append(chips);
         card.append(set);
       }
-      const submit = node("button", "tp-primary", "Continue");
+      const actions = node("div", "tp-question-actions");
+      const submit = node("button", "tp-primary", "None of these");
       submit.type = "submit";
-      card.append(submit);
+      const hint = node("span", "tp-question-hint", "Leave everything unticked if none apply.");
+      const sync = () => {
+        const count = boxes.filter(box => box.checked).length;
+        submit.textContent = count ? `Continue with ${count} selected` : "None of these";
+        hint.hidden = count > 0;
+      };
+      boxes.forEach(box => box.addEventListener("change", sync));
+      actions.append(submit, hint);
+      card.append(actions);
       card.addEventListener("submit", event => {
         event.preventDefault();
-        const picked = [...card.querySelectorAll("input[type=checkbox]:checked")].map(box => box.value);
+        const picked = boxes.filter(box => box.checked).map(box => box.value);
         facts = model.answer(facts, question, picked);
         check();
       });
       return card;
+    }
+
+    // What the user has told us about the destination, with a way to undo.
+    function answersStrip(hostLabel, evaluation) {
+      const lookups = evaluation.lookups || activeCatalogs;
+      const items = Object.entries(facts).flatMap(([field, value]) => [
+        ...value.yes.map(id => ({ yes: true, label: model.valueLabel(field, id, lookups) })),
+        ...value.no.map(id => ({ yes: false, label: model.valueLabel(field, id, lookups) })),
+      ]);
+      if (!items.length) return null;
+      const strip = node("div", "tp-answers");
+      strip.append(node("span", "tp-answers-lead", `You said ${hostLabel}`));
+      const list = node("span", "tp-answers-list");
+      items.forEach(item => {
+        const chip = node("span", `tp-answer ${item.yes ? "is-yes" : "is-no"}`);
+        chip.append(node("span", "tp-answer-verb", item.yes ? "is" : "isn't"), document.createTextNode(` ${item.label}`));
+        list.append(chip);
+      });
+      const change = node("button", "tp-link", "Change");
+      change.type = "button";
+      change.addEventListener("click", () => { facts = {}; check(); });
+      strip.append(list, change);
+      return strip;
     }
 
     function highlightTargets(matched) {

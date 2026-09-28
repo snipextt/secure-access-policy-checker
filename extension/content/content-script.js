@@ -162,19 +162,11 @@ function findDefaultRuleRows() {
 // ---------------------------------------------------------------------------
 
 function getRuleName(element) {
-  // Skip the Policy Checker's own badge when reading the first cell.
-  const firstCell = element.querySelector("td:first-child");
-  const firstCellText = firstCell
-    ? Array.from(firstCell.childNodes)
-        .filter((child) => !(child.classList && child.classList.contains("sec-hit-badge-row")))
-        .map((child) => child.textContent)
-        .join("")
-    : "";
   const name =
     element.querySelector("p.cds-text__weight--bold")?.textContent ||
     element.querySelector("[data-rule-name]")?.textContent ||
     element.querySelector(".rule-name")?.textContent ||
-    firstCellText ||
+    element.querySelector("td:first-child")?.textContent ||
     element.textContent.trim().split("\n")[0];
 
   return (name || "unknown").trim();
@@ -281,55 +273,53 @@ function highlightRule(ruleName, matchedConditions) {
 }
 
 // ---------------------------------------------------------------------------
-// highlightRules — Policy Checker result on the page. Marks every matched
-// rule row with a ring in its action colour and a badge naming the stages it
-// decided ("DNS · Web  Block"), then scrolls to the first one. Marks stay
-// until the next check or until the docked result card is closed.
+// highlightRules — Policy Checker result on the page. Draws a ring over each
+// matched rule row with a tag naming the stages it decided ("DNS · Web —
+// Block"), then scrolls to the first one. The ring lives in its own fixed
+// overlay layer, so Cisco's table layout is never touched; it follows the
+// row through scrolling, resizing and re-renders until the next check or
+// until the result card is closed.
 // ---------------------------------------------------------------------------
-var HIT_CLASS = "sec-hit";
+var HIT_LAYER_ID = "sec-hit-layer";
+var currentHits = [];
+var hitSyncFrame = null;
+var hitListenersBound = false;
+var HIT_ACTIONS = ["allow", "block", "warn", "isolate"];
 
 function ensureHitStyle() {
   if (document.getElementById("sec-hit-style")) return;
   const style = document.createElement("style");
   style.id = "sec-hit-style";
   style.textContent = `
-    tr.sec-hit td {
-      background-color: color-mix(in srgb, var(--sec-hit) 7%, transparent) !important;
-      border-top: 2px solid var(--sec-hit) !important;
-      border-bottom: 2px solid var(--sec-hit) !important;
+    #sec-hit-layer { position: fixed; inset: 0; z-index: 2147483000; pointer-events: none; }
+    .sec-hit-ring {
+      --sec-hit: #b91c1c; --sec-hit-soft: rgba(185, 28, 28, .07);
+      position: fixed; box-sizing: border-box; border: 2px solid var(--sec-hit); border-radius: 6px;
+      background: var(--sec-hit-soft); box-shadow: 0 0 0 4px color-mix(in srgb, var(--sec-hit) 14%, transparent);
+      opacity: 0; transition: opacity .2s ease;
     }
-    tr.sec-hit td:first-child { border-left: 4px solid var(--sec-hit) !important; }
-    tr.sec-hit td:last-child { border-right: 2px solid var(--sec-hit) !important; }
-    tr.sec-hit { --sec-hit: #b91c1c; }
-    tr.sec-hit.sec-hit-allow { --sec-hit: #15803d; }
-    tr.sec-hit.sec-hit-warn, tr.sec-hit.sec-hit-isolate { --sec-hit: #a16207; }
-    .sec-hit-badge {
-      display: inline-flex; align-items: center; gap: 6px;
-      margin: 0 0 4px; padding: 2px 8px 2px 6px;
-      border-radius: 999px; background: var(--sec-hit); color: #fff;
-      font: 700 11px/1.4 Inter, system-ui, sans-serif; white-space: nowrap;
-      box-shadow: 0 0 0 3px color-mix(in srgb, var(--sec-hit) 22%, transparent);
+    .sec-hit-ring.sec-hit-in { opacity: 1; }
+    .sec-hit-ring.sec-hit-allow { --sec-hit: #15803d; --sec-hit-soft: rgba(21, 128, 61, .06); }
+    .sec-hit-ring.sec-hit-warn, .sec-hit-ring.sec-hit-isolate { --sec-hit: #a16207; --sec-hit-soft: rgba(161, 98, 7, .07); }
+    .sec-hit-ring[hidden] { display: none; }
+    .sec-hit-tag {
+      position: absolute; left: 10px; top: -12px; display: inline-flex; align-items: center; gap: 6px;
+      max-width: calc(100% - 20px); height: 22px; padding: 0 9px 0 7px; border-radius: 999px;
+      background: var(--sec-hit); color: #fff; box-shadow: 0 2px 6px rgba(15, 23, 42, .18);
+      font: 600 11px/22px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .sec-hit-badge::before {
-      content: ""; width: 8px; height: 8px; border-radius: 50%;
-      background: #fff; box-shadow: 0 0 0 2px color-mix(in srgb, #fff 45%, transparent);
-    }
+    .sec-hit-tag-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #fff; }
+    .sec-hit-tag-action { padding-left: 7px; border-left: 1px solid rgba(255, 255, 255, .4); font-weight: 700; }
     @media (prefers-reduced-motion: no-preference) {
-      tr.sec-hit .sec-hit-badge { animation: sec-hit-pulse 1.2s ease-out 2; }
+      .sec-hit-ring.sec-hit-in { animation: sec-hit-pulse 1.1s ease-out 1; }
     }
     @keyframes sec-hit-pulse {
-      0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--sec-hit) 55%, transparent); }
-      100% { box-shadow: 0 0 0 10px transparent; }
+      0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--sec-hit) 45%, transparent); }
+      100% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--sec-hit) 14%, transparent); }
     }
   `;
   document.head.appendChild(style);
-}
-
-function clearRuleHits() {
-  document.querySelectorAll(`tr.${HIT_CLASS}`).forEach((row) => {
-    row.classList.remove(HIT_CLASS, "sec-hit-allow", "sec-hit-block", "sec-hit-warn", "sec-hit-isolate");
-  });
-  document.querySelectorAll(".sec-hit-badge-row").forEach((badge) => badge.remove());
 }
 
 function findRuleRowByName(ruleName) {
@@ -338,36 +328,78 @@ function findRuleRowByName(ruleName) {
     findDefaultRuleRows().find((row) => getRuleName(row).toLowerCase() === wanted) || null;
 }
 
+function syncRuleHits() {
+  hitSyncFrame = null;
+  for (const hit of currentHits) {
+    // Cisco's table re-renders rows; re-find by name when ours was replaced.
+    if (!hit.row || !hit.row.isConnected) hit.row = findRuleRowByName(hit.ruleName);
+    const rect = hit.row && hit.row.getBoundingClientRect();
+    const visible = rect && rect.height > 0 && rect.bottom > 0 && rect.top < window.innerHeight;
+    hit.ring.hidden = !visible;
+    if (!visible) continue;
+    hit.ring.style.left = `${rect.left - 3}px`;
+    hit.ring.style.top = `${rect.top - 2}px`;
+    hit.ring.style.width = `${rect.width + 6}px`;
+    hit.ring.style.height = `${rect.height + 4}px`;
+  }
+}
+
+function scheduleHitSync() {
+  if (!currentHits.length || hitSyncFrame) return;
+  hitSyncFrame = requestAnimationFrame(syncRuleHits);
+}
+
+function clearRuleHits() {
+  currentHits = [];
+  const layer = document.getElementById(HIT_LAYER_ID);
+  if (layer) layer.remove();
+}
+
 // targets: [{ ruleName, stages: ["DNS", "Web"], action: "block" }]
 function highlightRules(targets) {
   ensureHitStyle();
   clearRuleHits();
-  let first = null;
+  const layer = document.createElement("div");
+  layer.id = HIT_LAYER_ID;
+  document.body.appendChild(layer);
+  if (!hitListenersBound) {
+    hitListenersBound = true;
+    window.addEventListener("scroll", scheduleHitSync, true);
+    window.addEventListener("resize", scheduleHitSync);
+    if (window.MutationObserver) new MutationObserver(scheduleHitSync).observe(document.body, { childList: true, subtree: true });
+  }
   const missing = [];
   for (const target of targets || []) {
     const row = findRuleRowByName(target.ruleName);
     if (!row) { missing.push(target.ruleName); continue; }
-    const action = ["allow", "block", "warn", "isolate"].includes(target.action) ? target.action : "block";
-    row.classList.add(HIT_CLASS, `sec-hit-${action}`);
-    const cell = row.querySelector("td");
-    if (cell) {
-      const badge = document.createElement("span");
-      badge.className = "sec-hit-badge";
-      const verb = action.charAt(0).toUpperCase() + action.slice(1);
-      const stages = (target.stages || []).join(" · ");
-      badge.textContent = stages ? `${stages}: ${verb}` : verb;
-      const holder = document.createElement("div");
-      holder.className = "sec-hit-badge-row";
-      holder.appendChild(badge);
-      cell.prepend(holder);
-    }
-    if (!first) first = row;
+    const action = HIT_ACTIONS.includes(target.action) ? target.action : "block";
+    const ring = document.createElement("div");
+    ring.className = `sec-hit-ring sec-hit-${action}`;
+    const tag = document.createElement("span");
+    tag.className = "sec-hit-tag";
+    const dot = document.createElement("span");
+    dot.className = "sec-hit-tag-dot";
+    const stages = document.createElement("span");
+    stages.textContent = (target.stages || []).join(" · ") || "Match";
+    const verb = document.createElement("span");
+    verb.className = "sec-hit-tag-action";
+    verb.textContent = action.charAt(0).toUpperCase() + action.slice(1);
+    tag.append(dot, stages, verb);
+    ring.appendChild(tag);
+    layer.appendChild(ring);
+    currentHits.push({ ruleName: target.ruleName, row, ring });
   }
-  if (first) first.scrollIntoView({ behavior: "smooth", block: "center" });
-  if (missing.length) {
-    console.warn("[SecPolicyChecker] HIGHLIGHT_RULES: no row found for", missing);
-  }
-  return { found: (targets || []).length - missing.length, missing };
+  syncRuleHits();
+  requestAnimationFrame(() => currentHits.forEach((hit) => hit.ring.classList.add("sec-hit-in")));
+  if (currentHits[0]) scrollToRuleHit(currentHits[0].ruleName);
+  if (missing.length) console.warn("[SecPolicyChecker] HIGHLIGHT_RULES: no row found for", missing);
+  return { found: currentHits.length, missing };
+}
+
+function scrollToRuleHit(ruleName) {
+  const hit = currentHits.find((item) => item.ruleName === ruleName);
+  const row = (hit && hit.row && hit.row.isConnected ? hit.row : null) || findRuleRowByName(ruleName);
+  if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 // ---------------------------------------------------------------------------
@@ -2218,31 +2250,51 @@ function ensureEmbeddedPopupStyle() {
     }
 
     #sec-result-dock {
-      --sec-dock-accent: #64748b;
-      position: fixed; right: 24px; bottom: 88px; z-index: 2147483645;
-      width: min(340px, calc(100vw - 48px)); padding: 12px 14px 12px 16px;
-      border: 1px solid #e2e8f0; border-left: 4px solid var(--sec-dock-accent);
-      border-radius: 4px; background: #fff; color: #1e293b;
-      box-shadow: 0 10px 30px rgba(15, 23, 42, .18);
-      font: 13px/1.45 Inter, system-ui, sans-serif;
+      --sec-dock-accent: #64748b; --sec-dock-soft: #f1f5f9;
+      position: fixed; right: 24px; bottom: 88px; z-index: 2147483645; box-sizing: border-box;
+      width: min(360px, calc(100vw - 48px)); padding: 14px 14px 12px;
+      border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; color: #1e293b;
+      box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 18px 44px rgba(15,23,42,.18);
+      font: 13px/1.45 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      opacity: 0; transform: translateY(8px); transition: opacity .2s ease, transform .25s cubic-bezier(.2,.8,.2,1);
     }
-    #sec-result-dock.sec-dock-allow { --sec-dock-accent: #15803d; }
-    #sec-result-dock.sec-dock-block { --sec-dock-accent: #b91c1c; }
-    #sec-result-dock.sec-dock-warn, #sec-result-dock.sec-dock-isolate { --sec-dock-accent: #a16207; }
-    #sec-result-dock.sec-dock-pending { --sec-dock-accent: #9a5b00; }
-    #sec-result-dock .sec-dock-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-    #sec-result-dock .sec-dock-kicker { min-width: 0; overflow: hidden; color: #64748b; font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-    #sec-result-dock .sec-dock-close { flex: none; width: 28px; height: 28px; margin: -6px -8px 0 0; border: 0; background: transparent; color: #64748b; font-size: 18px; line-height: 1; cursor: pointer; }
-    #sec-result-dock .sec-dock-close:hover { color: #0f172a; }
-    #sec-result-dock .sec-dock-title { display: block; color: var(--sec-dock-accent); font-size: 16px; line-height: 1.3; }
-    #sec-result-dock .sec-dock-stages { margin: 8px 0 10px; padding: 0; list-style: none; }
-    #sec-result-dock .sec-dock-stages li { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 8px; padding: 3px 0; border-top: 1px solid #f1f5f9; }
-    #sec-result-dock .sec-dock-stages li:first-child { border-top: 0; }
-    #sec-result-dock .sec-dock-stage { color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding-top: 1px; }
-    #sec-result-dock .sec-dock-value { min-width: 0; overflow-wrap: anywhere; }
-    #sec-result-dock .sec-dock-expand { min-height: 32px; padding: 5px 12px; border: 1px solid #0f172a; border-radius: 4px; background: #0f172a; color: #fff; font: 600 12px Inter, system-ui, sans-serif; cursor: pointer; }
+    #sec-result-dock.sec-dock-in { opacity: 1; transform: none; }
+    #sec-result-dock * { box-sizing: border-box; }
+    #sec-result-dock.sec-dock-allow { --sec-dock-accent: #15803d; --sec-dock-soft: #dcfce7; }
+    #sec-result-dock.sec-dock-block { --sec-dock-accent: #b91c1c; --sec-dock-soft: #fee2e2; }
+    #sec-result-dock.sec-dock-warn, #sec-result-dock.sec-dock-isolate { --sec-dock-accent: #a16207; --sec-dock-soft: #fef3c7; }
+    #sec-result-dock.sec-dock-pending { --sec-dock-accent: #9a5b00; --sec-dock-soft: #ffedd5; }
+    #sec-result-dock .sec-dock-head { display: flex; align-items: center; gap: 10px; }
+    #sec-result-dock .sec-dock-icon { flex: none; display: grid; place-items: center; width: 32px; height: 32px; padding: 7px; border-radius: 50%; background: var(--sec-dock-soft); color: var(--sec-dock-accent); }
+    #sec-result-dock .sec-dock-icon svg { display: block; width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    #sec-result-dock .sec-dock-titles { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+    #sec-result-dock .sec-dock-title { color: #0f172a; font-size: 15px; line-height: 1.3; letter-spacing: -.01em; }
+    #sec-result-dock .sec-dock-sub { overflow: hidden; color: #64748b; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+    #sec-result-dock .sec-dock-close { flex: none; align-self: flex-start; width: 28px; height: 28px; margin: -4px -4px 0 0; border: 0; border-radius: 6px; background: transparent; color: #64748b; font-size: 18px; line-height: 1; cursor: pointer; }
+    #sec-result-dock .sec-dock-close:hover { background: #f1f5f9; color: #0f172a; }
+    #sec-result-dock .sec-dock-stages { margin: 12px -6px 10px; padding: 0; list-style: none; }
+    #sec-result-dock .sec-dock-stage-inner {
+      display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: center; gap: 8px; width: 100%;
+      min-height: 36px; padding: 6px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; text-align: left;
+    }
+    #sec-result-dock button.sec-dock-stage-inner { cursor: pointer; }
+    #sec-result-dock button.sec-dock-stage-inner:hover { background: #f5f7fa; }
+    #sec-result-dock .sec-dock-stage { color: #64748b; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+    #sec-result-dock .sec-dock-value { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    #sec-result-dock .sec-dock-rule { min-width: 0; overflow: hidden; color: #0f172a; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+    #sec-result-dock .sec-dock-muted { color: #94a3b8; }
+    #sec-result-dock .sec-dock-pill { flex: none; padding: 1px 8px; border-radius: 999px; background: #f1f5f9; color: #475569; font-size: 11px; font-weight: 700; }
+    #sec-result-dock .sec-dock-pill-allow { background: #dcfce7; color: #15803d; }
+    #sec-result-dock .sec-dock-pill-block { background: #fee2e2; color: #b91c1c; }
+    #sec-result-dock .sec-dock-pill-warn, #sec-result-dock .sec-dock-pill-isolate { background: #fef3c7; color: #a16207; }
+    #sec-result-dock .sec-dock-go { width: 7px; height: 7px; margin-right: 4px; border-top: 1.5px solid #94a3b8; border-right: 1.5px solid #94a3b8; transform: rotate(45deg); }
+    #sec-result-dock .sec-dock-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 10px; border-top: 1px solid #f1f5f9; }
+    #sec-result-dock .sec-dock-expand { min-height: 32px; padding: 5px 14px; border: 1px solid #0f172a; border-radius: 6px; background: #0f172a; color: #fff; font: 600 12px Inter, system-ui, sans-serif; cursor: pointer; }
     #sec-result-dock .sec-dock-expand:hover { background: #1e293b; }
+    #sec-result-dock .sec-dock-clear { min-height: 32px; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: #475569; font: 600 12px Inter, system-ui, sans-serif; cursor: pointer; }
+    #sec-result-dock .sec-dock-clear:hover { background: #f1f5f9; color: #0f172a; }
     #sec-result-dock button:focus-visible { outline: 2px solid #1d6fd8; outline-offset: 2px; }
+    @media (prefers-reduced-motion: reduce) { #sec-result-dock { transition: none; } }
 
     #sec-embed-iframe {
       width: 100%;
@@ -2379,6 +2431,12 @@ function initEmbeddedPopup() {
 // only: rule names are tenant data.
 // ---------------------------------------------------------------------------
 var RESULT_DOCK_ID = "sec-result-dock";
+var DOCK_ICONS = {
+  allow: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  block: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M6.5 17.5l11-11"/></svg>',
+  warn: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5l8.5 15h-17z"/><path d="M12 10v4M12 16.8h.01"/></svg>',
+  pending: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.6a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.4M12 16.8h.01"/></svg>',
+};
 
 function hideResultDock(clearHits) {
   const dock = document.getElementById(RESULT_DOCK_ID);
@@ -2390,58 +2448,71 @@ function showResultDock(summary, panel) {
   hideResultDock(false);
   const text = (value) => (typeof value === "string" ? value : "");
   const status = ["allow", "block", "warn", "isolate", "pending", "unknown"].includes(summary.status) ? summary.status : "unknown";
-  const dock = document.createElement("section");
+  const make = (tag, className, content) => {
+    const el = document.createElement(tag);
+    if (className) el.className = className;
+    if (content !== undefined) el.textContent = content;
+    return el;
+  };
+  const dock = make("section");
   dock.id = RESULT_DOCK_ID;
   dock.className = `sec-dock-${status}`;
   dock.setAttribute("aria-label", "Policy check result");
 
-  const head = document.createElement("div");
-  head.className = "sec-dock-head";
-  const kicker = document.createElement("span");
-  kicker.className = "sec-dock-kicker";
-  kicker.textContent = `Policy check · ${text(summary.destination)}`;
-  const close = document.createElement("button");
+  const head = make("div", "sec-dock-head");
+  const iconEl = make("span", "sec-dock-icon");
+  iconEl.innerHTML = DOCK_ICONS[status === "isolate" ? "warn" : status] || DOCK_ICONS.pending; // constant markup
+  const titles = make("div", "sec-dock-titles");
+  titles.append(make("strong", "sec-dock-title", text(summary.title)), make("span", "sec-dock-sub", text(summary.destination)));
+  const close = make("button", "sec-dock-close", "×");
   close.type = "button";
-  close.className = "sec-dock-close";
   close.setAttribute("aria-label", "Close result and clear highlights");
-  close.textContent = "×";
   close.addEventListener("click", () => hideResultDock(true));
-  head.append(kicker, close);
+  head.append(iconEl, titles, close);
 
-  const title = document.createElement("strong");
-  title.className = "sec-dock-title";
-  title.textContent = text(summary.title);
-
-  const list = document.createElement("ul");
-  list.className = "sec-dock-stages";
+  const list = make("ul", "sec-dock-stages");
   for (const stage of Array.isArray(summary.stages) ? summary.stages : []) {
-    const item = document.createElement("li");
-    const label = document.createElement("span");
-    label.className = "sec-dock-stage";
-    label.textContent = text(stage.label);
-    const value = document.createElement("span");
-    value.className = "sec-dock-value";
-    value.textContent = stage.state === "matched"
-      ? `${text(stage.action)} · ${text(stage.rule)}`
-      : stage.state === "needs-answer" ? "Needs a detail"
-        : stage.state === "not-reached" ? "Not reached"
-          : stage.state === "no-match" ? "No rule matched" : "Not evaluated";
-    item.append(label, value);
+    const matched = stage.state === "matched" && text(stage.rule);
+    const item = make("li", `sec-dock-stage-row sec-dock-${stage.state}`);
+    const inner = make(matched ? "button" : "div", "sec-dock-stage-inner");
+    if (matched) {
+      inner.type = "button";
+      inner.title = "Scroll to this rule";
+      inner.addEventListener("click", () => scrollToRuleHit(stage.rule));
+    }
+    inner.appendChild(make("span", "sec-dock-stage", text(stage.label)));
+    const value = make("span", "sec-dock-value");
+    if (matched) {
+      const action = String(stage.action || "").toLowerCase();
+      value.append(make("span", `sec-dock-pill sec-dock-pill-${action}`, text(stage.action)), make("span", "sec-dock-rule", text(stage.rule)));
+    } else {
+      value.appendChild(make("span", "sec-dock-muted",
+        stage.state === "needs-answer" ? "Waiting on an answer in the checker"
+          : stage.state === "not-reached" ? "Not reached"
+            : stage.state === "no-match" ? "No rule matched" : "Not evaluated"));
+    }
+    inner.appendChild(value);
+    if (matched) inner.appendChild(make("span", "sec-dock-go"));
+    item.appendChild(inner);
     list.appendChild(item);
   }
 
-  const expand = document.createElement("button");
+  const foot = make("div", "sec-dock-foot");
+  const expand = make("button", "sec-dock-expand", "Open checker");
   expand.type = "button";
-  expand.className = "sec-dock-expand";
-  expand.textContent = "Open checker";
   expand.addEventListener("click", (e) => {
     e.stopPropagation();
     hideResultDock(false);
     panel.classList.add("sec-embed-open");
   });
+  const clear = make("button", "sec-dock-clear", "Clear highlights");
+  clear.type = "button";
+  clear.addEventListener("click", () => hideResultDock(true));
+  foot.append(expand, clear);
 
-  dock.append(head, title, list, expand);
+  dock.append(head, list, foot);
   document.body.appendChild(dock);
+  requestAnimationFrame(() => dock.classList.add("sec-dock-in"));
 }
 
 // ---------------------------------------------------------------------------

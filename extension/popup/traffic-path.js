@@ -436,7 +436,8 @@
     return {
       stage: result.stage.key,
       ruleName: rule.ruleName || rule.name || "Unnamed rule",
-      prompt: `Which of these describe ${host}?`,
+      host,
+      prompt: `Is ${host} any of these?`,
       groups: pending.map(item => ({
         field: item.field,
         noun: (QUESTION_FIELDS[item.field] || { noun: "value" }).noun,
