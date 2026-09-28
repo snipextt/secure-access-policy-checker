@@ -2482,6 +2482,74 @@ function catalogHost(catalog) {
 }
 
 // ---------------------------------------------------------------------------
+// Destination lookup (Cisco Investigate, as the dashboard's Investigate page
+// calls it, with the management token):
+//   /domains/categorization/{host}?taloscategories=true → content and
+//     security categories as bit positions (same numbering as the bundled
+//     category lookups)
+//   /url/{host}/classifiers → security categories by name; catches threats
+//     the domain categorization misses (verified: a Malware domain from
+//     Activity Search that categorization no longer lists)
+//   /get-casi-data?fqdn={host} → the cloud application ("TikTok")
+// One host per call (the bulk endpoint needs a higher Investigate tier).
+// Cached per host in storage.session (survives the worker going idle, cleared
+// with the browser session) so rechecks don't spend Investigate quota; the
+// Tier 1 license answers 403 once its rate limit is hit.
+// ---------------------------------------------------------------------------
+var destinationLookupCache = new Map();
+var LOOKUP_CACHE_KEY = "psc_destination_lookups";
+
+async function lookupDestination(host, tabId) {
+  const name = host.trim().toLowerCase();
+  if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(name)) return { ok: false, error: "not a domain" };
+  if (destinationLookupCache.has(name)) return destinationLookupCache.get(name);
+  try {
+    const stored = ((await api.storage.session.get(LOOKUP_CACHE_KEY))[LOOKUP_CACHE_KEY] || {})[name];
+    if (stored) { destinationLookupCache.set(name, stored); return stored; }
+  } catch (_) {}
+  const tokenObj = await getFreshToken("mgmt_authz_token", tabId);
+  if (!tokenObj) return { ok: false, error: "no token" };
+  const headers = { Authorization: `Bearer ${tokenObj.token}`, Accept: "application/json" };
+  const encoded = encodeURIComponent(name);
+  const [categorization, casi, classifiers] = await Promise.all([
+    fetch(`https://investigate.umbrella.com/domains/categorization/${encoded}?taloscategories=true`, { headers }),
+    fetch(`https://investigate.umbrella.com/get-casi-data?fqdn=${encoded}`, { headers }).catch(() => null),
+    fetch(`https://investigate.umbrella.com/url/${encoded}/classifiers`, { headers }).catch(() => null),
+  ]);
+  if (!categorization.ok) {
+    logEvent("destination-lookup", "categorization non-OK", { status: categorization.status });
+    return { ok: false, error: `Investigate returned ${categorization.status}` };
+  }
+  const entry = ((await categorization.json()) || {})[name] || {};
+  let app = null;
+  if (casi && casi.ok) {
+    try {
+      const data = JSON.parse((await casi.text()) || "null");
+      if (data && data.name && data.service_type !== "Website") app = { name: String(data.name), category: data.category || "" };
+    } catch (_) {}
+  }
+  let securityNames = [];
+  if (classifiers && classifiers.ok) {
+    try { securityNames = ((await classifiers.json()) || {}).securityCategories || []; } catch (_) {}
+  }
+  const result = {
+    ok: true,
+    host: name,
+    contentBits: (entry.content_categories || []).map(String),
+    securityBits: (entry.security_categories || []).map(String),
+    securityNames: securityNames.map(String),
+    app,
+  };
+  destinationLookupCache.set(name, result);
+  try {
+    const all = (await api.storage.session.get(LOOKUP_CACHE_KEY))[LOOKUP_CACHE_KEY] || {};
+    all[name] = result;
+    await api.storage.session.set({ [LOOKUP_CACHE_KEY]: all });
+  } catch (_) {}
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // Security profiles (captured from the dashboard's security profile editor):
 //   /v3/organizations/{org}/securitysettings  threat protections per setting:
 //     malware/botnet/phishing toggles + categoryBits (bit positions into
@@ -2752,6 +2820,13 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ ok: false, error: err.message, members: [], name: id });
       }
     })();
+    return true;
+  }
+
+  if (msg.type === "LOOKUP_DESTINATION") {
+    lookupDestination(String(msg.host || ""), sender && sender.tab && sender.tab.id)
+      .then((result) => sendResponse(result))
+      .catch((err) => sendResponse({ ok: false, error: err.message }));
     return true;
   }
 

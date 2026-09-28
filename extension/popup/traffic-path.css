@@ -198,6 +198,7 @@ select.tp-input { padding-right: 28px; }
 .tp-question-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-left: 30px; }
 .tp-question-hint { color: var(--tp-muted); font-size: 12px; }
 .tp-note { margin: 12px 0 0; color: var(--tp-muted); font-size: 12px; }
+.tp-note-lookup { margin: 0 0 8px; }
 
 /* Answers given */
 .tp-answers { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 8px; font-size: 12px; }
@@ -207,6 +208,7 @@ select.tp-input { padding-right: 28px; }
 .tp-answer-verb { font-weight: 700; }
 .tp-answer.is-yes .tp-answer-verb { color: var(--tp-allow); }
 .tp-answer.is-no .tp-answer-verb { color: var(--tp-muted); }
+.tp-answer.is-threat { background: #fee2e2; color: var(--tp-block); font-weight: 600; }
 .tp-link { padding: 2px 4px; border: 0; border-radius: 2px; background: transparent; color: var(--tp-focus); font: 600 12px var(--hbr-font-family, Inter, system-ui, sans-serif); cursor: pointer; }
 .tp-link:hover { text-decoration: underline; }
 .tp-link:focus-visible { outline: 2px solid var(--tp-focus); outline-offset: 2px; }

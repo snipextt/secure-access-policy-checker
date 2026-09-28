@@ -1329,6 +1329,9 @@
       const values = conditionValues(cond, lookups).map(String);
       const yes = confirmedValues(testInput, field);
       if (values.some(value => yes.includes(value))) continue;
+      // The confirmed list is complete (e.g. from Cisco Investigate):
+      // anything not on it is a no, so nothing is left to ask.
+      if (flattenSelectedIds(testInput.ruledOutAll).includes(field)) continue;
       const no = flattenSelectedIds(ruledOut[field]).map(String);
       const open = values.filter(value => !no.includes(value));
       if (open.length) pending.push({ attributeName: cond.attributeName, field, ids: open, cond });

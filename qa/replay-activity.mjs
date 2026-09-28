@@ -12,7 +12,11 @@ import vm from "node:vm";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const REPO = new URL("..", import.meta.url).pathname.replace(/\/$/, "");
-const [EVENTS = "qa/data/events.jsonl", DATA = "qa/data/extension-data.json", OUT = "qa/data/replay-results.json"] = process.argv.slice(2);
+const [EVENTS = "qa/data/events.jsonl", DATA = "qa/data/extension-data.json", OUT = "qa/data/replay-results.json"] = process.argv.slice(2).filter(arg => !arg.startsWith("--"));
+// --investigate=<lookups.json>: answer only from Cisco Investigate lookups
+// ({ host: lookupDestination result }), never from the log, and replay only
+// events for those hosts. Any question left counts as a failure.
+const INVESTIGATE = (process.argv.find(arg => arg.startsWith("--investigate=")) || "").split("=")[1];
 const ip = require(`${REPO}/extension/popup/ip-address.js`);
 globalThis.IPAddress = ip;
 const model = require(`${REPO}/extension/popup/traffic-path.js`);
@@ -23,7 +27,7 @@ const Matcher = ctx.window.Matcher;
 const data = JSON.parse(fs.readFileSync(DATA, "utf8"));
 const rules = data.sse_rules;
 const om = data.sse_object_maps;
-const bundled = { categories: JSON.parse(fs.readFileSync(`${REPO}/extension/data/categories-lookup.json`, "utf8")), apps: JSON.parse(fs.readFileSync(`${REPO}/extension/data/apps-lookup.json`, "utf8")), protocols: JSON.parse(fs.readFileSync(`${REPO}/extension/data/protocols-lookup.json`, "utf8")) };
+const bundled = { securityCategories: JSON.parse(fs.readFileSync(`${REPO}/extension/data/security-categories-lookup.json`, "utf8")), categories: JSON.parse(fs.readFileSync(`${REPO}/extension/data/categories-lookup.json`, "utf8")), apps: JSON.parse(fs.readFileSync(`${REPO}/extension/data/apps-lookup.json`, "utf8")), protocols: JSON.parse(fs.readFileSync(`${REPO}/extension/data/protocols-lookup.json`, "utf8")) };
 const lookups = { ...bundled, ...om, memberMaps: data.sse_member_maps, identities: data.sse_identity_map, sourceIdentityTypeIds: om.sourceIdentityTypeIds, identityTypeNames: data.sse_identity_type_map };
 const ruleById = new Map(rules.map(r => [String(r.ruleId ?? r.id), r]));
 
@@ -50,7 +54,10 @@ function logBlockCause(event) {
   if (event.Type === "firewall") return { kind: "content", name: "IPS signature" };
   return { kind: "content", name: `app/content controls (${event.Application || event.Categories || "unknown"})` };
 }
-const rows = fs.readFileSync(EVENTS, "utf8").trim().split("\n").map(l => JSON.parse(l));
+const investigated = INVESTIGATE ? JSON.parse(fs.readFileSync(INVESTIGATE, "utf8")) : null;
+const eventHost = event => (event.Type === "dns" ? String(event.Destination) : String(event.Hostname || event.Destination || "").split(":")[0]).replace(/\.$/, "").toLowerCase();
+const rows = fs.readFileSync(EVENTS, "utf8").trim().split("\n").map(l => JSON.parse(l))
+  .filter(event => !investigated || investigated[eventHost(event)]);
 const split = v => String(v || "").split(/,\s*(?![^()]*\))/).map(s => s.trim()).filter(Boolean);
 
 function classify(event) {
@@ -142,7 +149,8 @@ for (const event of rows) {
   const destText = event.Type === "proxy" ? `${port === "443" ? "https" : "http"}://${host.includes(":") ? `[${host}]` : host}${port !== "443" && port !== "80" ? ":" + port : ""}/` : host;
   const built = model.buildRequest({ connection, sources, destination: destText, port, protocol }, om);
   if (built.error) { res.status = "form-error"; res.why = built.error; res.connection = connection; continue; }
-  const request = built.request;
+  let request = built.request;
+  if (investigated) request = { ...request, facts: model.factsFromLookup(investigated[eventHost(event)], lookups) };
   // evaluate, answering questions from the log until settled
   let evaluation; let rounds = 0;
   while (true) {
@@ -150,6 +158,8 @@ for (const event of rows) {
     if (evaluation.error) break;
     const pending = evaluation.stages.find(s => s.state === "needs-answer" && s.match.pending && s.match.pending.length);
     if (++rounds > 12) break;
+    if (pending && investigated) { res.notes.add(`would still ask about ${pending.match.pending.map(p => p.field).join(", ")}`); break; }
+    if (evaluation.threatCheck && investigated) { res.notes.add("would still ask about threats"); break; }
     if (pending) { answerFrom(event, pending.match.pending, request.facts, res.notes); continue; }
     // Threat check: answer with the threat categories the log blocked on.
     if (evaluation.threatCheck) {

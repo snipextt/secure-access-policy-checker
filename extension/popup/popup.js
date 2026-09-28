@@ -73,6 +73,21 @@ document.addEventListener("DOMContentLoaded", () => {
   // ---------------------------------------------------------------------------
   // Highlight matched rule on the dashboard page
   // ---------------------------------------------------------------------------
+  function lookupDestination(host) {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => resolve({ ok: false, error: "timeout" }), 6000);
+      try {
+        api.runtime.sendMessage({ type: "LOOKUP_DESTINATION", host }, (response) => {
+          clearTimeout(timer);
+          resolve(api.runtime.lastError ? { ok: false, error: api.runtime.lastError.message } : (response || { ok: false }));
+        });
+      } catch (err) {
+        clearTimeout(timer);
+        resolve({ ok: false, error: err.message });
+      }
+    });
+  }
+
   // targets: [{ ruleName, stages: ["DNS", "Web"], action, matchedConditions }]
   function highlightRulesOnPage(targets) {
     api.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -120,7 +135,7 @@ document.addEventListener("DOMContentLoaded", () => {
     else testerHandle = window.TrafficPathPanel.create(
       testerRoot,
       objectMaps || {},
-      /* onRun */ async (request) => {
+      /* onRun */ async (request, options = {}) => {
         const lookups = { ...(await window.PopupSections.loadLookups()) };
         Object.assign(lookups, currentObjectMaps || {});
         // Source identity IDs are resolved separately from their source type.
@@ -143,8 +158,17 @@ document.addEventListener("DOMContentLoaded", () => {
         lookups.memberMaps = currentMemberMaps || {};
         lookups.identityTypeNames = currentIdentityTypeMap || {};
         if (!currentRules.length) return { error: "No rules are loaded yet. Open the dashboard's policy page and wait for the data to load." };
+        // Ask Cisco Investigate what the domain is (categories, threats, app)
+        // so the checker does not have to ask; answers the user gave win.
+        let destinationLookup = null;
+        if (options.autoLookup !== false && request.destination.kind === "domain") {
+          destinationLookup = await lookupDestination(request.destination.host);
+          if (destinationLookup && destinationLookup.ok) {
+            request = { ...request, facts: { ...window.TrafficPath.factsFromLookup(destinationLookup, lookups), ...request.facts } };
+          }
+        }
         const evaluation = window.TrafficPath.evaluate(request, currentRules, lookups, window.Matcher);
-        return { ...evaluation, lookups };
+        return { ...evaluation, lookups, destinationLookup, facts: request.facts };
       },
       /* onHighlight */ (targets, summary) => {
         highlightRulesOnPage(targets);

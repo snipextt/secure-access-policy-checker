@@ -305,12 +305,48 @@
   // ---------------------------------------------------------------------------
 
   function applyFacts(testInput, facts) {
-    const out = { ...testInput, ruledOut: {} };
+    const out = { ...testInput, ruledOut: {}, ruledOutAll: [] };
     for (const [field, answer] of Object.entries(facts || {})) {
       if (answer.yes && answer.yes.length) out[field] = [...answer.yes];
       if (answer.no && answer.no.length) out.ruledOut[field] = [...answer.no];
+      if (answer.all) out.ruledOutAll.push(field);
     }
     return out;
+  }
+
+  // Facts from a Cisco Investigate lookup ({ contentBits, securityBits, app },
+  // see the service worker's lookupDestination). Each field is complete
+  // (all: true): what Cisco does not list is a no. Category and application
+  // lists follow from their members. lookups.categories and
+  // lookups.securityCategories are the bundled bit-position lookups.
+  function factsFromLookup(result, lookups) {
+    if (!result || !result.ok) return {};
+    lookups = lookups || {};
+    const bits = lookups.categories || {};
+    const securityBits = lookups.securityCategories || {};
+    const memberMaps = lookups.memberMaps || {};
+    const contentIds = result.contentBits.map(bit => bits[bit] && String(bits[bit].categoryId)).filter(Boolean);
+    const threats = [...new Set([
+      ...result.securityBits.map(bit => securityBits[bit] && securityBits[bit].name),
+      ...(result.securityNames || []),
+    ].filter(Boolean))];
+    const listsWith = (kind, ids) => Object.entries(memberMaps[kind] || {})
+      .filter(([, entry]) => ((entry && entry.members) || []).some(member => ids.includes(String(member.id))))
+      .map(([id]) => String(id));
+    const facts = {
+      contentCategoryId: { yes: contentIds, no: [], all: true },
+      categoryListId: { yes: listsWith("categoryLists", contentIds), no: [], all: true },
+      securityCategory: { yes: threats, no: [], all: true, auto: true },
+    };
+    // CASI names the cloud app; match it to the org's application catalog.
+    const appName = result.app && result.app.name.toLowerCase();
+    const appIds = appName ? Object.entries(lookups.applications || {}).filter(([, name]) => String(name).toLowerCase() === appName).map(([id]) => String(id)) : [];
+    if (!result.app || appIds.length) {
+      facts.applicationId = { yes: appIds, no: [], all: true };
+      facts.applicationListId = { yes: listsWith("applicationLists", appIds), no: [], all: true };
+    }
+    Object.values(facts).forEach(fact => { fact.auto = true; });
+    return facts;
   }
 
   function stageInput(request, scope, groups, stage) {
@@ -565,7 +601,7 @@
   root.TrafficPath = {
     CONNECTIONS, SOURCES, STAGES, PROTOCOLS,
     parseDestination, resolveScope, groupsContaining, buildRequest, planStages,
-    evaluate, questionFor, threatQuestion, answer, actionLabel, webProfile, catalogLabel, valueLabel,
+    evaluate, questionFor, threatQuestion, answer, factsFromLookup, actionLabel, webProfile, catalogLabel, valueLabel,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = root.TrafficPath;
 })(typeof window !== "undefined" ? window : globalThis);

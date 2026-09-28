@@ -290,6 +290,48 @@ test("security settings: DNS default before rules, web profile on allow rules", 
   assert.equal(clean.outcome.unlessFlagged, undefined);
 });
 
+test("Cisco Investigate lookup answers every question", () => {
+  // Shapes from investigate.umbrella.com for this tenant: categorization gives
+  // bit positions (content 113 = Computer Security, security 66 = Malware),
+  // CASI names the app, the URL classifier names extra threats.
+  const bundledLookups = {
+    ...lookups,
+    categories: { 10: { name: "Gambling", categoryId: 11 }, 113: { name: "Computer Security", categoryId: 331 } },
+    securityCategories: { 66: { name: "Malware", categoryId: 94 } },
+    applications: { 993005: "TikTok" },
+    memberMaps: { ...memberMaps, applicationLists: { 20230: { name: "AUP", members: [{ id: "993005", kind: "application" }] } }, categoryLists: { 7: { name: "Restricted", members: [{ id: "11", kind: "category" }] } } },
+    securityProfiles: { dnsDefaultSettingId: "1", securitySettings: { 1: { name: "Default Settings", categories: ["Malware", "Phishing"] } }, webProfiles: {} },
+  };
+  const facts = model.factsFromLookup({ ok: true, contentBits: ["10"], securityBits: [], securityNames: [], app: { name: "TikTok" } }, bundledLookups);
+  assert.deepEqual(facts.contentCategoryId.yes, ["11"]);
+  assert.deepEqual(facts.applicationId.yes, ["993005"]);
+  assert.deepEqual(facts.applicationListId.yes, ["20230"]);
+  assert.deepEqual(facts.categoryListId.yes, ["7"]);
+
+  // A rule on an app list and a rule on a category both resolve without asking.
+  const aup = rule("AUP apps", "block", [SRC_ALL, cond("umbrella.destination.application_list_ids", "INTERSECT", [20230])]);
+  const onGambling = rule("Gambling", "block", [SRC_ALL, cond("umbrella.destination.category_ids", "INTERSECT", [10])]);
+  const request = build({ connection: "network", sources: { network: "sourceNetworks:1" }, destination: "www.tiktok.com", facts });
+  const evaluation = model.evaluate(request, [aup, onGambling, internetDefault], bundledLookups, Matcher);
+  assert.deepEqual(states(evaluation), ["dns:matched:AUP apps"]);
+  assert.equal(evaluation.threatCheck, null);
+
+  // Nothing on record: every rule that depends on it resolves as "no", no question.
+  const plain = model.factsFromLookup({ ok: true, contentBits: [], securityBits: [], securityNames: [], app: null }, bundledLookups);
+  const quiet = model.evaluate(build({ connection: "network", sources: { network: "sourceNetworks:1" }, destination: "example.org", facts: plain }), [aup, onGambling, internetDefault], bundledLookups, Matcher);
+  assert.deepEqual(states(quiet), ["dns:matched:Default Internet"]);
+  assert.equal(quiet.threatCheck, null);
+
+  // A threat named only by the URL classifier still counts.
+  const flagged = model.factsFromLookup({ ok: true, contentBits: [], securityBits: [], securityNames: ["Malware"], app: null }, bundledLookups);
+  const blocked = model.evaluate(build({ connection: "network", sources: { network: "sourceNetworks:1" }, destination: "marksidfgs.ug", facts: flagged }), [internetDefault], bundledLookups, Matcher);
+  assert.equal(blocked.outcome.title, "Blocked at DNS");
+  assert.equal(blocked.stages[0].security.category, "Malware");
+
+  // A failed lookup leaves the questions in place.
+  assert.deepEqual(model.factsFromLookup({ ok: false }, bundledLookups), {});
+});
+
 test("disabled rules are skipped", () => {
   const off = rule("Disabled block", "block", [SRC_ALL, DST_ALL], { ruleIsEnabled: false });
   assert.deepEqual(states(run({ connection: "va", sources: { site: "sourceSites:21" }, destination: "example.com" }, [off])), ["dns:matched:Default Internet"]);

@@ -2793,8 +2793,9 @@
       lookupsPromise = Promise.all([
         fetch("../data/categories-lookup.json").then(r => r.json()).catch(() => ({})),
         fetch("../data/apps-lookup.json").then(r => r.json()).catch(() => ({})),
-        fetch("../data/protocols-lookup.json").then(r => r.json()).catch(() => ({}))
-      ]).then(([categories, apps, protocols]) => ({ categories, apps, protocols }));
+        fetch("../data/protocols-lookup.json").then(r => r.json()).catch(() => ({})),
+        fetch("../data/security-categories-lookup.json").then(r => r.json()).catch(() => ({}))
+      ]).then(([categories, apps, protocols, securityCategories]) => ({ categories, apps, protocols, securityCategories }));
     }
     return lookupsPromise;
   }

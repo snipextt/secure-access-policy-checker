@@ -29,7 +29,9 @@ On the dashboard's policy page, the shield button opens the checker. It predicts
 - A domain is checked at DNS and then at Web over HTTPS. A URL uses its own port. An IP address includes the firewall on a tunnel, with the port and protocol you give.
 - Destinations that match a configured private resource, or an internal (RFC 1918 / ULA) address, are evaluated as Private Access. From a tunnel, an internal IP goes through the firewall under the private-access rules.
 - A firewall block stops the later stages ("Not reached"). After a DNS block, Web is still shown as the fallback, because DNS may not know the user.
-- If a higher-priority rule depends on something a domain alone doesn't reveal (its content category, application, or location), the checker asks which of that rule's values apply, then continues.
+- For a domain, the checker asks Cisco Investigate what it is: content categories, security categories (Malware, Phishing, …) and the cloud application (via CASI). Rules on categories, category lists, applications and application lists then resolve without asking anything. Lookups use the dashboard's own session and are cached for the browser session.
+- Only when Investigate can't answer (an IP destination, or the lookup fails, e.g. the Investigate license's rate limit) does the checker ask which of a rule's values apply, or whether the destination is flagged as a threat. **Change** next to Cisco's answer lets you answer yourself.
+- Threats: the DNS default security setting applies before any rule; a matched Allow/Warn/Isolate rule's web security profile can still block a flagged destination at Web.
 - **Show on page** marks each matched rule row on the dashboard with its stages and action, and docks a compact result card while the panel is minimized.
 
 Results are predictions from the loaded rules, not observed traffic. Security-profile controls (malware and threat categories, file inspection, tenant controls, IPS) can still block traffic an Allow rule matched, and DNS security settings can block before any rule.

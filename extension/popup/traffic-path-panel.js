@@ -190,6 +190,7 @@
     let connection = "";
     let facts = {};
     let factsFor = "";
+    let manualFor = "";
     let lastEvaluation = null;
     let runSeq = 0;
 
@@ -418,7 +419,7 @@
       run.disabled = true;
       run.textContent = "Checking…";
       try {
-        const evaluation = await onRun(built.request);
+        const evaluation = await onRun(built.request, { autoLookup: manualFor !== factsFor });
         if (seq !== runSeq) return;
         if (evaluation.error) {
           error.textContent = evaluation.error;
@@ -470,6 +471,10 @@
         show.type = "button";
         show.addEventListener("click", () => onHighlight(highlightTargets(highlightable), summaryFor(request, evaluation)));
         banner.append(show);
+      }
+      const lookup = evaluation.destinationLookup;
+      if (question && lookup && !lookup.ok && lookup.error !== "not a domain" && !Object.keys(facts).length) {
+        results.append(node("p", "tp-note tp-note-lookup", "Couldn't reach Cisco Investigate to classify this domain, so the checker needs your answer."));
       }
       // With a question to answer, the question itself is the headline.
       if (question && outcome.status === "pending") results.append(questionCard(question, pending.match.rule));
@@ -649,9 +654,37 @@
       return card;
     }
 
-    // What the user has told us about the destination, with a way to undo.
+    // What Cisco Investigate says the destination is (so nothing is asked),
+    // or what the user told us, with a way to change it.
     function answersStrip(hostLabel, evaluation) {
       const lookups = evaluation.lookups || activeCatalogs;
+      const found = evaluation.destinationLookup;
+      if (found && found.ok && !Object.keys(facts).length) {
+        const strip = node("div", "tp-answers");
+        strip.append(node("span", "tp-answers-lead", `Cisco Investigate: ${hostLabel} is`));
+        const list = node("span", "tp-answers-list");
+        const threatNames = [...new Set([
+          ...found.securityBits.map(bit => lookups.securityCategories && lookups.securityCategories[bit] && lookups.securityCategories[bit].name),
+          ...(found.securityNames || []),
+        ].filter(Boolean))];
+        const names = [
+          ...threatNames,
+          ...(found.app ? [found.app.name] : []),
+          ...found.contentBits.map(bit => lookups.categories && lookups.categories[bit] && lookups.categories[bit].name),
+        ].filter(Boolean);
+        if (!names.length) names.push("uncategorized");
+        const threats = new Set(threatNames);
+        names.forEach(name => {
+          const chip = node("span", `tp-answer ${threats.has(name) ? "is-threat" : "is-yes"}`, name);
+          list.append(chip);
+        });
+        const change = node("button", "tp-link", "Change");
+        change.type = "button";
+        change.title = "Answer the category and threat questions yourself";
+        change.addEventListener("click", () => { manualFor = factsFor; facts = {}; check(); });
+        strip.append(list, change);
+        return strip;
+      }
       const items = Object.entries(facts).flatMap(([field, value]) => [
         ...value.yes.map(id => ({ yes: true, label: model.valueLabel(field, id, lookups) })),
         ...value.no.map(id => ({ yes: false, label: model.valueLabel(field, id, lookups) })),
