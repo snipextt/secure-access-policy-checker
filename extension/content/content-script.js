@@ -294,7 +294,7 @@ function ensureHitStyle() {
     #sec-hit-layer { position: fixed; inset: 0; z-index: 2147483000; pointer-events: none; }
     .sec-hit-ring {
       --sec-hit: #b91c1c; --sec-hit-soft: rgba(185, 28, 28, .07);
-      position: fixed; box-sizing: border-box; border: 2px solid var(--sec-hit); border-radius: 6px;
+      position: fixed; box-sizing: border-box; border: 2px solid var(--sec-hit); border-radius: 2px;
       background: var(--sec-hit-soft); box-shadow: 0 0 0 4px color-mix(in srgb, var(--sec-hit) 14%, transparent);
       opacity: 0; transition: opacity .2s ease;
     }
@@ -303,10 +303,10 @@ function ensureHitStyle() {
     .sec-hit-ring.sec-hit-warn, .sec-hit-ring.sec-hit-isolate { --sec-hit: #a16207; --sec-hit-soft: rgba(161, 98, 7, .07); }
     .sec-hit-ring[hidden] { display: none; }
     .sec-hit-tag {
-      position: absolute; left: 10px; top: -12px; display: inline-flex; align-items: center; gap: 6px;
-      max-width: calc(100% - 20px); height: 22px; padding: 0 9px 0 7px; border-radius: 999px;
+      position: absolute; left: 8px; top: -10px; display: inline-flex; align-items: center; gap: 6px;
+      max-width: calc(100% - 20px); height: 18px; padding: 0 7px 0 6px; border-radius: 2px;
       background: var(--sec-hit); color: #fff; box-shadow: 0 2px 6px rgba(15, 23, 42, .18);
-      font: 600 11px/22px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font: 600 10.5px/18px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .sec-hit-tag-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #fff; }
@@ -570,7 +570,7 @@ function ensureHoverPopoverStyle() {
     .sec-member-panel.sec-member-visible { opacity: 1; transform: none; }
     .sec-member-panel .sec-mp-header {
       display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
-      padding: 10px 12px 8px; border-bottom: 1px solid #edf1f6;
+      padding: 8px 10px 6px; border-bottom: 1px solid #edf1f6;
     }
     .sec-member-panel .sec-mp-title { min-width: 0; color: #0f172a; font-weight: 650; overflow-wrap: anywhere; }
     .sec-member-panel .sec-mp-count { flex: none; color: #64748b; font-size: 11px; font-variant-numeric: tabular-nums; }
@@ -581,7 +581,7 @@ function ensureHoverPopoverStyle() {
     .sec-member-panel .sec-mp-filter:focus { border-color: #2563eb; background: #fff; box-shadow: 0 0 0 2px rgba(37,99,235,.15); }
     .sec-member-panel .sec-mp-list { overflow-y: auto; padding: 4px 0 6px; overscroll-behavior: contain; }
     .sec-member-panel .sec-mp-row {
-      display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 5px 12px;
+      display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 4px 10px;
       color: #1e293b; outline: none;
     }
     .sec-member-panel .sec-mp-row[hidden] { display: none; }
@@ -2252,8 +2252,8 @@ function ensureEmbeddedPopupStyle() {
     #sec-result-dock {
       --sec-dock-accent: #64748b; --sec-dock-soft: #f1f5f9;
       position: fixed; right: 24px; bottom: 88px; z-index: 2147483645; box-sizing: border-box;
-      width: min(360px, calc(100vw - 48px)); padding: 14px 14px 12px;
-      border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; color: #1e293b;
+      width: min(330px, calc(100vw - 48px)); padding: 10px 10px 8px;
+      border: 1px solid #e2e8f0; border-radius: 3px; background: #fff; color: #1e293b;
       box-shadow: 0 1px 2px rgba(15,23,42,.06), 0 18px 44px rgba(15,23,42,.18);
       font: 13px/1.45 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       opacity: 0; transform: translateY(8px); transition: opacity .2s ease, transform .25s cubic-bezier(.2,.8,.2,1);
@@ -2264,18 +2264,18 @@ function ensureEmbeddedPopupStyle() {
     #sec-result-dock.sec-dock-block { --sec-dock-accent: #b91c1c; --sec-dock-soft: #fee2e2; }
     #sec-result-dock.sec-dock-warn, #sec-result-dock.sec-dock-isolate { --sec-dock-accent: #a16207; --sec-dock-soft: #fef3c7; }
     #sec-result-dock.sec-dock-pending { --sec-dock-accent: #9a5b00; --sec-dock-soft: #ffedd5; }
-    #sec-result-dock .sec-dock-head { display: flex; align-items: center; gap: 10px; }
-    #sec-result-dock .sec-dock-icon { flex: none; display: grid; place-items: center; width: 32px; height: 32px; padding: 7px; border-radius: 50%; background: var(--sec-dock-soft); color: var(--sec-dock-accent); }
+    #sec-result-dock .sec-dock-head { display: flex; align-items: center; gap: 8px; }
+    #sec-result-dock .sec-dock-icon { flex: none; display: grid; place-items: center; width: 26px; height: 26px; padding: 5px; border-radius: 50%; background: var(--sec-dock-soft); color: var(--sec-dock-accent); }
     #sec-result-dock .sec-dock-icon svg { display: block; width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     #sec-result-dock .sec-dock-titles { display: flex; flex: 1; flex-direction: column; min-width: 0; }
-    #sec-result-dock .sec-dock-title { color: #0f172a; font-size: 15px; line-height: 1.3; letter-spacing: -.01em; }
+    #sec-result-dock .sec-dock-title { color: #0f172a; font-size: 14px; line-height: 1.3; letter-spacing: -.01em; }
     #sec-result-dock .sec-dock-sub { overflow: hidden; color: #64748b; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-    #sec-result-dock .sec-dock-close { flex: none; align-self: flex-start; width: 28px; height: 28px; margin: -4px -4px 0 0; border: 0; border-radius: 6px; background: transparent; color: #64748b; font-size: 18px; line-height: 1; cursor: pointer; }
+    #sec-result-dock .sec-dock-close { flex: none; align-self: flex-start; width: 24px; height: 24px; margin: -2px -2px 0 0; border: 0; border-radius: 2px; background: transparent; color: #64748b; font-size: 18px; line-height: 1; cursor: pointer; }
     #sec-result-dock .sec-dock-close:hover { background: #f1f5f9; color: #0f172a; }
-    #sec-result-dock .sec-dock-stages { margin: 12px -6px 10px; padding: 0; list-style: none; }
+    #sec-result-dock .sec-dock-stages { margin: 6px -4px 6px; padding: 0; list-style: none; }
     #sec-result-dock .sec-dock-stage-inner {
-      display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: center; gap: 8px; width: 100%;
-      min-height: 36px; padding: 6px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; text-align: left;
+      display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; align-items: center; gap: 8px; width: 100%;
+      min-height: 28px; padding: 3px 4px; border: 0; border-radius: 2px; background: transparent; color: inherit; font: inherit; text-align: left;
     }
     #sec-result-dock button.sec-dock-stage-inner { cursor: pointer; }
     #sec-result-dock button.sec-dock-stage-inner:hover { background: #f5f7fa; }
@@ -2283,15 +2283,15 @@ function ensureEmbeddedPopupStyle() {
     #sec-result-dock .sec-dock-value { display: flex; align-items: center; gap: 8px; min-width: 0; }
     #sec-result-dock .sec-dock-rule { min-width: 0; overflow: hidden; color: #0f172a; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
     #sec-result-dock .sec-dock-muted { color: #94a3b8; }
-    #sec-result-dock .sec-dock-pill { flex: none; padding: 1px 8px; border-radius: 999px; background: #f1f5f9; color: #475569; font-size: 11px; font-weight: 700; }
+    #sec-result-dock .sec-dock-pill { flex: none; padding: 1px 8px; border-radius: 2px; background: #f1f5f9; color: #475569; font-size: 11px; font-weight: 700; }
     #sec-result-dock .sec-dock-pill-allow { background: #dcfce7; color: #15803d; }
     #sec-result-dock .sec-dock-pill-block { background: #fee2e2; color: #b91c1c; }
     #sec-result-dock .sec-dock-pill-warn, #sec-result-dock .sec-dock-pill-isolate { background: #fef3c7; color: #a16207; }
     #sec-result-dock .sec-dock-go { width: 7px; height: 7px; margin-right: 4px; border-top: 1.5px solid #94a3b8; border-right: 1.5px solid #94a3b8; transform: rotate(45deg); }
-    #sec-result-dock .sec-dock-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 10px; border-top: 1px solid #f1f5f9; }
-    #sec-result-dock .sec-dock-expand { min-height: 32px; padding: 5px 14px; border: 1px solid #0f172a; border-radius: 6px; background: #0f172a; color: #fff; font: 600 12px Inter, system-ui, sans-serif; cursor: pointer; }
+    #sec-result-dock .sec-dock-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 8px; border-top: 1px solid #f1f5f9; }
+    #sec-result-dock .sec-dock-expand { min-height: 28px; padding: 3px 12px; border: 1px solid #0f172a; border-radius: 2px; background: #0f172a; color: #fff; font: 600 12px Inter, system-ui, sans-serif; cursor: pointer; }
     #sec-result-dock .sec-dock-expand:hover { background: #1e293b; }
-    #sec-result-dock .sec-dock-clear { min-height: 32px; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; color: #475569; font: 600 12px Inter, system-ui, sans-serif; cursor: pointer; }
+    #sec-result-dock .sec-dock-clear { min-height: 28px; padding: 3px 8px; border: 0; border-radius: 2px; background: transparent; color: #475569; font: 600 12px Inter, system-ui, sans-serif; cursor: pointer; }
     #sec-result-dock .sec-dock-clear:hover { background: #f1f5f9; color: #0f172a; }
     #sec-result-dock button:focus-visible { outline: 2px solid #1d6fd8; outline-offset: 2px; }
     @media (prefers-reduced-motion: reduce) { #sec-result-dock { transition: none; } }
