@@ -17,13 +17,17 @@
     client: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="10.5" rx="1.5"/><path d="M2.5 18.5h19"/></svg>',
     va: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="6.5" rx="1.2"/><rect x="4" y="13.5" width="16" height="6.5" rx="1.2"/><path d="M7.5 7.25h.01M7.5 16.75h.01"/></svg>',
     tunnel: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="8.5" width="6" height="7" rx="1.2"/><rect x="15.5" y="8.5" width="6" height="7" rx="1.2"/><path d="M8.5 10.5h7M8.5 13.5h7" stroke-dasharray="1.6 1.6"/></svg>',
+    network: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.4 2.3 3.6 5.1 3.6 8.5s-1.2 6.2-3.6 8.5c-2.4-2.3-3.6-5.1-3.6-8.5s1.2-6.2 3.6-8.5z"/></svg>',
     check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
     block: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M6.5 17.5l11-11"/></svg>',
     warn: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5l8.5 15h-17z"/><path d="M12 10v4M12 16.8h.01"/></svg>',
     question: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.6a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.4M12 16.8h.01"/></svg>',
   };
-  const LAYER_LABELS = { client: ["DNS", "Web"], va: ["DNS"], tunnel: ["DNS", "Firewall", "Web"] };
-  const SOURCE_NOUNS = { roaming: "roaming computers", identity: "users or groups", site: "sites", network: "networks", tunnel: "network tunnels" };
+  const LAYER_LABELS = { client: ["DNS", "Web"], va: ["DNS"], network: ["DNS"], tunnel: ["DNS", "Firewall", "Web"] };
+  const SOURCE_NOUNS = {
+    roaming: "roaming computers", identity: "users or groups", site: "sites", network: "networks", tunnel: "network tunnels",
+    computer: "AD computers", sdwan: "SD-WAN VPNs", sgt: "security group tags",
+  };
 
   function icon(name, className) {
     const span = node("span", className || "tp-icon");
@@ -361,11 +365,11 @@
 
     function updateDestinationHint() {
       const parsed = destination.value.trim() ? model.parseDestination(destination.value) : null;
-      const showTransport = !!parsed && !parsed.error && parsed.kind === "ip" && !parsed.fromUrl && connection !== "va";
+      const showTransport = !!parsed && !parsed.error && parsed.kind === "ip" && !parsed.fromUrl && connection !== "va" && connection !== "network";
       transport.hidden = !showTransport;
       port.disabled = protocol.value === "ICMP";
       if (!connection) destinationHint.textContent = "";
-      else if (connection === "va") destinationHint.textContent = "The VA only forwards DNS, so enter the domain being looked up.";
+      else if (connection === "va" || connection === "network") destinationHint.textContent = "This path only carries DNS, so enter the domain being looked up.";
       else if (connection === "tunnel") destinationHint.textContent = "Enter an IP address to include the firewall. A domain checks DNS and Web.";
       else destinationHint.textContent = "A domain checks DNS then Web (HTTPS). A URL uses its own port.";
     }
@@ -457,7 +461,7 @@
       bannerCopy.append(node("span", "tp-outcome-rule", summary));
       const outcomeIcon = { allow: "check", block: "block", warn: "warn", isolate: "warn", pending: "question" }[outcome.status] || "question";
       banner.append(icon(outcomeIcon, "tp-outcome-icon"), bannerCopy);
-      const highlightable = stages.filter(result => result.state === "matched");
+      const highlightable = stages.filter(result => result.state === "matched" && !result.afterBlock);
       if (highlightable.length) {
         const show = node("button", "tp-secondary", "Show on page");
         show.type = "button";
@@ -543,7 +547,7 @@
     }
 
     function stageRow(result) {
-      const row = node("li", `tp-stage tp-stage-${result.state}${result.state === "matched" ? ` tp-stage-${result.action}` : ""}`);
+      const row = node("li", `tp-stage tp-stage-${result.state}${result.state === "matched" ? ` tp-stage-${result.action}` : ""}${result.afterBlock ? " tp-stage-after" : ""}`);
       const markerIcon = result.state === "matched"
         ? ({ allow: "check", block: "block", warn: "warn", isolate: "warn" }[result.action] || "question")
         : result.state === "needs-answer" ? "question" : null;
@@ -556,7 +560,8 @@
         head.append(node("span", `tp-action tp-action-${result.action}`, model.actionLabel(result.action)), node("span", "tp-stage-rule", ruleTitle(rule)));
         body.append(head);
         const meta = [rulePriority(rule)];
-        if (result.conditional) meta.push(`if ${result.conditional.label} lets it through`);
+        if (result.afterBlock) meta.push(`only if the ${result.afterBlock.label} block doesn't apply (e.g. ${result.afterBlock.label} doesn't see this user)`);
+        else if (result.conditional) meta.push(`if ${result.conditional.label} lets it through`);
         body.append(node("span", "tp-stage-meta", meta.filter(Boolean).join(" · ")));
         if (result.webProfileId) body.append(node("span", "tp-stage-meta", "Security profile controls on this rule can still block content."));
       } else {
@@ -670,7 +675,7 @@
         stages: evaluation.stages.map(result => ({
           label: result.stage.label,
           state: result.state,
-          action: result.state === "matched" ? model.actionLabel(result.action) : "",
+          action: result.state === "matched" ? model.actionLabel(result.action) + (result.afterBlock ? ` if ${result.afterBlock.label} misses` : "") : "",
           rule: result.match && result.match.rule ? ruleTitle(result.match.rule) : "",
         })),
       };

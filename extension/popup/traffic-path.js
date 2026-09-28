@@ -2,15 +2,19 @@
 // traffic-path.js — Policy Checker model.
 //
 // Predicts which access rule a request hits at each enforcement point, the
-// way Umbrella's policy tester does, from three connection types:
+// way Umbrella's policy tester does, from four connection types:
 //
-//   Secure Client   roaming computer (+ logged-in user)     DNS → Web
-//   On-prem VA      site, internal IP, AD user, egress net   DNS only
-//   S2S tunnel      network tunnel, internal IP, user        DNS → Firewall → Web
+//   Secure Client   roaming computer (+ logged-in user)          DNS → Web
+//   On-prem VA      site, internal IP, AD user/computer, network  DNS only
+//   Network DNS     registered network (public IP)                DNS only
+//   S2S tunnel      tunnel, internal IP, AD user/computer,        DNS → Firewall → Web
+//                   SD-WAN VPN, security group tag
 //
-// A request carries every identity its connection exposes; a rule's source
-// matches if any of them (or a group they belong to) is listed. Stages run in
-// traffic order and a block stops the later stages.
+// Identity kinds per connection follow what Activity Search logs for each
+// path. A request carries every identity its connection exposes; a rule's
+// source matches if any of them (or a group they belong to) is listed. Stages
+// run in traffic order; a firewall block stops later stages, while a DNS
+// block leaves Web evaluated as a fallback (DNS may not know the user).
 //
 // Pure logic (no DOM, no extension APIs) so Node tests can drive it.
 // =============================================================================
@@ -25,6 +29,9 @@
     site: { label: "Site", catalogs: ["sourceSites"], inputKey: "sourceSiteId", placeholder: "Search sites" },
     network: { label: "Egress network (public IP)", catalogs: ["sourceNetworks"], inputKey: "sourceNetworkId", placeholder: "Search networks" },
     tunnel: { label: "Network tunnel", catalogs: ["sourceTunnelGroups"], inputKey: "sourceTunnelGroupId", placeholder: "Search network tunnels" },
+    computer: { label: "AD computer", catalogs: ["sourceEndpointDevices"], inputKey: "sourceEndpointDeviceId", placeholder: "Search AD computers" },
+    sdwan: { label: "SD-WAN VPN", catalogs: ["sourceCatalystSdwan"], inputKey: "sourceCatalystSdwanId", placeholder: "Search SD-WAN VPNs" },
+    sgt: { label: "Security group tag", catalogs: ["sourceSecurityGroupTags"], inputKey: "sourceSecurityGroupTagId", placeholder: "Search security group tags" },
     internalIp: { label: "Internal client IP", placeholder: "e.g. 10.1.20.15" },
   };
 
@@ -35,6 +42,9 @@
     sourceSites: "sourceSiteId",
     sourceNetworks: "sourceNetworkId",
     sourceTunnelGroups: "sourceTunnelGroupId",
+    sourceEndpointDevices: "sourceEndpointDeviceId",
+    sourceCatalystSdwan: "sourceCatalystSdwanId",
+    sourceSecurityGroupTags: "sourceSecurityGroupTagId",
   };
 
   const CONNECTIONS = {
@@ -45,13 +55,18 @@
     },
     va: {
       label: "On-prem VA", layers: "DNS only",
-      description: "DNS forwarded by a virtual appliance. The VA reports its site, the client's internal IP, and the AD user.",
-      sources: ["site", "internalIp", "identity", "network"],
+      description: "DNS forwarded by a virtual appliance. The VA reports its site, the client's internal IP, and the AD user or computer.",
+      sources: ["site", "internalIp", "identity", "computer", "network"],
+    },
+    network: {
+      label: "Network DNS", layers: "DNS only",
+      description: "DNS sent straight from a registered network's public IP. Secure Access sees only the network.",
+      sources: ["network"],
     },
     tunnel: {
       label: "Site-to-site tunnel", layers: "DNS + Firewall + Web",
-      description: "Branch traffic sent through an IPsec tunnel to Secure Access.",
-      sources: ["tunnel", "internalIp", "identity"],
+      description: "Branch traffic sent through an IPsec tunnel. It can also carry the AD user or computer, SD-WAN VPN, and security group tag.",
+      sources: ["tunnel", "internalIp", "identity", "computer", "sdwan", "sgt"],
     },
   };
 
@@ -62,6 +77,7 @@
     private: { key: "private", label: "Private access" },
   };
 
+  const DNS_ONLY = ["va", "network"];
   const WEB_PORTS = ["80", "443"];
   const PROTOCOLS = ["TCP", "UDP", "ICMP"];
 
@@ -239,8 +255,8 @@
       protocol = PROTOCOLS.includes(String(form.protocol || "").toUpperCase()) ? String(form.protocol).toUpperCase() : "TCP";
       if (protocol === "ICMP") port = "";
     }
-    if (form.connection === "va" && destination.kind === "ip") {
-      return { error: "An on-prem VA only sees DNS lookups. Enter the domain the client resolves." };
+    if (DNS_ONLY.includes(form.connection) && destination.kind === "ip") {
+      return { error: `${connection.label} only sees DNS lookups. Enter the domain the client resolves.` };
     }
     return {
       request: {
@@ -260,7 +276,10 @@
   function planStages(request, scope) {
     const { connection, destination } = request;
     if (scope.scope === "private_network") {
-      if (connection === "va") return { stages: [], error: "Private Access is not reached through an on-prem VA. Choose Secure Client or Site-to-site tunnel." };
+      if (DNS_ONLY.includes(connection)) return { stages: [], error: `Private Access is not reached through ${CONNECTIONS[connection].label}. Choose Secure Client or Site-to-site tunnel.` };
+      // Branch traffic to an internal address is enforced by the firewall
+      // (Activity Search logs it as a firewall event under the private rules).
+      if (connection === "tunnel" && destination.kind === "ip") return { stages: [{ ...STAGES.firewall }] };
       return { stages: [{ ...STAGES.private }] };
     }
     const isWebPort = destination.protocol === "TCP" && WEB_PORTS.includes(destination.port);
@@ -296,7 +315,7 @@
     const base = applyFacts(request.testInput, request.facts);
     const input = {
       ...base,
-      sourceIdentityIds: groups.map(group => group.id),
+      sourceIdentityIds: [...new Set([...(base.sourceIdentityIds || []).map(String), ...groups.map(group => group.id)])],
       destination: request.destination.host,
       destinationScope: scope.scope,
       trafficStage: stage.key === "private" ? "" : stage.key,
@@ -348,24 +367,27 @@
     let blockedAt = null;
     let uncertainBefore = null;
     for (const stage of plan.stages) {
-      if (blockedAt) {
+      // A firewall block ends the connection. A DNS block usually does too,
+      // but DNS may not know the user (their identity can exist only at the
+      // proxy), so Web is still evaluated and shown as the fallback.
+      if (blockedAt && blockedAt.key !== "dns") {
         results.push({ stage, state: "not-reached", reason: `Blocked at ${blockedAt.label} first.` });
         continue;
       }
       const input = stageInput(request, scope, groups, stage);
       const match = matcher.matchPolicy(rules, input, lookups);
       if (match && match.indeterminate) {
-        results.push({ stage, state: "needs-answer", match, conditional: uncertainBefore });
+        results.push({ stage, state: "needs-answer", match, conditional: uncertainBefore, afterBlock: blockedAt || null });
         if (!uncertainBefore) uncertainBefore = stage;
         continue;
       }
       if (!match || match.noMatch || !match.rule) {
-        results.push({ stage, state: "no-match", match, conditional: uncertainBefore });
+        results.push({ stage, state: "no-match", match, conditional: uncertainBefore, afterBlock: blockedAt || null });
         continue;
       }
       const action = ruleAction(match.rule);
-      results.push({ stage, state: "matched", match, action, conditional: uncertainBefore, webProfileId: stage.key === "web" ? webProfile(match.rule) : null });
-      if (action === "block" && !uncertainBefore) blockedAt = stage;
+      results.push({ stage, state: "matched", match, action, conditional: uncertainBefore, afterBlock: blockedAt || null, webProfileId: stage.key === "web" ? webProfile(match.rule) : null });
+      if (action === "block" && !uncertainBefore && !blockedAt) blockedAt = stage;
     }
     for (const skipped of plan.skipped || []) results.push({ stage: skipped, state: "skipped", reason: skipped.reason });
     results.sort((a, b) => stageOrder(a.stage.key) - stageOrder(b.stage.key));

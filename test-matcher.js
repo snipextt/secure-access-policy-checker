@@ -523,10 +523,22 @@ console.log("\n=== Group 7: Multiple conditions (AND) ===");
     sourceUserId: "111", applicationId: 222, applicationCategoryId: 333,
   }, true, "Triple AND: all three match → match");
 
+  // Destinations are alternatives (verified against Activity Search: one
+  // rule blocked both an app from its list and a category-only domain).
   assertMatch(rule, {
     source: "10.0.0.1", destination: "any.com",
     sourceUserId: "111", applicationId: 222, applicationCategoryId: 999,
-  }, false, "Triple AND: category fails → no match");
+  }, true, "Destinations are any-of: app matches although category does not → match");
+
+  assertMatch(rule, {
+    source: "10.0.0.1", destination: "any.com",
+    sourceUserId: "111", applicationId: 999, applicationCategoryId: 999,
+  }, false, "Destinations are any-of: neither app nor category matches → no match");
+
+  assertMatch(rule, {
+    source: "10.0.0.1", destination: "any.com",
+    sourceUserId: "222", applicationId: 222, applicationCategoryId: 333,
+  }, false, "Source still required: destination matches but identity does not → no match");
 }
 
 // ---------------------------------------------------------------------------
@@ -974,6 +986,17 @@ console.log("\n=== Group 21: Nested member address matching ===");
     destination: "1.1.1.1",
   }, false, "Network object group: unrelated IP does not match", lookups);
 }
+
+// ---------------------------------------------------------------------------
+// Regression (Activity Search replay): destination list entry "fo" (Faroe
+// Islands TLD) must not match "foodremit.com"; path entries need the path.
+// ---------------------------------------------------------------------------
+console.log("\n=== Domain matching: suffix and path semantics ===");
+assert(Matcher.fqdnMatch("fo", "x.fo"), "domain entry matches its subdomain");
+assert(Matcher.fqdnMatch("fo", "fo"), "domain entry matches itself");
+assert(!Matcher.fqdnMatch("fo", "foodremit.com"), "domain entry does not match a substring");
+assert(Matcher.fqdnMatch("reddit.com", "www.reddit.com"), "domain entry matches www subdomain");
+assert(!Matcher.fqdnMatch("reddit.com/r/cisco", "reddit.com"), "path entry does not cover the whole host");
 
 // ---------------------------------------------------------------------------
 // Summary

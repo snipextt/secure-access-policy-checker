@@ -56,7 +56,7 @@
 .tp-step.is-waiting .tp-step-number { background: var(--tp-faint); }
 
 /* Connection cards */
-.tp-connection-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.tp-connection-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .tp-connection { position: relative; display: block; cursor: pointer; }
 .tp-connection-radio { position: absolute; opacity: 0; pointer-events: none; }
 .tp-connection-body { display: flex; flex-direction: column; gap: 4px; height: 100%; padding: 8px 10px; border: 1px solid var(--tp-field); border-radius: 3px; background: #fff; transition: border-color .15s, background-color .15s, box-shadow .15s, transform .15s var(--tp-ease); }
@@ -167,6 +167,8 @@ select.tp-input { padding-right: 28px; }
 .tp-action-block { background: #fee2e2; color: var(--tp-block); }
 .tp-action-warn, .tp-action-isolate { background: #fef3c7; color: var(--tp-warn); }
 .tp-action-needs-answer { background: #ffedd5; color: var(--tp-pending); }
+.tp-stage-after .tp-stage-marker { opacity: .55; }
+.tp-stage-after .tp-stage-rule { color: #475569; }
 .tp-stage-not-reached .tp-stage-name, .tp-stage-skipped .tp-stage-name, .tp-stage-not-reached .tp-stage-meta, .tp-stage-skipped .tp-stage-meta { color: var(--tp-faint); }
 
 /* Question */
@@ -227,7 +229,8 @@ select.tp-input { padding-right: 28px; }
 @keyframes tp-shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
 
 @media (max-width: 520px) {
-  .tp-connection-cards, .tp-source-fields { grid-template-columns: 1fr; }
+  .tp-connection-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tp-source-fields { grid-template-columns: 1fr; }
   .tp-header, .tp-form, .tp-results { padding-left: 12px; padding-right: 12px; }
   .tp-data-status { margin-left: 12px; margin-right: 12px; }
 }

@@ -19,17 +19,29 @@ On the dashboard's policy page, the shield button opens the checker. It predicts
 | Connection | Sources you can give | Stages evaluated |
 |---|---|---|
 | Secure Client | Roaming computer, user or group | DNS → Web |
-| On-prem VA | Site, internal client IP, user or group, egress network | DNS |
-| Site-to-site tunnel | Network tunnel, internal client IP, user or group | DNS → Firewall → Web |
+| On-prem VA | Site, internal client IP, user or group, AD computer, egress network | DNS |
+| Network DNS | Registered network (public IP) | DNS |
+| Site-to-site tunnel | Network tunnel, internal client IP, user or group, AD computer, SD-WAN VPN, security group tag | DNS → Firewall → Web |
 
 - The request carries every identity you fill in. A rule's source matches if any of them, or any AD group they belong to (nested groups included), is listed on the rule.
+- A rule's destinations are alternatives: the request matches if it hits any one of them.
 - A domain is checked at DNS and then at Web over HTTPS. A URL uses its own port. An IP address includes the firewall on a tunnel, with the port and protocol you give.
-- Destinations that match a configured private resource, or an internal (RFC 1918 / ULA) address, are evaluated as Private Access.
-- A block stops the later stages ("Not reached").
+- Destinations that match a configured private resource, or an internal (RFC 1918 / ULA) address, are evaluated as Private Access. From a tunnel, an internal IP goes through the firewall under the private-access rules.
+- A firewall block stops the later stages ("Not reached"). After a DNS block, Web is still shown as the fallback, because DNS may not know the user.
 - If a higher-priority rule depends on something a domain alone doesn't reveal (its content category, application, or location), the checker asks which of that rule's values apply, then continues.
 - **Show on page** marks each matched rule row on the dashboard with its stages and action, and docks a compact result card while the panel is minimized.
 
-Results are predictions from the loaded rules, not observed traffic. Security-profile controls (file inspection, tenant controls, and so on) can still change the final event.
+Results are predictions from the loaded rules, not observed traffic. Security-profile controls (malware and threat categories, file inspection, tenant controls, IPS) can still block traffic an Allow rule matched, and DNS security settings can block before any rule.
+
+## QA against Activity Search
+
+Replays a real Activity Search export through the checker (form, model and matcher) against the tenant's live rules, and compares the predicted layer and rule with what was logged. Tenant data stays in `qa/data/`, which is git-ignored.
+
+```
+python3 qa/export-to-jsonl.py export.xlsx              # → qa/data/events.jsonl
+node qa/dump-extension-data.mjs 9444 dump qa/data/extension-data.json   # from a signed-in Chrome, see the file header
+node qa/replay-activity.mjs                            # prints accuracy per layer and rule
+```
 
 ## Tests
 
@@ -68,6 +80,10 @@ extension/
 │   └── debug-log.js           # Persistent debug logging
 └── data/
     ├── apps-lookup.json        # Application ID → name mappings
-    ├── categories-lookup.json  # Category ID → name mappings
+    ├── categories-lookup.json  # Content category bit position → category ID and name
     └── protocols-lookup.json   # Protocol number → name mappings
+qa/
+├── export-to-jsonl.py         # Activity Search export (.xlsx/.csv) → JSON Lines
+├── dump-extension-data.mjs    # Read rules + catalogs from a signed-in Chrome
+└── replay-activity.mjs        # Replay events through the checker, report mismatches
 ```

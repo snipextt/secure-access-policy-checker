@@ -2175,7 +2175,39 @@ function _classifyMember(m, key) {
   return null;
 }
 
+// Category lists ("category settings") carry their categories as a hex
+// bitmask, not a member array: bit N set means the category at position N of
+// data/categories-lookup.json (keyed by bit position, holding categoryId).
+// Verified against Activity Search: "Finance Restricted" decodes to include
+// Encrypted DNS and Chat and Instant Messaging, both blocked under its rule.
+var categoryBitIndex = null;
+
+async function loadCategoryBitIndex() {
+  if (categoryBitIndex) return categoryBitIndex;
+  try {
+    const response = await fetch(api.runtime.getURL("data/categories-lookup.json"));
+    categoryBitIndex = await response.json();
+  } catch (err) {
+    logEvent("membership", "category lookup unavailable", { error: err.message });
+    categoryBitIndex = {};
+  }
+  return categoryBitIndex;
+}
+
+function decodeCategoryBits(hex, index) {
+  if (typeof hex !== "string" || !/^[0-9a-f]+$/i.test(hex)) return [];
+  const members = [];
+  let bits = BigInt(`0x${hex}`);
+  for (let position = 0; bits > 0n; position++, bits >>= 1n) {
+    if (!(bits & 1n)) continue;
+    const entry = index[String(position)];
+    if (entry && entry.categoryId !== undefined) members.push({ id: String(entry.categoryId), kind: "category", name: entry.name });
+  }
+  return members;
+}
+
 function _extractMemberList(item, key) {
+  if (key === "categoryLists" && item && item.categoryBits) return decodeCategoryBits(item.categoryBits, categoryBitIndex || {});
   if (key === "privateResources") return extractPrivateResourceAddresses(item);
   if (key === "networkObjects") return extractNetworkObjectAddresses(item);
   if (key === "serviceObjects") return extractServiceObjectLeaves(item);
@@ -2334,6 +2366,7 @@ async function fetchMembershipKind(kind, orgId, tabId, existingMaps, ids) {
   });
   if (!response.ok) { logEvent("membership", "non-OK", { kind, status: response.status }); return existingMaps[kind] || {}; }
   const json = await response.json();
+  if (kind === "categoryLists") await loadCategoryBitIndex();
   const entries = parseMembership(json, kind);
   const next = Object.assign({}, existingMaps[kind] || {});
   for (const e of entries) {

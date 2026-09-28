@@ -80,7 +80,11 @@
       const suffix = p.slice(2);
       return v === suffix || v.endsWith("." + suffix);
     }
-    return v === p || v.includes(p);
+    // A domain entry covers itself and its subdomains: "fo" matches "x.fo",
+    // never "foodremit.com". An entry with a path ("reddit.com/r/cisco")
+    // only covers that path, which a host alone cannot confirm.
+    if (p.includes("/")) return v.includes("/") && (v === p || v.startsWith(p.replace(/\/+$/, "") + "/"));
+    return v === p || v.endsWith("." + p);
   }
 
   // ===========================================================================
@@ -445,9 +449,24 @@
     return out;
   }
 
+  // Rule conditions store content categories as bit positions, not category
+  // IDs (umbrella.destination.category_ids [10] is Gambling, bit 10, not
+  // categoryId 10). lookups.categories is data/categories-lookup.json, keyed
+  // by bit position. Verified against Activity Search: a rule on [10] blocked
+  // Gambling domains. Every other condition's values are used as-is.
+  function conditionValues(cond, lookups) {
+    const values = Array.isArray(cond.attributeValue) ? cond.attributeValue : [cond.attributeValue];
+    if (!String(cond.attributeName || "").toLowerCase().endsWith(".category_ids")) return values;
+    const bits = (lookups && lookups.categories) || {};
+    return values.map(value => {
+      const entry = bits[String(value)];
+      return entry && typeof entry === "object" && entry.categoryId !== undefined ? entry.categoryId : value;
+    });
+  }
+
   function matchCatalogCondition(cond, testInput, lookups) {
     const an = (cond.attributeName || "").toLowerCase();
-    const values = Array.isArray(cond.attributeValue) ? cond.attributeValue : [cond.attributeValue];
+    const values = conditionValues(cond, lookups);
     let selected;
     if (an === "umbrella.source.identity_type_ids") {
       const typeMap = lookups.sourceIdentityTypeIds || {};
@@ -1169,17 +1188,39 @@
         matchedConditions.push("destination: no destination conditions on rule (unrestricted)");
       } else {
         const displays = [];
-        for (const cond of dstConds) {
-          const result = matchAnyAddress(destination, destinationPort, (addr, port) => (
-            matchConditionValue(cond, "destination", addr, port, lookups, testInput)
-          ));
+        const evaluate = (cond) => matchAnyAddress(destination, destinationPort, (addr, port) => (
+          matchConditionValue(cond, "destination", addr, port, lookups, testInput)
+        ));
+        // A rule's destinations are alternatives: the request matches if it
+        // hits any one of them. Verified against Activity Search: one rule
+        // with a category and an application list blocked both a
+        // category-only domain and an app from the list. Private resource
+        // *type* narrows the other destinations instead.
+        const qualifiers = dstConds.filter((cond) => /private_resource_types/i.test(cond.attributeName || ""));
+        const isCatchAll = (cond) => cond.attributeValue === true && String(cond.attributeName || "").toLowerCase().endsWith(".all");
+        let alternatives = dstConds.filter((cond) => !qualifiers.includes(cond));
+        // "Any destination" only stands when it is the rule's only destination.
+        if (alternatives.some((cond) => !isCatchAll(cond))) alternatives = alternatives.filter((cond) => !isCatchAll(cond));
+        for (const cond of qualifiers) {
+          const result = evaluate(cond);
           if (!result.matched) return {
             matched: false,
             matchedConditions: [...matchedConditions, result.note || `Destination condition ${cond.attributeName} did not match`],
             matchFields: null,
           };
           matchedConditions.push(result.note);
-          if (result.display) displays.push(result.display);
+        }
+        if (alternatives.length) {
+          const misses = [];
+          let hit = null;
+          for (const cond of alternatives) {
+            const result = evaluate(cond);
+            if (result.matched) { hit = result; break; }
+            misses.push(result.note || `Destination condition ${cond.attributeName} did not match`);
+          }
+          if (!hit) return { matched: false, matchedConditions: [...matchedConditions, ...misses], matchFields: null };
+          matchedConditions.push(hit.note);
+          if (hit.display) displays.push(hit.display);
         }
         if (displays.length) {
           matchFields.destination = { label: "Destination", constrained: true, display: displays.join(", ") };
@@ -1270,10 +1311,6 @@
       name.includes("geolocations") ? "geolocation" : null;
   }
 
-  // The firewall sees addresses, ports, and applications; content-category
-  // style classification only exists on the DNS and Web paths.
-  const FIREWALL_CLASSIFICATION_FIELDS = ["applicationId", "applicationListId", "geolocation"];
-
   function confirmedValues(testInput, field) {
     const values = field === "applicationId"
       ? [testInput.applicationId, testInput.protocolId, testInput.enterpriseApplicationId]
@@ -1281,7 +1318,7 @@
     return flattenSelectedIds(values).map(String);
   }
 
-  function unresolvedClassification(rule, testInput) {
+  function unresolvedClassification(rule, testInput, lookups) {
     const stage = testInput.trafficStage;
     if (stage !== "dns" && stage !== "web" && stage !== "firewall") return [];
     const ruledOut = testInput.ruledOut || {};
@@ -1289,8 +1326,7 @@
     for (const cond of rule.ruleConditions || rule.conditions || []) {
       const field = classificationField(cond.attributeName);
       if (!field) continue;
-      if (stage === "firewall" && !FIREWALL_CLASSIFICATION_FIELDS.includes(field)) continue;
-      const values = (Array.isArray(cond.attributeValue) ? cond.attributeValue : [cond.attributeValue]).map(String);
+      const values = conditionValues(cond, lookups).map(String);
       const yes = confirmedValues(testInput, field);
       if (values.some(value => yes.includes(value))) continue;
       const no = flattenSelectedIds(ruledOut[field]).map(String);
@@ -1302,10 +1338,14 @@
 
   function needsDestinationClassification(rule, testInput, lookups) {
     if (rule.ruleIsEnabled === false || rule.enabled === false) return null;
-    const pending = unresolvedClassification(rule, testInput);
+    const pending = unresolvedClassification(rule, testInput, lookups);
     if (!pending.length) return null;
+    // Would the rule match if the unknown conditions turned out true? They
+    // stand in as "any destination" (destinations are alternatives).
     const unknown = pending.map(item => item.cond);
-    const conditions = (rule.ruleConditions || rule.conditions || []).filter(cond => !unknown.includes(cond));
+    const conditions = (rule.ruleConditions || rule.conditions || []).map(cond => unknown.includes(cond)
+      ? { attributeName: "umbrella.destination.all", attributeOperator: "=", attributeValue: true }
+      : cond);
     if (!matchesRule({ ...rule, ruleConditions: conditions, conditions }, testInput, lookups).matched) return null;
     return pending.map(({ attributeName, field, ids }) => ({ attributeName, field, ids }));
   }

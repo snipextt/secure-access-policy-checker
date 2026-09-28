@@ -25,6 +25,9 @@ const catalogs = {
   sourceSites: { 21: "Default Site" },
   sourceNetworks: { 1: "London 1" },
   sourceTunnelGroups: { 33: "Branch Tunnel" },
+  sourceEndpointDevices: { 55: "RWKST1.corp.example" },
+  sourceCatalystSdwan: { 66: "IOT_OT" },
+  sourceSecurityGroupTags: { 77: "Finance" },
   contentCategories: { 27: "Gambling", 28: "Social Networking" },
   sourceIdentityTypeIds: { 7: 7, 8: 7, 3: 3, 4: 3, 9: 9, 21: 21, 1: 1, 33: 40 },
 };
@@ -77,8 +80,9 @@ test("destination parsing", () => {
 // --- Sources per connection ------------------------------------------------
 test("connection limits sources", () => {
   assert.deepEqual(model.CONNECTIONS.client.sources, ["roaming", "identity"]);
-  assert.deepEqual(model.CONNECTIONS.va.sources, ["site", "internalIp", "identity", "network"]);
-  assert.deepEqual(model.CONNECTIONS.tunnel.sources, ["tunnel", "internalIp", "identity"]);
+  assert.deepEqual(model.CONNECTIONS.va.sources, ["site", "internalIp", "identity", "computer", "network"]);
+  assert.deepEqual(model.CONNECTIONS.network.sources, ["network"]);
+  assert.deepEqual(model.CONNECTIONS.tunnel.sources, ["tunnel", "internalIp", "identity", "computer", "sdwan", "sgt"]);
   // A site picked earlier is ignored once the connection is Secure Client.
   const request = build({ connection: "client", sources: { roaming: "sourceRoaming:9", site: "sourceSites:21" }, destination: "example.com" });
   assert.deepEqual(request.testInput, { sourceRoamingId: "9" });
@@ -117,7 +121,9 @@ test("stage plan per connection", () => {
   assert.equal(plan({ ...tunnel, destination: "203.0.113.10" }), "firewall,web");
   assert.equal(plan({ ...tunnel, destination: "203.0.113.10", protocol: "ICMP" }), "firewall");
   assert.equal(plan({ ...tunnel, destination: "hr.internal.example" }), "private");
-  assert.equal(plan({ ...tunnel, destination: "10.9.9.9" }), "private");
+  // Branch traffic to internal IPs is logged as firewall events.
+  assert.equal(plan({ ...tunnel, destination: "10.9.9.9" }), "firewall");
+  assert.equal(plan({ connection: "client", sources: { roaming: "sourceRoaming:9" }, destination: "10.9.9.9" }), "private");
   assert.match(plan({ connection: "va", sources: { site: "sourceSites:21" }, destination: "hr.internal.example" }), /error:Private Access is not reached/);
 });
 
@@ -126,7 +132,10 @@ test("user matches a rule on a nested group", () => {
   const staff = rule("Block gambling for staff", "block", [cond("umbrella.source.identity_ids", "INTERSECT", [4]), DST_ALL]);
   const evaluation = run({ connection: "client", sources: { roaming: "sourceRoaming:9", identity: "sourceUsers:7" }, destination: "example.com" }, [staff]);
   assert.deepEqual(evaluation.groups.map(group => group.name).sort(), ["All staff", "HR"]);
-  assert.deepEqual(states(evaluation), ["dns:matched:Block gambling for staff", "web:not-reached"]);
+  // DNS may not know the user, so Web is still evaluated as the fallback
+  // (Activity Search shows proxy blocks for requests whose DNS rule blocks).
+  assert.deepEqual(states(evaluation), ["dns:matched:Block gambling for staff", "web:matched:Block gambling for staff"]);
+  assert.equal(evaluation.stages[1].afterBlock.key, "dns");
   assert.equal(evaluation.outcome.status, "block");
   assert.equal(evaluation.outcome.title, "Blocked at DNS");
   // Dan is not in HR, so the default applies at both stages.
@@ -153,7 +162,8 @@ test("category rule asks, then resolves from the answer", () => {
   assert.deepEqual(question.groups[0].options.map(option => option.label), ["Gambling", "Social Networking"]);
 
   const yes = run({ ...form, facts: model.answer({}, question, ["27"]) }, [gambling]);
-  assert.deepEqual(states(yes), ["dns:matched:Block gambling", "web:not-reached"]);
+  assert.deepEqual(states(yes), ["dns:matched:Block gambling", "web:matched:Block gambling"]);
+  assert.equal(yes.outcome.title, "Blocked at DNS");
 
   const no = run({ ...form, facts: model.answer({}, question, []) }, [gambling]);
   assert.deepEqual(states(no), ["dns:matched:Default Internet", "web:matched:Default Internet"]);
@@ -167,13 +177,15 @@ test("DNS and Web can land on different rules", () => {
   assert.equal(evaluation.outcome.title, "Blocked at Web");
 });
 
-test("tunnel firewall: port rules match, content categories do not apply", () => {
+test("tunnel firewall: port rules match, categories apply too", () => {
   const rpc = rule("Block RPC", "block", [SRC_ALL, cond("umbrella.destination.composite_inline_ip", "IN", [{ ip: ["0.0.0.0/0"], port: ["135"], protocol: "TCP" }])]);
   const social = rule("Block social", "block", [SRC_ALL, cond("umbrella.destination.category_ids", "INTERSECT", [28])]);
   const tunnel = { connection: "tunnel", sources: { tunnel: "sourceTunnelGroups:33", internalIp: "10.1.2.3" } };
   assert.deepEqual(states(run({ ...tunnel, destination: "203.0.113.10", port: "135" }, [rpc, social])), ["firewall:matched:Block RPC"]);
+  // Activity Search shows category-list blocks on firewall events, so a
+  // category rule is a question at the firewall as well as on the web.
   const web = run({ ...tunnel, destination: "203.0.113.10" }, [rpc, social]);
-  assert.deepEqual(states(web), ["firewall:matched:Default Internet", "web:needs-answer"]);
+  assert.deepEqual(states(web), ["firewall:needs-answer", "web:needs-answer"]);
 });
 
 test("firewall block stops web", () => {
@@ -189,7 +201,7 @@ test("private resource destination", () => {
   assert.deepEqual(hr.scope.resourceNames, ["HR app"]);
   assert.deepEqual(states(hr), ["private:matched:HR app for HR"]);
   const byIp = run({ connection: "tunnel", sources: { identity: "sourceUsers:7" }, destination: "10.20.1.5", port: "443" }, [hrApp]);
-  assert.deepEqual(states(byIp), ["private:matched:HR app for HR"]);
+  assert.deepEqual(states(byIp), ["firewall:matched:HR app for HR"]);
   const outsider = run({ connection: "client", sources: { identity: "sourceUsers:8" }, destination: "hr.internal.example" }, [hrApp]);
   assert.deepEqual(states(outsider), ["private:matched:Default Private"]);
 });
@@ -199,6 +211,35 @@ test("VA site and internal IP", () => {
   const ipRule = rule("Lab subnet", "allow", [cond("umbrella.source.composite_inline_ip", "IN", [{ ip: ["10.50.0.0/16"], port: ["any"], protocol: "ANY" }]), DST_ALL]);
   assert.deepEqual(states(run({ connection: "va", sources: { internalIp: "10.50.3.4" }, destination: "example.com" }, [ipRule, siteRule])), ["dns:matched:Lab subnet"]);
   assert.deepEqual(states(run({ connection: "va", sources: { site: "sourceSites:21", internalIp: "10.60.3.4" }, destination: "example.com" }, [ipRule, siteRule])), ["dns:matched:Branch DNS filtering"]);
+});
+
+test("Network DNS and the identity kinds seen in Activity Search", () => {
+  // DNS from a registered network (525 export events): only the network.
+  const byNetwork = rule("Block by network", "block", [cond("umbrella.source.identity_ids", "INTERSECT", [1]), DST_ALL]);
+  assert.deepEqual(states(run({ connection: "network", sources: { network: "sourceNetworks:1" }, destination: "example.com" }, [byNetwork])), ["dns:matched:Block by network"]);
+  assert.match(model.buildRequest({ connection: "network", sources: { network: "sourceNetworks:1" }, destination: "203.0.113.5" }, catalogs).error, /only sees DNS/);
+  // AD computer through a tunnel to an internal broadcast (15,396 events).
+  const byComputer = rule("Block computer", "block", [cond("umbrella.source.identity_ids", "INTERSECT", [55]), DST_ALL], { trafficScope: "private_network" });
+  assert.deepEqual(states(run({ connection: "tunnel", sources: { computer: "sourceEndpointDevices:55" }, destination: "10.100.67.255", port: "138", protocol: "UDP" }, [byComputer])), ["firewall:matched:Block computer"]);
+  // SD-WAN VPN and security group tag carried by a tunnel (1,398 events).
+  const bySgt = rule("SGT web", "allow", [cond("umbrella.source.identity_ids", "INTERSECT", [77]), DST_ALL]);
+  const request = build({ connection: "tunnel", sources: { tunnel: "sourceTunnelGroups:33", sdwan: "sourceCatalystSdwan:66", sgt: "sourceSecurityGroupTags:77" }, destination: "https://example.com/" });
+  assert.deepEqual(request.testInput, { sourceTunnelGroupId: "33", sourceCatalystSdwanId: "66", sourceSecurityGroupTagId: "77" });
+  assert.equal(model.evaluate(request, [bySgt, internetDefault], lookups, Matcher).stages.find(stage => stage.stage.key === "web").match.rule.ruleName, "SGT web");
+});
+
+test("category conditions are bit positions, not category IDs", () => {
+  // Activity Search: rule 334892 lists category [10] and blocked Gambling
+  // domains; bit 10 is Gambling (categoryId 11), categoryId 10 is File Storage.
+  const bits = { 10: { name: "Gambling", categoryId: 11 }, 9: { name: "File Storage", categoryId: 10 } };
+  const gambling = rule("Block category bit 10", "block", [SRC_ALL, cond("umbrella.destination.category_ids", "INTERSECT", [10])]);
+  const withBits = { ...lookups, categories: bits, contentCategories: { 10: "File Storage", 11: "Gambling" } };
+  const form = { connection: "network", sources: { network: "sourceNetworks:1" }, destination: "bet.example" };
+  const first = model.evaluate(build(form), [gambling, internetDefault], withBits, Matcher);
+  const question = model.questionFor(first.stages[0], "bet.example", withBits);
+  assert.deepEqual(question.groups[0].options.map(option => option.label), ["Gambling"]);
+  const yes = model.evaluate(build({ ...form, facts: model.answer({}, question, ["11"]) }), [gambling, internetDefault], withBits, Matcher);
+  assert.deepEqual(states(yes), ["dns:matched:Block category bit 10"]);
 });
 
 test("disabled rules are skipped", () => {
