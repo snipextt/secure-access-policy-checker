@@ -73,12 +73,13 @@ document.addEventListener("DOMContentLoaded", () => {
   // ---------------------------------------------------------------------------
   // Highlight matched rule on the dashboard page
   // ---------------------------------------------------------------------------
-  function highlightOnPage(ruleName, matchedConditions) {
+  // targets: [{ ruleName, stages: ["DNS", "Web"], action, matchedConditions }]
+  function highlightRulesOnPage(targets) {
     api.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (!tabs || tabs.length === 0) return;
-      api.tabs.sendMessage(tabs[0].id, { type: "HIGHLIGHT_RULE", ruleName, matchedConditions }, () => {
+      api.tabs.sendMessage(tabs[0].id, { type: "HIGHLIGHT_RULES", targets }, () => {
         if (api.runtime.lastError) {
-          console.warn("[popup] HIGHLIGHT_RULE — content script not reachable:",
+          console.warn("[popup] HIGHLIGHT_RULES — content script not reachable:",
             api.runtime.lastError.message);
         }
       });
@@ -115,13 +116,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const identityOptions = window.Matcher.getIdentityOptions(rules);
 
-    // Traffic-path flow replaces the broad From/To tester; the Rules & Audit tab remains unchanged.
     if (testerHandle) testerHandle.updateCatalogs(objectMaps || {});
     else testerHandle = window.TrafficPathPanel.create(
       testerRoot,
       objectMaps || {},
-      /* onRun */ async (prepared, path) => {
-        const lookups = await window.PopupSections.loadLookups();
+      /* onRun */ async (request) => {
+        const lookups = { ...(await window.PopupSections.loadLookups()) };
         Object.assign(lookups, currentObjectMaps || {});
         // Source identity IDs are resolved separately from their source type.
         // Retain the catalog-derived type map so result text can identify,
@@ -141,14 +141,14 @@ document.addEventListener("DOMContentLoaded", () => {
         lookups.applicationCategories = (currentObjectMaps && currentObjectMaps.applicationCategories) || {};
         lookups.enterpriseApplications = (currentObjectMaps && currentObjectMaps.enterpriseApplications) || {};
         lookups.memberMaps = currentMemberMaps || {};
-        return window.TrafficPath.evaluateStages(path, prepared, stageInput => window.Matcher.matchPolicy(currentRules, stageInput, lookups));
+        lookups.identityTypeNames = currentIdentityTypeMap || {};
+        if (!currentRules.length) return { error: "No rules are loaded yet. Open the dashboard's policy page and wait for the data to load." };
+        const evaluation = window.TrafficPath.evaluate(request, currentRules, lookups, window.Matcher);
+        return { ...evaluation, lookups };
       },
-      /* onReset */ () => {},
-      /* onHighlight */ (result) => {
-        if (!result || result.noMatch || !result.rule) return;
-        const displayName = result.rule.ruleName || result.rule.name || "(unnamed)";
-        highlightOnPage(displayName, result.matchedConditions);
-        minimizeEmbeddedPanel();
+      /* onHighlight */ (targets, summary) => {
+        highlightRulesOnPage(targets);
+        minimizeEmbeddedPanel(summary);
       }
     );
 
@@ -167,9 +167,14 @@ document.addEventListener("DOMContentLoaded", () => {
     return window.self !== window.top;
   }
 
-  function minimizeEmbeddedPanel() {
+  // `summary` (optional) lets the page dock a compact result card while the
+  // panel is minimized.
+  function minimizeEmbeddedPanel(summary) {
     if (!isEmbeddedInPage()) return;
-    window.parent.postMessage({ type: "SEC_MINIMIZE_PANEL" }, "*");
+    // The summary names policy rules, so send it only to the dashboard origin.
+    const parentOrigin = (window.location.ancestorOrigins && window.location.ancestorOrigins[0]) || "";
+    const targetOrigin = DASHBOARD_ORIGIN_PATTERN.test(parentOrigin) ? parentOrigin : null;
+    window.parent.postMessage({ type: "SEC_MINIMIZE_PANEL", summary: targetOrigin ? summary || null : null }, targetOrigin || "*");
   }
 
   function requestOrgIdFromParent(timeoutMs = 1500) {

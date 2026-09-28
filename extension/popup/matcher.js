@@ -452,6 +452,7 @@
     if (an === "umbrella.source.identity_type_ids") {
       const typeMap = lookups.sourceIdentityTypeIds || {};
       const fromCatalogs = flattenSelectedIds([
+        testInput.sourceIdentityIds,
         testInput.sourceUserId, testInput.sourceGsuiteUserId, testInput.sourceGsuiteOuId,
         testInput.sourceRoamingId, testInput.sourceGroupId,
         testInput.sourceEndpointDeviceId, testInput.sourceNetworkId, testInput.sourceSiteId,
@@ -464,6 +465,7 @@
     } else {
       selected =
         an === "umbrella.source.identity_ids" ? flattenSelectedIds([
+          testInput.sourceIdentityIds,
           testInput.sourceUserId, testInput.sourceGsuiteUserId, testInput.sourceGsuiteOuId,
           testInput.sourceRoamingId, testInput.sourceGroupId,
           testInput.sourceEndpointDeviceId, testInput.sourceNetworkId, testInput.sourceSiteId,
@@ -1081,6 +1083,7 @@
     } = testInput;
     const hasSelected = (value) => flattenSelectedIds(value).length > 0;
     const hasSource = source.trim() !== "" || [
+      testInput.sourceIdentityIds,
       sourceUserId, identityTypeIds, sourceGsuiteUserId, sourceGsuiteOuId, sourceRoamingId, sourceGroupId, sourceEndpointDeviceId,
       sourceNetworkId, sourceSiteId, sourceSecurityGroupTagId,
       sourceCatalystSdwanId, sourceTunnelGroupId,
@@ -1251,23 +1254,60 @@
       cidrMatch(testInput.destination, item.cidr) || fqdnMatch(item.cidr, testInput.destination)));
   }
 
+  // Destination facts a domain/IP alone does not reveal (its content
+  // category, application, geolocation, ...). The traffic-path checker asks
+  // the user about the exact values a higher-priority rule depends on:
+  // confirmed values go in the normal testInput field, rejected ones in
+  // testInput.ruledOut[field]. A value in neither set is still unknown.
+  function classificationField(attributeName) {
+    const name = String(attributeName || "").toLowerCase();
+    return name.includes("application_list") ? "applicationListId" :
+      name.includes("application_ids") ? "applicationId" :
+      name.includes("application_category") ? "applicationCategoryId" :
+      name.endsWith(".category_ids") ? "contentCategoryId" :
+      name.includes("category_list") ? "categoryListId" :
+      name.includes("appriskprofile") ? "appRiskProfileId" :
+      name.includes("geolocations") ? "geolocation" : null;
+  }
+
+  // The firewall sees addresses, ports, and applications; content-category
+  // style classification only exists on the DNS and Web paths.
+  const FIREWALL_CLASSIFICATION_FIELDS = ["applicationId", "applicationListId", "geolocation"];
+
+  function confirmedValues(testInput, field) {
+    const values = field === "applicationId"
+      ? [testInput.applicationId, testInput.protocolId, testInput.enterpriseApplicationId]
+      : testInput[field];
+    return flattenSelectedIds(values).map(String);
+  }
+
+  function unresolvedClassification(rule, testInput) {
+    const stage = testInput.trafficStage;
+    if (stage !== "dns" && stage !== "web" && stage !== "firewall") return [];
+    const ruledOut = testInput.ruledOut || {};
+    const pending = [];
+    for (const cond of rule.ruleConditions || rule.conditions || []) {
+      const field = classificationField(cond.attributeName);
+      if (!field) continue;
+      if (stage === "firewall" && !FIREWALL_CLASSIFICATION_FIELDS.includes(field)) continue;
+      const values = (Array.isArray(cond.attributeValue) ? cond.attributeValue : [cond.attributeValue]).map(String);
+      const yes = confirmedValues(testInput, field);
+      if (values.some(value => yes.includes(value))) continue;
+      const no = flattenSelectedIds(ruledOut[field]).map(String);
+      const open = values.filter(value => !no.includes(value));
+      if (open.length) pending.push({ attributeName: cond.attributeName, field, ids: open, cond });
+    }
+    return pending;
+  }
+
   function needsDestinationClassification(rule, testInput, lookups) {
-    if (testInput.trafficStage !== "dns" && testInput.trafficStage !== "web") return false;
-    if (rule.ruleIsEnabled === false || rule.enabled === false) return false;
-    const unknown = (rule.ruleConditions || rule.conditions || []).filter(cond => {
-      const name = String(cond.attributeName || "").toLowerCase();
-      const field = name.includes("application_list") ? testInput.applicationListId :
-        name.includes("application_ids") ? [testInput.applicationId, testInput.protocolId, testInput.enterpriseApplicationId] :
-        name.includes("application_category") ? testInput.applicationCategoryId :
-        name.endsWith(".category_ids") ? testInput.contentCategoryId :
-        name.includes("category_list") ? testInput.categoryListId :
-        name.includes("appriskprofile") ? testInput.appRiskProfileId :
-        name.includes("geolocations") ? testInput.geolocation : null;
-      return field !== null && flattenSelectedIds(field).length === 0;
-    });
-    if (!unknown.length) return false;
+    if (rule.ruleIsEnabled === false || rule.enabled === false) return null;
+    const pending = unresolvedClassification(rule, testInput);
+    if (!pending.length) return null;
+    const unknown = pending.map(item => item.cond);
     const conditions = (rule.ruleConditions || rule.conditions || []).filter(cond => !unknown.includes(cond));
-    return matchesRule({ ...rule, ruleConditions: conditions, conditions }, testInput, lookups).matched;
+    if (!matchesRule({ ...rule, ruleConditions: conditions, conditions }, testInput, lookups).matched) return null;
+    return pending.map(({ attributeName, field, ids }) => ({ attributeName, field, ids }));
   }
 
   function matchPolicy(rules, testInput, lookups = {}) {
@@ -1292,10 +1332,17 @@
     const rejected = [];
     for (const rule of sorted) {
       const result = matchesRule(rule, testInput, lookups);
-      if (needsTransportContext(rule, testInput, lookups) || (!result.matched && needsDestinationClassification(rule, testInput, lookups))) {
+      if (needsTransportContext(rule, testInput, lookups)) {
         return {
-          indeterminate: true, reason: "A higher-priority rule needs destination classification or traffic port before this stage can be determined.",
-          rule,
+          indeterminate: true, reason: "A higher-priority rule depends on the traffic port or protocol.",
+          rule, pending: [],
+        };
+      }
+      const pending = !result.matched && needsDestinationClassification(rule, testInput, lookups);
+      if (pending) {
+        return {
+          indeterminate: true, reason: "A higher-priority rule depends on what the destination is (category, application, or location).",
+          rule, pending,
         };
       }
       if (result.matched) {
@@ -1411,5 +1458,6 @@
     getIdentityOptions,
     collectMemberAddresses,
     memberKindForAttribute,
+    classificationField,
   };
 })(window);
