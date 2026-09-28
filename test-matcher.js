@@ -14,7 +14,7 @@
 // ---------------------------------------------------------------------------
 // Bootstrap matcher.js in a Node-safe way (no window/document)
 // ---------------------------------------------------------------------------
-const fakeWindow = {};
+const fakeWindow = { IPAddress: require("./extension/popup/ip-address.js") };
 const matcherSrc = require("fs").readFileSync(
   require("path").join(__dirname, "extension/popup/matcher.js"),
   "utf-8"
@@ -733,7 +733,14 @@ assert(Matcher.cidrMatch("10.0.0.1", "10.0.0.1"), "cidrMatch: bare IP (no /) = /
 assert(!Matcher.cidrMatch("10.0.0.2", "10.0.0.1"), "cidrMatch: bare IP mismatch");
 assert(!Matcher.cidrMatch("", "10.0.0.0/8"), "cidrMatch: empty IP");
 assert(!Matcher.cidrMatch("10.0.0.1", ""), "cidrMatch: empty CIDR");
-assert(!Matcher.cidrMatch("2001:db8::1", "2001:db8::/32"), "cidrMatch: IPv6 returns false (not implemented)");
+assert(Matcher.cidrMatch("2001:db8::1", "2001:db8::/32"), "cidrMatch: IPv6 inside /32");
+assert(!Matcher.cidrMatch("2001:db9::1", "2001:db8::/32"), "cidrMatch: IPv6 outside /32");
+assert(Matcher.cidrMatch("2001:0db8::1", "2001:db8::1/128"), "cidrMatch: equivalent IPv6 /128");
+assert(Matcher.cidrMatch("::ffff:192.0.2.1", "::ffff:c000:200/120"), "cidrMatch: mixed IPv6 notation");
+assert(!Matcher.cidrMatch("192.0.2.1", "::ffff:192.0.2.1"), "cidrMatch: do not mix families");
+assert(!Matcher.cidrMatch("2001:db8::1", "2001:db8::/129"), "cidrMatch: invalid prefix");
+assert(!Matcher.cidrMatch("2001:::1", "::/0"), "cidrMatch: invalid IPv6 literal");
+assert(!Matcher.cidrMatch("10.0.0.1", "10.0.0.0/8junk"), "cidrMatch: invalid IPv4 prefix");
 
 // ---------------------------------------------------------------------------
 // TEST GROUP 15: FQDN helper

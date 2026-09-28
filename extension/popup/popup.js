@@ -110,18 +110,17 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderResults(rules, findings, identityMap, objectMap, objectMaps, identityTypeMap) {
-    testerRoot.innerHTML = "";
     rulesRoot.innerHTML = "";
-    testerHandle = null;
     auditHandle  = null;
 
     const identityOptions = window.Matcher.getIdentityOptions(rules);
 
     // Traffic-path flow replaces the broad From/To tester; the Rules & Audit tab remains unchanged.
-    testerHandle = window.TrafficPathPanel.create(
+    if (testerHandle) testerHandle.updateCatalogs(objectMaps || {});
+    else testerHandle = window.TrafficPathPanel.create(
       testerRoot,
       objectMaps || {},
-      /* onRun */ async (testInput) => {
+      /* onRun */ async (prepared, path) => {
         const lookups = await window.PopupSections.loadLookups();
         Object.assign(lookups, currentObjectMaps || {});
         // Source identity IDs are resolved separately from their source type.
@@ -142,8 +141,7 @@ document.addEventListener("DOMContentLoaded", () => {
         lookups.applicationCategories = (currentObjectMaps && currentObjectMaps.applicationCategories) || {};
         lookups.enterpriseApplications = (currentObjectMaps && currentObjectMaps.enterpriseApplications) || {};
         lookups.memberMaps = currentMemberMaps || {};
-        const result = window.Matcher.matchPolicy(currentRules, testInput, lookups);
-        return result;
+        return window.TrafficPath.evaluateStages(path, prepared, stageInput => window.Matcher.matchPolicy(currentRules, stageInput, lookups));
       },
       /* onReset */ () => {},
       /* onHighlight */ (result) => {
