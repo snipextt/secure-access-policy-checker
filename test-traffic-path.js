@@ -52,6 +52,7 @@ function rule(name, action, conditions, extra = {}) {
   return { ruleId: id, ruleName: name, rulePriority: id, ruleAction: action, ruleIsEnabled: true, trafficScope: "public_internet", ruleConditions: conditions, ...extra };
 }
 const internetDefault = rule("Default Internet", "allow", [SRC_ALL, DST_ALL], { ruleIsDefault: true, rulePriority: 999 });
+const geoBlock = rule("Block selected countries", "block", [SRC_ALL, cond("umbrella.destination.geolocations", "INTERSECT", ["AQ", "FO"])]);
 const privateDefault = rule("Default Private", "block", [SRC_ALL, DST_ALL], { ruleIsDefault: true, rulePriority: 998, trafficScope: "private_network" });
 
 function build(form) {
@@ -150,6 +151,33 @@ test("roaming computer identity type rule", () => {
   const evaluation = model.evaluate(build({ connection: "client", sources: { roaming: "sourceRoaming:9" }, destination: "example.com" }), [roamingRule, internetDefault], { ...lookups, sourceIdentityTypeIds: catalogs.sourceIdentityTypeIds }, Matcher);
   assert.deepEqual(states(evaluation), ["dns:matched:All roaming computers", "web:matched:All roaming computers"]);
   assert.equal(evaluation.outcome.status, "warn");
+});
+
+test("GeoIP dependency is reported unsupported instead of guessed", () => {
+  const evaluation = run({ connection: "client", sources: { roaming: "sourceRoaming:9" }, destination: "google.com" }, [geoBlock]);
+  assert.deepEqual(states(evaluation), ["dns:unsupported", "web:unsupported"]);
+  assert.equal(evaluation.outcome.status, "unsupported");
+  assert.equal(evaluation.outcome.rule.ruleName, "Block selected countries");
+  assert.match(evaluation.outcome.reason, /GeoIP matching isn’t supported yet/);
+  assert.equal(model.questionFor(evaluation.stages[0], "google.com", lookups), null);
+});
+
+test("answerable category stays separate from unsupported GeoIP", () => {
+  const geoAndCategory = rule("Block country gambling", "block", [SRC_ALL, cond("umbrella.destination.geolocations", "INTERSECT", ["AQ"]), cond("umbrella.destination.category_ids", "INTERSECT", [27])]);
+  const form = { connection: "client", sources: { roaming: "sourceRoaming:9" }, destination: "bet.example" };
+  const first = run(form, [geoAndCategory]);
+  const question = model.questionFor(first.stages[0], "bet.example", lookups);
+  assert.deepEqual(Array.from(question.groups, group => group.field), ["contentCategoryId"]);
+  assert.equal(first.stages[0].match.geoUnsupported, true);
+  const answered = run({ ...form, facts: model.answer({}, question, []) }, [geoAndCategory]);
+  assert.equal(answered.outcome.status, "unsupported");
+  assert.match(answered.outcome.reason, /GeoIP matching isn’t supported yet/);
+});
+
+test("GeoIP uncertainty suppresses a later TCP firewall allow", () => {
+  const evaluation = run({ connection: "vpn", sources: { identity: "sourceUsers:7" }, destination: "203.0.113.10", port: "443" }, [geoBlock]);
+  assert.deepEqual(states(evaluation), ["firewall:unsupported", "web:unsupported"]);
+  assert.equal(evaluation.outcome.status, "unsupported");
 });
 
 test("category rule asks, then resolves from the answer", () => {

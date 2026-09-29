@@ -457,12 +457,26 @@
       // Only TCP: the handshake carries no payload, while the first UDP
       // packet already identifies the application (Activity Search: SD-WAN
       // DNS on UDP 53 was not logged under an app-list rule).
-      if (match && match.indeterminate && stage.key === "firewall" && request.destination.protocol === "TCP" && match.pending && match.pending.length) {
+      if (match && match.indeterminate && stage.key === "firewall" && request.destination.protocol === "TCP" && match.pending && match.pending.length && !match.pending.some(item => item.field === "geolocation")) {
         results.push({ stage, state: "matched", match, action: "allow", provisional: true, conditional: uncertainBefore, afterBlock: blockedAt || null });
         continue;
       }
       if (match && match.indeterminate) {
-        results.push({ stage, state: "needs-answer", match, conditional: uncertainBefore, afterBlock: blockedAt || null });
+        const geoPending = (match.pending || []).some(item => item.field === "geolocation");
+        const answerPending = (match.pending || []).filter(item => item.field !== "geolocation");
+        if (geoPending && !answerPending.length) {
+          results.push({
+            stage, state: "unsupported", match,
+            reason: "GeoIP matching isn’t supported yet. This rule depends on Cisco’s location for the destination IP.",
+            conditional: uncertainBefore, afterBlock: blockedAt || null,
+          });
+        } else {
+          results.push({
+            stage, state: "needs-answer",
+            match: geoPending ? { ...match, pending: answerPending, geoUnsupported: true } : match,
+            conditional: uncertainBefore, afterBlock: blockedAt || null,
+          });
+        }
         if (!uncertainBefore) uncertainBefore = stage;
         continue;
       }
@@ -496,7 +510,7 @@
     const outcome = outcomeOf(results);
     // Threat categories in play and not yet answered: the result holds
     // "unless Cisco flags it", and the panel asks.
-    const threatCheck = !threatAnswer && threatCategories.size && outcome.status !== "block" && outcome.status !== "pending"
+    const threatCheck = !threatAnswer && threatCategories.size && outcome.status !== "block" && outcome.status !== "pending" && outcome.status !== "unsupported"
       ? { categories: [...threatCategories].sort() }
       : null;
     if (threatCheck) outcome.unlessFlagged = true;
@@ -544,12 +558,15 @@
 
   function outcomeOf(results) {
     const active = results.filter(result => result.state !== "skipped" && result.state !== "not-reached");
-    const pending = active.find(result => result.state === "needs-answer");
+    const uncertain = active.find(result => result.state === "needs-answer" || result.state === "unsupported");
     const block = active.find(result => result.state === "matched" && result.action === "block");
-    if (block && (!pending || stageOrder(block.stage.key) < stageOrder(pending.stage.key))) {
+    if (block && (!uncertain || stageOrder(block.stage.key) < stageOrder(uncertain.stage.key))) {
       return { status: "block", title: `Blocked at ${block.stage.label}`, stage: block.stage.key, rule: block.match.rule };
     }
-    if (pending) return { status: "pending", title: "Needs one more detail", stage: pending.stage.key };
+    if (uncertain && uncertain.state === "unsupported") {
+      return { status: "unsupported", title: "Cannot determine policy match", stage: uncertain.stage.key, rule: uncertain.match.rule, reason: uncertain.reason };
+    }
+    if (uncertain) return { status: "pending", title: "Needs one more detail", stage: uncertain.stage.key };
     if (active.some(result => result.state === "no-match")) return { status: "unknown", title: "No rule matched", stage: null };
     const last = active[active.length - 1];
     if (!last) return { status: "unknown", title: "Not evaluated", stage: null };
@@ -598,7 +615,7 @@
   }
 
   function questionFor(result, host, lookups) {
-    const pending = (result.match && result.match.pending) || [];
+    const pending = ((result.match && result.match.pending) || []).filter(item => item.field !== "geolocation");
     if (!pending.length) return null;
     const rule = result.match.rule;
     return {

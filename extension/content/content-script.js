@@ -2263,7 +2263,7 @@ function ensureEmbeddedPopupStyle() {
     #sec-result-dock.sec-dock-allow { --sec-dock-accent: #15803d; --sec-dock-soft: #dcfce7; }
     #sec-result-dock.sec-dock-block { --sec-dock-accent: #b91c1c; --sec-dock-soft: #fee2e2; }
     #sec-result-dock.sec-dock-warn, #sec-result-dock.sec-dock-isolate { --sec-dock-accent: #a16207; --sec-dock-soft: #fef3c7; }
-    #sec-result-dock.sec-dock-pending { --sec-dock-accent: #9a5b00; --sec-dock-soft: #ffedd5; }
+    #sec-result-dock.sec-dock-pending, #sec-result-dock.sec-dock-unsupported { --sec-dock-accent: #9a5b00; --sec-dock-soft: #ffedd5; }
     #sec-result-dock .sec-dock-head { display: flex; align-items: center; gap: 8px; }
     #sec-result-dock .sec-dock-icon { flex: none; display: grid; place-items: center; width: 26px; height: 26px; padding: 5px; border-radius: 50%; background: var(--sec-dock-soft); color: var(--sec-dock-accent); }
     #sec-result-dock .sec-dock-icon svg { display: block; width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -2447,7 +2447,7 @@ function hideResultDock(clearHits) {
 function showResultDock(summary, panel) {
   hideResultDock(false);
   const text = (value) => (typeof value === "string" ? value : "");
-  const status = ["allow", "block", "warn", "isolate", "pending", "unknown"].includes(summary.status) ? summary.status : "unknown";
+  const status = ["allow", "block", "warn", "isolate", "pending", "unsupported", "unknown"].includes(summary.status) ? summary.status : "unknown";
   const make = (tag, className, content) => {
     const el = document.createElement(tag);
     if (className) el.className = className;
@@ -2488,7 +2488,8 @@ function showResultDock(summary, panel) {
     } else {
       value.appendChild(make("span", "sec-dock-muted",
         stage.state === "needs-answer" ? "Waiting on an answer in the checker"
-          : stage.state === "not-reached" ? "Not reached"
+          : stage.state === "unsupported" ? "GeoIP matching unsupported"
+            : stage.state === "not-reached" ? "Not reached"
             : stage.state === "no-match" ? "No rule matched" : "Not evaluated"));
     }
     inner.appendChild(value);

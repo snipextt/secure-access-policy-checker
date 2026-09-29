@@ -464,13 +464,14 @@
       const blockedBy = stages.find(result => result.security && result.stage.key === outcome.stage);
       const summary = blockedBy
         ? `${blockedBy.security.category} · ${blockedBy.security.profile ? `security profile “${blockedBy.security.profile}” on ${ruleTitle(outcome.rule)}` : `DNS security setting “${blockedBy.security.setting}”`}`
+        : outcome.status === "unsupported" ? `${ruleTitle(outcome.rule)} · ${outcome.reason}`
         : outcome.rule
         ? `${ruleTitle(outcome.rule)} · ${rulePriority(outcome.rule)}${outcome.unlessFlagged ? " · unless flagged as a threat" : ""}`
         : outcome.status === "pending" ? "Answer the question below to finish the check." : "Default rules should always match. Refresh the dashboard data and try again.";
       bannerCopy.append(node("span", "tp-outcome-rule", summary));
       const outcomeIcon = { allow: "check", block: "block", warn: "warn", isolate: "warn", pending: "question" }[outcome.status] || "question";
       banner.append(icon(outcomeIcon, "tp-outcome-icon"), bannerCopy);
-      const highlightable = stages.filter(result => result.state === "matched" && !result.afterBlock && !result.match.rule.security);
+      const highlightable = outcome.status === "unsupported" ? [] : stages.filter(result => result.state === "matched" && !result.afterBlock && !result.match.rule.security);
       if (highlightable.length) {
         const show = node("button", "tp-secondary", "Show on page");
         show.type = "button";
@@ -494,6 +495,9 @@
         results.append(banner);
         if (question) results.append(questionCard(question, pending.match.rule));
         else if (pending) results.append(node("p", "tp-note", pending.match.reason));
+      }
+      if (pending && pending.match.geoUnsupported) {
+        results.append(node("p", "tp-note", "GeoIP matching isn’t supported yet. This rule also depends on Cisco’s location for the destination IP."));
       }
       const answers = answersStrip(hostLabel, evaluation);
       if (answers) results.append(answers);
@@ -573,7 +577,7 @@
       const row = node("li", `tp-stage tp-stage-${result.state}${result.state === "matched" ? ` tp-stage-${result.action}` : ""}${result.afterBlock ? " tp-stage-after" : ""}`);
       const markerIcon = result.state === "matched"
         ? ({ allow: "check", block: "block", warn: "warn", isolate: "warn" }[result.action] || "question")
-        : result.state === "needs-answer" ? "question" : null;
+        : result.state === "needs-answer" || result.state === "unsupported" ? "question" : null;
       const marker = markerIcon ? icon(markerIcon, "tp-stage-marker") : node("span", "tp-stage-marker");
       row.append(marker, node("span", "tp-stage-name", result.stage.label));
       const body = node("div", "tp-stage-body");
@@ -597,10 +601,12 @@
         if (result.webProfileId && !result.security) body.append(node("span", "tp-stage-meta", `${result.webProfileName ? `Security profile “${result.webProfileName}”` : "The rule's security profile"} can still block by file type, data loss prevention, or app controls.`));
         if (result.ipsProfileId) body.append(node("span", "tp-stage-meta", "IPS on this rule can still block by signature."));
       } else {
-        const text = result.state === "needs-answer"
-          ? ["Waiting on your answer", result.match.pending && result.match.pending.length
-            ? `Decided by ${ruleTitle(result.match.rule)} (${rulePriority(result.match.rule)}) or a later rule.`
-            : `${ruleTitle(result.match.rule)} (${rulePriority(result.match.rule)}) depends on the traffic port or protocol.`]
+        const text = result.state === "unsupported"
+          ? ["Cannot evaluate GeoIP", result.reason]
+          : result.state === "needs-answer"
+            ? ["Waiting on your answer", result.match.pending && result.match.pending.length
+              ? `Decided by ${ruleTitle(result.match.rule)} (${rulePriority(result.match.rule)}) or a later rule.`
+              : `${ruleTitle(result.match.rule)} (${rulePriority(result.match.rule)}) depends on the traffic port or protocol.`]
           : result.state === "no-match" ? ["No rule matched", "No loaded rule covers this stage."]
             : result.state === "not-reached" ? ["Not reached", result.reason]
               : ["Not evaluated", result.reason || ""];
