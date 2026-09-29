@@ -1188,9 +1188,11 @@
         matchedConditions.push("destination: no destination conditions on rule (unrestricted)");
       } else {
         const displays = [];
-        const evaluate = (cond) => matchAnyAddress(destination, destinationPort, (addr, port) => (
-          matchConditionValue(cond, "destination", addr, port, lookups, testInput)
-        ));
+        const evaluate = (cond) => cond.__pscUnknownDestination
+          ? { matched: true, note: `Destination classification is unresolved (${cond.attributeName})` }
+          : matchAnyAddress(destination, destinationPort, (addr, port) => (
+            matchConditionValue(cond, "destination", addr, port, lookups, testInput)
+          ));
         // A rule's destinations are alternatives: the request matches if it
         // hits any one of them. Verified against Activity Search: one rule
         // with a category and an application list blocked both a
@@ -1309,7 +1311,7 @@
       name.endsWith(".category_ids") ? "contentCategoryId" :
       name.includes("category_list") ? "categoryListId" :
       name.includes("appriskprofile") ? "appRiskProfileId" :
-      name.includes("geolocations") ? "geolocation" : null;
+      name.startsWith("umbrella.destination.") && name.includes("geolocations") ? "geolocation" : null;
   }
 
   function confirmedValues(testInput, field) {
@@ -1361,7 +1363,7 @@
     // stand in as "any destination" (destinations are alternatives).
     const unknown = pending.map(item => item.cond);
     const conditions = (rule.ruleConditions || rule.conditions || []).map(cond => unknown.includes(cond)
-      ? { attributeName: "umbrella.destination.all", attributeOperator: "=", attributeValue: true }
+      ? { ...cond, __pscUnknownDestination: true }
       : cond);
     if (!matchesRule({ ...rule, ruleConditions: conditions, conditions }, testInput, lookups).matched) return null;
     return pending.map(({ attributeName, field, ids }) => ({ attributeName, field, ids }));

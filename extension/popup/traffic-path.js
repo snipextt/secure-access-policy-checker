@@ -287,6 +287,14 @@
   function planStages(request, scope) {
     const { connection, destination } = request;
     if (scope.scope === "private_network") {
+      if (connection === "client") return {
+        stages: [],
+        unsupported: {
+          stage: STAGES.private,
+          label: "Private access unavailable",
+          reason: "Standard Secure Client doesn’t route to private resources. Use Remote Access VPN or a site-to-site tunnel for this private destination.",
+        },
+      };
       if (DNS_ONLY.includes(connection)) return { stages: [], error: `Private Access is not reached through ${CONNECTIONS[connection].label}. Choose Secure Client or Site-to-site tunnel.` };
       // Branch traffic to an internal address or private resource is enforced
       // by the firewall (Activity Search logs it as a firewall event under the
@@ -416,6 +424,33 @@
     const scope = resolveScope(request.destination.host, lookups);
     const plan = planStages(request, scope);
     if (plan.error && !plan.stages.length) return { error: plan.error };
+    if (plan.unsupported) {
+      return {
+        scope, groups: [],
+        stages: [{ stage: plan.unsupported.stage, state: "unsupported", reason: plan.unsupported.reason }],
+        outcome: { status: "unsupported", title: plan.unsupported.label, stage: plan.unsupported.stage.key, reason: plan.unsupported.reason },
+        threatCheck: null,
+      };
+    }
+    const needsVpnClientIp = request.connection === "vpn" && scope.scope === "private_network" && !request.testInput.source && (rules || []).some(rule => {
+      const privateScope = rule.trafficScope || rule.ruleAccess || (rule.raw && rule.raw.ruleAccess);
+      const originalConditions = rule.ruleConditions || rule.conditions || [];
+      const sourceNetwork = originalConditions.find(condition => String(condition.attributeName || "").toLowerCase() === "umbrella.source.composite_inline_ip");
+      if (privateScope !== "private_network" || !sourceNetwork) return false;
+      const conditions = originalConditions.map(condition => condition === sourceNetwork
+        ? { attributeName: "umbrella.source.all", attributeOperator: "=", attributeValue: true }
+        : condition);
+      return matcher.matchPolicy([{ ...rule, ruleConditions: conditions, conditions }], stageInput(request, scope, [], STAGES.firewall), lookups).rule !== undefined;
+    });
+    if (needsVpnClientIp) {
+      const reason = "Enter the VPN-assigned client IP to evaluate source/destination subnet direction for this private destination.";
+      return {
+        scope, groups: [],
+        stages: [{ stage: STAGES.firewall, state: "unsupported", reason }],
+        outcome: { status: "unsupported", title: "VPN direction needs client IP", stage: STAGES.firewall.key, reason },
+        threatCheck: null,
+      };
+    }
     const directIds = request.identities.filter(identity => identity.id !== undefined).map(identity => identity.id);
     const groups = groupsContaining(directIds, lookups.memberMaps);
 
@@ -457,12 +492,26 @@
       // Only TCP: the handshake carries no payload, while the first UDP
       // packet already identifies the application (Activity Search: SD-WAN
       // DNS on UDP 53 was not logged under an app-list rule).
-      if (match && match.indeterminate && stage.key === "firewall" && request.destination.protocol === "TCP" && match.pending && match.pending.length) {
+      if (match && match.indeterminate && stage.key === "firewall" && request.destination.protocol === "TCP" && match.pending && match.pending.length && !match.pending.some(item => item.field === "geolocation")) {
         results.push({ stage, state: "matched", match, action: "allow", provisional: true, conditional: uncertainBefore, afterBlock: blockedAt || null });
         continue;
       }
       if (match && match.indeterminate) {
-        results.push({ stage, state: "needs-answer", match, conditional: uncertainBefore, afterBlock: blockedAt || null });
+        const geoPending = (match.pending || []).some(item => item.field === "geolocation");
+        const answerPending = (match.pending || []).filter(item => item.field !== "geolocation");
+        if (geoPending && !answerPending.length) {
+          results.push({
+            stage, state: "unsupported", match,
+            reason: "GeoIP matching isn’t supported yet. This rule depends on Cisco’s location for the destination IP.",
+            conditional: uncertainBefore, afterBlock: blockedAt || null,
+          });
+        } else {
+          results.push({
+            stage, state: "needs-answer",
+            match: geoPending ? { ...match, pending: answerPending, geoUnsupported: true } : match,
+            conditional: uncertainBefore, afterBlock: blockedAt || null,
+          });
+        }
         if (!uncertainBefore) uncertainBefore = stage;
         continue;
       }
@@ -496,7 +545,7 @@
     const outcome = outcomeOf(results);
     // Threat categories in play and not yet answered: the result holds
     // "unless Cisco flags it", and the panel asks.
-    const threatCheck = !threatAnswer && threatCategories.size && outcome.status !== "block" && outcome.status !== "pending"
+    const threatCheck = !threatAnswer && threatCategories.size && outcome.status !== "block" && outcome.status !== "pending" && outcome.status !== "unsupported"
       ? { categories: [...threatCategories].sort() }
       : null;
     if (threatCheck) outcome.unlessFlagged = true;
@@ -544,12 +593,15 @@
 
   function outcomeOf(results) {
     const active = results.filter(result => result.state !== "skipped" && result.state !== "not-reached");
-    const pending = active.find(result => result.state === "needs-answer");
+    const uncertain = active.find(result => result.state === "needs-answer" || result.state === "unsupported");
     const block = active.find(result => result.state === "matched" && result.action === "block");
-    if (block && (!pending || stageOrder(block.stage.key) < stageOrder(pending.stage.key))) {
+    if (block && (!uncertain || stageOrder(block.stage.key) < stageOrder(uncertain.stage.key))) {
       return { status: "block", title: `Blocked at ${block.stage.label}`, stage: block.stage.key, rule: block.match.rule };
     }
-    if (pending) return { status: "pending", title: "Needs one more detail", stage: pending.stage.key };
+    if (uncertain && uncertain.state === "unsupported") {
+      return { status: "unsupported", title: "Cannot determine policy match", stage: uncertain.stage.key, rule: uncertain.match.rule, reason: uncertain.reason };
+    }
+    if (uncertain) return { status: "pending", title: "Needs one more detail", stage: uncertain.stage.key };
     if (active.some(result => result.state === "no-match")) return { status: "unknown", title: "No rule matched", stage: null };
     const last = active[active.length - 1];
     if (!last) return { status: "unknown", title: "Not evaluated", stage: null };
@@ -598,7 +650,7 @@
   }
 
   function questionFor(result, host, lookups) {
-    const pending = (result.match && result.match.pending) || [];
+    const pending = ((result.match && result.match.pending) || []).filter(item => item.field !== "geolocation");
     if (!pending.length) return null;
     const rule = result.match.rule;
     return {
