@@ -108,7 +108,9 @@ test("stage plan per connection", () => {
     const request = build(form);
     const scope = model.resolveScope(request.destination.host, lookups);
     const result = model.planStages(request, scope);
-    return result.error && !result.stages.length ? `error:${result.error}` : result.stages.map(stage => stage.key).join(",") + (result.skipped && result.skipped.length ? ` skip:${result.skipped.map(stage => stage.key)}` : "");
+    if (result.error && !result.stages.length) return `error:${result.error}`;
+    if (result.unsupported) return `unsupported:${result.unsupported.stage.key}`;
+    return result.stages.map(stage => stage.key).join(",") + (result.skipped && result.skipped.length ? ` skip:${result.skipped.map(stage => stage.key)}` : "");
   };
   const client = { connection: "client", sources: { roaming: "sourceRoaming:9" } };
   const tunnel = { connection: "tunnel", sources: { tunnel: "sourceTunnelGroups:33" } };
@@ -125,7 +127,7 @@ test("stage plan per connection", () => {
   assert.equal(plan({ ...tunnel, destination: "hr.internal.example" }), "firewall");
   // Branch traffic to internal IPs is logged as firewall events.
   assert.equal(plan({ ...tunnel, destination: "10.9.9.9" }), "firewall");
-  assert.equal(plan({ connection: "client", sources: { roaming: "sourceRoaming:9" }, destination: "10.9.9.9" }), "private");
+  assert.equal(plan({ connection: "client", sources: { roaming: "sourceRoaming:9" }, destination: "10.9.9.9" }), "unsupported:private");
   assert.match(plan({ connection: "va", sources: { site: "sourceSites:21" }, destination: "hr.internal.example" }), /error:Private Access is not reached/);
 });
 
@@ -231,15 +233,48 @@ test("firewall block stops web", () => {
   assert.equal(evaluation.outcome.title, "Blocked at Firewall");
 });
 
+test("Secure Client cannot be evaluated for private destinations", () => {
+  for (const destination of ["10.99.1.1", "hr.internal.example"]) {
+    const evaluation = run({ connection: "client", sources: { roaming: "sourceRoaming:9" }, destination }, [internetDefault]);
+    assert.equal(evaluation.outcome.status, "unsupported");
+    assert.match(evaluation.outcome.reason, /Standard Secure Client doesn’t route to private resources/);
+    assert.deepEqual(states(evaluation), ["private:unsupported"]);
+  }
+  const internet = run({ connection: "client", sources: { roaming: "sourceRoaming:9" }, destination: "google.com" }, [internetDefault]);
+  assert.deepEqual(states(internet), ["dns:matched:Default Internet", "web:matched:Default Internet"]);
+});
+
+test("VPN firewall rules preserve source and destination direction", () => {
+  const sourceNetwork = range => cond("umbrella.source.composite_inline_ip", "IN", [{ ip: [range], port: ["0-65535"], protocol: "ANY" }]);
+  const destinationNetwork = range => cond("umbrella.destination.composite_inline_ip", "IN", [{ ip: [range], port: ["0-65535"], protocol: "ANY" }]);
+  const outbound = rule("VPN client to internal resource", "allow", [sourceNetwork("10.99.1.0/24"), destinationNetwork("10.20.0.0/16")], { trafficScope: "private_network" });
+  const inbound = rule("Internal resource to VPN client", "block", [sourceNetwork("10.20.0.0/16"), destinationNetwork("10.99.1.0/24")], { trafficScope: "private_network" });
+  const missingIp = run({ connection: "vpn", sources: { identity: "sourceUsers:7" }, destination: "10.20.1.5", port: "443" }, [outbound]);
+  assert.deepEqual(states(missingIp), ["firewall:unsupported"]);
+  assert.match(missingIp.outcome.reason, /VPN-assigned client IP/);
+  const identityOnlyRule = rule("Private app for user", "allow", [cond("umbrella.source.identity_ids", "INTERSECT", [7]), cond("umbrella.destination.private_resource_ids", "IN", [8627])], { trafficScope: "private_network" });
+  const identityOnly = run({ connection: "vpn", sources: { identity: "sourceUsers:7" }, destination: "hr.internal.example" }, [identityOnlyRule]);
+  assert.deepEqual(states(identityOnly), ["firewall:matched:Private app for user"]);
+  const unrelatedSourceRule = rule("Other source range", "block", [sourceNetwork("10.80.0.0/16"), destinationNetwork("10.20.0.0/16")], { trafficScope: "private_network" });
+  const unrelated = run({ connection: "vpn", sources: { identity: "sourceUsers:7" }, destination: "hr.internal.example" }, [unrelatedSourceRule, identityOnlyRule]);
+  assert.deepEqual(states(unrelated), ["firewall:matched:Private app for user"]);
+  const request = { connection: "vpn", sources: { internalIp: "10.99.1.25", identity: "sourceUsers:7" }, destination: "10.20.1.5", port: "443" };
+  assert.deepEqual(states(run(request, [outbound])), ["firewall:matched:VPN client to internal resource"]);
+  assert.deepEqual(states(run(request, [inbound])), ["firewall:matched:Default Private"]);
+});
+
 test("private resource destination", () => {
   const hrApp = rule("HR app for HR", "allow", [cond("umbrella.source.identity_ids", "INTERSECT", [3]), cond("umbrella.destination.private_resource_ids", "IN", [8627])], { trafficScope: "private_network" });
-  const hr = run({ connection: "client", sources: { identity: "sourceUsers:7" }, destination: "hr.internal.example" }, [hrApp]);
+  const hr = run({ connection: "vpn", sources: { identity: "sourceUsers:7", internalIp: "10.99.1.25" }, destination: "hr.internal.example" }, [hrApp]);
   assert.deepEqual(hr.scope.resourceNames, ["HR app"]);
-  assert.deepEqual(states(hr), ["private:matched:HR app for HR"]);
+  assert.deepEqual(states(hr), ["firewall:matched:HR app for HR"]);
+  const standardClient = run({ connection: "client", sources: { identity: "sourceUsers:7" }, destination: "hr.internal.example" }, [hrApp]);
+  assert.deepEqual(standardClient.scope.resourceNames, ["HR app"]);
+  assert.deepEqual(states(standardClient), ["private:unsupported"]);
   const byIp = run({ connection: "tunnel", sources: { identity: "sourceUsers:7" }, destination: "10.20.1.5", port: "443" }, [hrApp]);
   assert.deepEqual(states(byIp), ["firewall:matched:HR app for HR"]);
-  const outsider = run({ connection: "client", sources: { identity: "sourceUsers:8" }, destination: "hr.internal.example" }, [hrApp]);
-  assert.deepEqual(states(outsider), ["private:matched:Default Private"]);
+  const outsider = run({ connection: "vpn", sources: { identity: "sourceUsers:8", internalIp: "10.99.1.25" }, destination: "hr.internal.example" }, [hrApp]);
+  assert.deepEqual(states(outsider), ["firewall:matched:Default Private"]);
 });
 
 test("VA site and internal IP", () => {

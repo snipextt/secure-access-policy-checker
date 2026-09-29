@@ -287,6 +287,14 @@
   function planStages(request, scope) {
     const { connection, destination } = request;
     if (scope.scope === "private_network") {
+      if (connection === "client") return {
+        stages: [],
+        unsupported: {
+          stage: STAGES.private,
+          label: "Private access unavailable",
+          reason: "Standard Secure Client doesn’t route to private resources. Use Remote Access VPN or a site-to-site tunnel for this private destination.",
+        },
+      };
       if (DNS_ONLY.includes(connection)) return { stages: [], error: `Private Access is not reached through ${CONNECTIONS[connection].label}. Choose Secure Client or Site-to-site tunnel.` };
       // Branch traffic to an internal address or private resource is enforced
       // by the firewall (Activity Search logs it as a firewall event under the
@@ -416,6 +424,33 @@
     const scope = resolveScope(request.destination.host, lookups);
     const plan = planStages(request, scope);
     if (plan.error && !plan.stages.length) return { error: plan.error };
+    if (plan.unsupported) {
+      return {
+        scope, groups: [],
+        stages: [{ stage: plan.unsupported.stage, state: "unsupported", reason: plan.unsupported.reason }],
+        outcome: { status: "unsupported", title: plan.unsupported.label, stage: plan.unsupported.stage.key, reason: plan.unsupported.reason },
+        threatCheck: null,
+      };
+    }
+    const needsVpnClientIp = request.connection === "vpn" && scope.scope === "private_network" && !request.testInput.source && (rules || []).some(rule => {
+      const privateScope = rule.trafficScope || rule.ruleAccess || (rule.raw && rule.raw.ruleAccess);
+      const originalConditions = rule.ruleConditions || rule.conditions || [];
+      const sourceNetwork = originalConditions.find(condition => String(condition.attributeName || "").toLowerCase() === "umbrella.source.composite_inline_ip");
+      if (privateScope !== "private_network" || !sourceNetwork) return false;
+      const conditions = originalConditions.map(condition => condition === sourceNetwork
+        ? { attributeName: "umbrella.source.all", attributeOperator: "=", attributeValue: true }
+        : condition);
+      return matcher.matchPolicy([{ ...rule, ruleConditions: conditions, conditions }], stageInput(request, scope, [], STAGES.firewall), lookups).rule !== undefined;
+    });
+    if (needsVpnClientIp) {
+      const reason = "Enter the VPN-assigned client IP to evaluate source/destination subnet direction for this private destination.";
+      return {
+        scope, groups: [],
+        stages: [{ stage: STAGES.firewall, state: "unsupported", reason }],
+        outcome: { status: "unsupported", title: "VPN direction needs client IP", stage: STAGES.firewall.key, reason },
+        threatCheck: null,
+      };
+    }
     const directIds = request.identities.filter(identity => identity.id !== undefined).map(identity => identity.id);
     const groups = groupsContaining(directIds, lookups.memberMaps);
 

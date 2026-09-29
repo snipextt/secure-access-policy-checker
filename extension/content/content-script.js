@@ -2488,7 +2488,7 @@ function showResultDock(summary, panel) {
     } else {
       value.appendChild(make("span", "sec-dock-muted",
         stage.state === "needs-answer" ? "Waiting on an answer in the checker"
-          : stage.state === "unsupported" ? "GeoIP matching unsupported"
+          : stage.state === "unsupported" ? "Unsupported path"
             : stage.state === "not-reached" ? "Not reached"
             : stage.state === "no-match" ? "No rule matched" : "Not evaluated"));
     }

@@ -464,7 +464,7 @@
       const blockedBy = stages.find(result => result.security && result.stage.key === outcome.stage);
       const summary = blockedBy
         ? `${blockedBy.security.category} · ${blockedBy.security.profile ? `security profile “${blockedBy.security.profile}” on ${ruleTitle(outcome.rule)}` : `DNS security setting “${blockedBy.security.setting}”`}`
-        : outcome.status === "unsupported" ? `${ruleTitle(outcome.rule)} · ${outcome.reason}`
+        : outcome.status === "unsupported" ? `${outcome.rule ? ruleTitle(outcome.rule) : "Connection path"} · ${outcome.reason}`
         : outcome.rule
         ? `${ruleTitle(outcome.rule)} · ${rulePriority(outcome.rule)}${outcome.unlessFlagged ? " · unless flagged as a threat" : ""}`
         : outcome.status === "pending" ? "Answer the question below to finish the check." : "Default rules should always match. Refresh the dashboard data and try again.";
@@ -602,7 +602,7 @@
         if (result.ipsProfileId) body.append(node("span", "tp-stage-meta", "IPS on this rule can still block by signature."));
       } else {
         const text = result.state === "unsupported"
-          ? ["Cannot evaluate GeoIP", result.reason]
+          ? ["Unsupported path", result.reason]
           : result.state === "needs-answer"
             ? ["Waiting on your answer", result.match.pending && result.match.pending.length
               ? `Decided by ${ruleTitle(result.match.rule)} (${rulePriority(result.match.rule)}) or a later rule.`
