@@ -53,6 +53,9 @@ global.__membership = {
   _classifyMember,
   _extractMemberList,
   parseMembership,
+  membershipFailureKey,
+  membershipFailureCoolingDown,
+  MEMBERSHIP_FAILURE_COOLDOWN_MS,
   classifyPerIdMember,
   perIdMemberUrl,
   normalizeMemberEntry,
@@ -299,6 +302,28 @@ console.log("\n=== Group 7: MEMBERSHIP_CONFIG keys are expandable kinds ===");
   for (const k of keys) {
     assert(M.MEMBERSHIP_CONFIG[k] && M.MEMBERSHIP_CONFIG[k].tokenKey, `config ${k} has tokenKey`);
   }
+}
+
+// ---------------------------------------------------------------------------
+console.log("\n=== Group 8: denied membership fetch cooldown ===");
+{
+  const now = 1000;
+  const failures = {
+    [M.membershipFailureKey("org-a", "identityGroups", "group-1")]: {
+      status: 403,
+      expiresAt: now + M.MEMBERSHIP_FAILURE_COOLDOWN_MS,
+    },
+  };
+  assert(M.membershipFailureCoolingDown(failures, "org-a", "identityGroups", "group-1", now),
+    "denied group fetch is suppressed during cooldown");
+  assert(!M.membershipFailureCoolingDown(failures, "org-b", "identityGroups", "group-1", now),
+    "cooldown does not cross organizations");
+  assert(!M.membershipFailureCoolingDown(failures, "org-a", "identityGroups", "group-2", now),
+    "cooldown does not suppress another group");
+  assert(!M.membershipFailureCoolingDown(failures, "org-a", "identityGroups", "group-1", now + M.MEMBERSHIP_FAILURE_COOLDOWN_MS),
+    "expired cooldown permits automatic retry");
+  assert(!M.membershipFailureCoolingDown({}, "org-a", "identityGroups", "group-1", now),
+    "manual resolve path is not blocked by auto-prefetch cooldown lookup");
 }
 
 // ---------------------------------------------------------------------------
