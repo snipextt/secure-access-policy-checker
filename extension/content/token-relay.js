@@ -24,6 +24,7 @@
   const api = typeof browser !== "undefined" ? browser : chrome;
   const MSG_NS = "__secPolicyChecker";
   const REQUEST_TIMEOUT_MS = 500;
+  const INVESTIGATE_LOOKUP_TIMEOUT_MS = 45000;
 
   const pendingRequests = new Map(); // requestId -> resolver
 
@@ -82,9 +83,37 @@
       }
       return;
     }
+
+    if (data.type === "INVESTIGATE_PAGE_LOOKUP_REPLY") {
+      const resolve = pendingRequests.get(data.requestId);
+      if (resolve) {
+        pendingRequests.delete(data.requestId);
+        resolve(data.result ? { result: data.result } : { error: data.error || "Investigate lookup failed" });
+      }
+    }
   });
 
   api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg.type === "LOOKUP_DESTINATION_IN_PAGE") {
+      const requestId = `investigate_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const timeout = setTimeout(() => {
+        pendingRequests.delete(requestId);
+        sendResponse({ error: "Investigate lookup timed out" });
+      }, INVESTIGATE_LOOKUP_TIMEOUT_MS);
+      pendingRequests.set(requestId, (result) => {
+        clearTimeout(timeout);
+        sendResponse(result);
+      });
+      window.postMessage({
+        [MSG_NS]: true,
+        type: "REQUEST_INVESTIGATE_LOOKUP",
+        requestId,
+        host: msg.host,
+        orgId: msg.orgId,
+      }, window.location.origin);
+      return true;
+    }
+
     if (msg.type === "REQUEST_TOKEN_CHECK") {
       const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2)}`;
       const timeout = setTimeout(() => {

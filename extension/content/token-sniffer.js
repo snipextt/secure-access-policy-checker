@@ -52,6 +52,8 @@
   const MSG_NS = "__secPolicyChecker";
 
   const lastTokens = Object.create(null); // tokenKey -> { token, capturedAt }
+  let dashboardCsrfToken = null;
+  const dashboardInvestigateTokens = new Map();
 
   function relay(tokenKey, token) {
     lastTokens[tokenKey] = { token, capturedAt: Date.now() };
@@ -154,6 +156,20 @@
         authHeader = input.headers.get("Authorization");
       }
       maybeCapture(url, authHeader);
+      const requestHeaders = init && init.headers || (typeof Request !== "undefined" && input instanceof Request ? input.headers : null);
+      try {
+        const requestUrl = new URL(url, window.location.href);
+        if (requestUrl.hostname === "dashboard.sse.cisco.com" && requestUrl.pathname === "/token" && requestHeaders) {
+          let csrf = null;
+          if (typeof Headers !== "undefined" && requestHeaders instanceof Headers) {
+            csrf = requestHeaders.get("X-CSRF-TOKEN");
+          } else {
+            const key = Object.keys(requestHeaders).find((name) => name.toLowerCase() === "x-csrf-token");
+            if (key) csrf = requestHeaders[key];
+          }
+          if (typeof csrf === "string" && csrf) dashboardCsrfToken = csrf;
+        }
+      } catch (_) {}
 
       // Response-body capture for token-minting endpoints
       if (isTokenMintUrl(url)) {
@@ -341,6 +357,87 @@
         },
         window.location.origin
       );
+      return;
+    }
+
+    if (data.type === "REQUEST_INVESTIGATE_LOOKUP") {
+      (async () => {
+        try {
+          const host = String(data.host || "").trim().toLowerCase();
+          const orgId = String(data.orgId || "");
+          if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(host) || !/^\d+$/.test(orgId)) throw new Error("invalid destination or organization");
+          if (!dashboardCsrfToken) throw new Error("dashboard CSRF token unavailable");
+          const base = "https://investigate.umbrella.com";
+          const encoded = encodeURIComponent(host);
+          const getToken = async () => {
+            const assertionResponse = await origFetch.call(window, "/token", {
+              credentials: "include",
+              headers: { Accept: "application/json", "X-CSRF-TOKEN": dashboardCsrfToken },
+            });
+            if (!assertionResponse.ok) throw new Error(`assertion request returned ${assertionResponse.status}`);
+            const assertionBody = await assertionResponse.json();
+            if (!assertionBody || typeof assertionBody.token !== "string") throw new Error("dashboard assertion missing");
+            const form = new URLSearchParams({
+              grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+              assertion: assertionBody.token,
+              scope: `org/${orgId}`,
+            });
+            const tokenResponse = await origFetch.call(window, "https://management.api.umbrella.com/auth/v2/oauth2/jwt-bearer/token", {
+              method: "POST",
+              credentials: "omit",
+              headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded; charset=utf-8" },
+              body: form.toString(),
+            });
+            if (!tokenResponse.ok) throw new Error(`Investigate token exchange returned ${tokenResponse.status}`);
+            const tokenBody = await tokenResponse.json();
+            if (!tokenBody || typeof tokenBody.access_token !== "string") throw new Error("Investigate access token missing");
+            const expiresIn = Number(tokenBody.expires_in) || 300;
+            dashboardInvestigateTokens.set(orgId, { token: tokenBody.access_token, expiresAt: Date.now() + expiresIn * 1000 });
+            return tokenBody.access_token;
+          };
+          const getJson = async (path, token) => {
+            const response = await origFetch.call(window, `${base}${path}`, {
+              credentials: "omit",
+              headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+              referrer: "https://dashboard.sse.cisco.com/",
+            });
+            return { response, json: response.ok ? await response.json() : null };
+          };
+          let category;
+          for (let attempt = 0; attempt < 2; attempt++) {
+            let tokenEntry = dashboardInvestigateTokens.get(orgId);
+            if (!tokenEntry || tokenEntry.expiresAt <= Date.now() + 10000) {
+              await getToken();
+              tokenEntry = dashboardInvestigateTokens.get(orgId);
+            }
+            category = await getJson(`/domains/categorization/${encoded}?taloscategories=true`, tokenEntry.token);
+            if (category.response.status === 403 && attempt === 0) {
+              dashboardInvestigateTokens.delete(orgId);
+              continue;
+            }
+            break;
+          }
+          if (!category || !category.response.ok) throw new Error(`Investigate returned ${category ? category.response.status : "unknown error"}`);
+          const entry = category.json && category.json[host] || {};
+          const securityBits = (entry.security_categories || []).map(String);
+          const [casi, classifiers] = await Promise.all([
+            getJson(`/get-casi-data?fqdn=${encoded}`, dashboardInvestigateTokens.get(orgId).token).catch(() => null),
+            securityBits.length ? Promise.resolve(null) : getJson(`/url/${encoded}/classifiers`, dashboardInvestigateTokens.get(orgId).token).catch(() => null),
+          ]);
+          const appData = casi && casi.json;
+          const result = {
+            ok: true,
+            host,
+            contentBits: (entry.content_categories || []).map(String),
+            securityBits,
+            securityNames: classifiers && classifiers.response.ok ? ((classifiers.json || {}).securityCategories || []).map(String) : [],
+            app: appData && appData.name && appData.service_type !== "Website" ? { name: String(appData.name), category: appData.category || "" } : null,
+          };
+          window.postMessage({ [MSG_NS]: true, type: "INVESTIGATE_PAGE_LOOKUP_REPLY", requestId: data.requestId, result }, window.location.origin);
+        } catch (error) {
+          window.postMessage({ [MSG_NS]: true, type: "INVESTIGATE_PAGE_LOOKUP_REPLY", requestId: data.requestId, error: error.message }, window.location.origin);
+        }
+      })();
       return;
     }
 

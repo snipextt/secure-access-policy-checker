@@ -7,7 +7,7 @@ const vm = require("node:vm");
 
 async function main() {
   let requests = 0;
-  let tokenChecks = 0;
+  let pageLookups = 0;
   let fetches = 0;
   const fetchCalls = [];
   let webRequestListener;
@@ -22,12 +22,14 @@ async function main() {
     },
     tabs: {
       onUpdated: addListener,
-      async query() { requests++; return [{ id: 7 }]; },
+      async query() { requests++; return [{ id: 7, url: "https://dashboard.sse.cisco.com/org/8176184/secure/policy" }]; },
       async sendMessage(tabId, message) {
         assert.equal(tabId, 7);
-        assert.equal(message.tokenKey, "mgmt_authz_token");
-        tokenChecks++;
-        return { token: "fixture-token", capturedAt: Date.now() };
+        assert.equal(message.type, "LOOKUP_DESTINATION_IN_PAGE");
+        assert.equal(message.host, "example.com");
+        assert.equal(message.orgId, "8176184");
+        pageLookups++;
+        return { result: { ok: true, host: message.host, contentBits: ["2"], securityBits: ["1"], securityNames: [], app: null } };
       },
     },
     alarms: { onAlarm: addListener, create() {}, async get() {} },
@@ -44,11 +46,7 @@ async function main() {
     async fetch(url, options) {
       fetches++;
       fetchCalls.push({ url, authorization: options?.headers?.Authorization });
-      return {
-        ok: true, status: 200,
-        async json() { return { "example.com": { content_categories: [], security_categories: ["1"] } }; },
-        async text() { return "null"; },
-      };
+      return { ok: true, status: 200, async json() { return {}; }, async text() { return "null"; } };
     },
   };
   sandbox.self = sandbox;
@@ -56,20 +54,13 @@ async function main() {
   vm.runInContext(fs.readFileSync("extension/background/service-worker.js", "utf8"), sandbox);
   assert.equal(vm.runInContext('tokenKeyForUrl("https://investigate.umbrella.com/domains/categorization/google.com")', sandbox), "mgmt_authz_token");
   assert.ok(webRequestFilter.urls.includes("https://investigate.umbrella.com/*"));
-  const result = await vm.runInContext('lookupDestination("example.com")', sandbox);
+  const result = await vm.runInContext('lookupDestination("example.com", 7, "8176184")', sandbox);
   assert.equal(result.ok, true);
   assert.ok(requests >= 1);
-  assert.equal(tokenChecks, 1);
-  assert.equal(fetches, 2);
-  assert.ok(fetchCalls[0].url.startsWith("https://investigate.umbrella.com/domains/categorization/example.com"));
-  assert.equal(fetchCalls[0].authorization, "Bearer fixture-token");
-  webRequestListener({
-    url: "https://investigate.umbrella.com/domains/categorization/google.com",
-    requestHeaders: [{ name: "Authorization", value: "Bearer ui-token" }],
-  });
-  await new Promise(resolve => setTimeout(resolve, 0));
-  assert.equal(stored.mgmt_authz_token.token, "ui-token");
-
+  assert.equal(pageLookups, 1);
+  assert.equal(fetches, 0, "the service worker does not call Investigate directly");
+  assert.deepEqual(Array.from(result.contentBits), ["2"]);
+  assert.deepEqual(Array.from(result.securityBits), ["1"]);
   vm.runInContext('_scheduleFetch = () => { globalThis.scheduledFetches = (globalThis.scheduledFetches || 0) + 1; }', sandbox);
   const newerCapture = Date.now() + 1000;
   await vm.runInContext(`storeToken("mgmt_authz_token", "duplicate-token", "test", ${newerCapture})`, sandbox);

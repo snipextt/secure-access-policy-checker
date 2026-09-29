@@ -73,11 +73,11 @@ document.addEventListener("DOMContentLoaded", () => {
   // ---------------------------------------------------------------------------
   // Highlight matched rule on the dashboard page
   // ---------------------------------------------------------------------------
-  function lookupDestination(host) {
+  function lookupDestination(host, orgId) {
     return new Promise((resolve) => {
-      const timer = setTimeout(() => resolve({ ok: false, error: "timeout" }), 20000);
+      const timer = setTimeout(() => resolve({ ok: false, error: "timeout" }), 50000);
       try {
-        api.runtime.sendMessage({ type: "LOOKUP_DESTINATION", host }, (response) => {
+        api.runtime.sendMessage({ type: "LOOKUP_DESTINATION", host, orgId }, (response) => {
           clearTimeout(timer);
           resolve(api.runtime.lastError ? { ok: false, error: api.runtime.lastError.message } : (response || { ok: false }));
         });
@@ -162,7 +162,9 @@ document.addEventListener("DOMContentLoaded", () => {
         // so the checker does not have to ask; answers the user gave win.
         let destinationLookup = null;
         if (options.autoLookup !== false && request.destination.kind === "domain") {
-          destinationLookup = await lookupDestination(request.destination.host);
+          let lookupOrgId = new URLSearchParams(window.location.search).get("orgId");
+          if (!lookupOrgId && isEmbeddedInPage()) lookupOrgId = await requestOrgIdFromParent();
+          destinationLookup = await lookupDestination(request.destination.host, lookupOrgId);
           if (destinationLookup && destinationLookup.ok) {
             request = { ...request, facts: { ...window.TrafficPath.factsFromLookup(destinationLookup, lookups), ...request.facts } };
           }
