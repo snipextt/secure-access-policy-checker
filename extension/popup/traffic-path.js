@@ -74,7 +74,7 @@
     },
     tunnel: {
       label: "Site-to-site tunnel", layers: "Firewall + Web",
-      description: "Branch traffic sent through an IPsec tunnel. It can also carry the AD user or computer, SD-WAN VPN, and security group tag.",
+      description: "Branch traffic sent through an IPsec tunnel. Firewall traffic may carry the AD user or computer, SD-WAN VPN, and security group tag; user and computer identities are not always available at Web.",
       sources: ["tunnel", "branch", "internalIp", "identity", "computer", "sdwan", "sgt"],
     },
   };
@@ -418,6 +418,13 @@
     return value === undefined || value === null || value === "" ? null : String(value);
   }
 
+  function hasDestinationGeoCondition(rule) {
+    return (rule.ruleConditions || rule.conditions || []).some(condition => {
+      const name = String(condition.attributeName || "").toLowerCase();
+      return name.startsWith("umbrella.destination.") && name.includes("geolocations");
+    });
+  }
+
   // `matcher` is window.Matcher (or its Node equivalent).
   function evaluate(request, rules, lookups, matcher) {
     lookups = lookups || {};
@@ -433,6 +440,7 @@
       };
     }
     const needsVpnClientIp = request.connection === "vpn" && scope.scope === "private_network" && !request.testInput.source && (rules || []).some(rule => {
+      if (hasDestinationGeoCondition(rule)) return false;
       const privateScope = rule.trafficScope || rule.ruleAccess || (rule.raw && rule.raw.ruleAccess);
       const originalConditions = rule.ruleConditions || rule.conditions || [];
       const sourceNetwork = originalConditions.find(condition => String(condition.attributeName || "").toLowerCase() === "umbrella.source.composite_inline_ip");
@@ -483,7 +491,27 @@
         }
       }
       const input = stageInput(request, scope, groups, stage);
-      const match = matcher.matchPolicy(rules, input, lookups);
+      const eligibleRules = (rules || []).filter(rule => !hasDestinationGeoCondition(rule));
+      const match = matcher.matchPolicy(eligibleRules, input, lookups);
+      if (request.connection === "tunnel" && !request.testInput.sourceTunnelGroupId && !request.testInput.sourceBranchId &&
+          !request.testInput.sourceCatalystSdwanId && !request.testInput.sourceSecurityGroupTagId) {
+        const ordered = [...eligibleRules].sort((a, b) => {
+          const defaultOf = rule => (rule.ruleIsDefault ?? rule.is_default) === true;
+          return Number(defaultOf(a)) - Number(defaultOf(b)) || (a.rulePriority ?? a.order) - (b.rulePriority ?? b.order);
+        });
+        const winnerIndex = match.rule ? ordered.indexOf(match.rule) : ordered.length;
+        const candidates = ordered.slice(0, winnerIndex).flatMap(rule => (rule.ruleConditions || rule.conditions || [])
+          .filter(condition => String(condition.attributeName || "").toLowerCase() === "umbrella.source.identity_ids")
+          .flatMap(condition => Array.isArray(condition.attributeValue) ? condition.attributeValue : [condition.attributeValue]))
+          .map(String).filter(id => (lookups.sourceTunnelGroups || {})[id] || (lookups.sourceBranches || {})[id]);
+        for (const id of new Set(candidates)) {
+          const hypothetical = { ...input, sourceIdentityIds: [...new Set([...input.sourceIdentityIds, id, ...groupsContaining([...directIds, id], lookups.memberMaps).map(group => group.id)])] };
+          const possible = matcher.matchPolicy(eligibleRules, hypothetical, lookups);
+          if (possible.rule && ordered.indexOf(possible.rule) < winnerIndex) {
+            return { error: "Select the network tunnel or branch: an earlier rule depends on that identity." };
+          }
+        }
+      }
       // The firewall cannot classify the application or category from the
       // first packets: it lets the flow through under the first rule whose
       // source matches and decides once the application is identified.
@@ -492,26 +520,12 @@
       // Only TCP: the handshake carries no payload, while the first UDP
       // packet already identifies the application (Activity Search: SD-WAN
       // DNS on UDP 53 was not logged under an app-list rule).
-      if (match && match.indeterminate && stage.key === "firewall" && request.destination.protocol === "TCP" && match.pending && match.pending.length && !match.pending.some(item => item.field === "geolocation")) {
+      if (match && match.indeterminate && stage.key === "firewall" && request.destination.protocol === "TCP" && match.pending && match.pending.length) {
         results.push({ stage, state: "matched", match, action: "allow", provisional: true, conditional: uncertainBefore, afterBlock: blockedAt || null });
         continue;
       }
       if (match && match.indeterminate) {
-        const geoPending = (match.pending || []).some(item => item.field === "geolocation");
-        const answerPending = (match.pending || []).filter(item => item.field !== "geolocation");
-        if (geoPending && !answerPending.length) {
-          results.push({
-            stage, state: "unsupported", match,
-            reason: "GeoIP matching isn’t supported yet. This rule depends on Cisco’s location for the destination IP.",
-            conditional: uncertainBefore, afterBlock: blockedAt || null,
-          });
-        } else {
-          results.push({
-            stage, state: "needs-answer",
-            match: geoPending ? { ...match, pending: answerPending, geoUnsupported: true } : match,
-            conditional: uncertainBefore, afterBlock: blockedAt || null,
-          });
-        }
+        results.push({ stage, state: "needs-answer", match, conditional: uncertainBefore, afterBlock: blockedAt || null });
         if (!uncertainBefore) uncertainBefore = stage;
         continue;
       }

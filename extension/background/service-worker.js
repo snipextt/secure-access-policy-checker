@@ -600,7 +600,7 @@ async function fetchRules(token, orgId) {
       // HAR-confirmed on default rules: public_internet | private_network.
       // destination.all is only a catch-all inside this traffic scope.
       trafficScope: raw.ruleAccess || null,
-      conditions: raw.conditions || raw.ruleConditions || [],
+      conditions: Array.isArray(raw.ruleConditions) ? raw.ruleConditions : (Array.isArray(raw.conditions) ? raw.conditions : []),
       logging_enabled: loggingEnabled,
       security_profiles: {
         ips_enabled: getProfile("umbrella.posture.ipsProfileId", ["umbrella.security.ips", "ips_enabled"]),
@@ -650,7 +650,7 @@ async function fetchRules(token, orgId) {
           ports: raw.ports || raw.port || ["any"],
           protocol: raw.protocol || "any",
           trafficScope: raw.ruleAccess || null,
-          conditions: raw.ruleConditions || raw.conditions || [],
+          conditions: Array.isArray(raw.ruleConditions) ? raw.ruleConditions : (Array.isArray(raw.conditions) ? raw.conditions : []),
           logging_enabled: (() => {
             const logLevel = (raw.ruleSettings || []).find(setting => setting.settingName === "umbrella.logLevel")?.settingValue;
             return logLevel === undefined ? true : logLevel !== "NONE";

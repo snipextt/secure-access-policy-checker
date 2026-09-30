@@ -155,31 +155,71 @@ test("roaming computer identity type rule", () => {
   assert.equal(evaluation.outcome.status, "warn");
 });
 
-test("GeoIP dependency is reported unsupported instead of guessed", () => {
+test("GeoIP-only rules are skipped and the next rule decides", () => {
   const evaluation = run({ connection: "client", sources: { roaming: "sourceRoaming:9" }, destination: "google.com" }, [geoBlock]);
-  assert.deepEqual(states(evaluation), ["dns:unsupported", "web:unsupported"]);
-  assert.equal(evaluation.outcome.status, "unsupported");
-  assert.equal(evaluation.outcome.rule.ruleName, "Block selected countries");
-  assert.match(evaluation.outcome.reason, /GeoIP matching isn’t supported yet/);
-  assert.equal(model.questionFor(evaluation.stages[0], "google.com", lookups), null);
+  assert.deepEqual(states(evaluation), ["dns:matched:Default Internet", "web:matched:Default Internet"]);
+  assert.equal(evaluation.outcome.status, "allow");
+  assert.equal(evaluation.outcome.rule.ruleName, "Default Internet");
 });
 
-test("answerable category stays separate from unsupported GeoIP", () => {
+test("mixed GeoIP and category rule is skipped as a whole", () => {
   const geoAndCategory = rule("Block country gambling", "block", [SRC_ALL, cond("umbrella.destination.geolocations", "INTERSECT", ["AQ"]), cond("umbrella.destination.category_ids", "INTERSECT", [27])]);
-  const form = { connection: "client", sources: { roaming: "sourceRoaming:9" }, destination: "bet.example" };
-  const first = run(form, [geoAndCategory]);
-  const question = model.questionFor(first.stages[0], "bet.example", lookups);
-  assert.deepEqual(Array.from(question.groups, group => group.field), ["contentCategoryId"]);
-  assert.equal(first.stages[0].match.geoUnsupported, true);
-  const answered = run({ ...form, facts: model.answer({}, question, []) }, [geoAndCategory]);
-  assert.equal(answered.outcome.status, "unsupported");
-  assert.match(answered.outcome.reason, /GeoIP matching isn’t supported yet/);
+  const evaluation = run({ connection: "client", sources: { roaming: "sourceRoaming:9" }, destination: "bet.example" }, [geoAndCategory]);
+  assert.deepEqual(states(evaluation), ["dns:matched:Default Internet", "web:matched:Default Internet"]);
+  assert.equal(evaluation.outcome.status, "allow");
+  assert.equal(evaluation.outcome.rule.ruleName, "Default Internet");
 });
 
-test("GeoIP uncertainty suppresses a later TCP firewall allow", () => {
+test("GeoIP firewall rule is skipped before the next TCP rule", () => {
   const evaluation = run({ connection: "vpn", sources: { identity: "sourceUsers:7" }, destination: "203.0.113.10", port: "443" }, [geoBlock]);
-  assert.deepEqual(states(evaluation), ["firewall:unsupported", "web:unsupported"]);
-  assert.equal(evaluation.outcome.status, "unsupported");
+  assert.deepEqual(states(evaluation), ["firewall:matched:Default Internet", "web:matched:Default Internet"]);
+  assert.equal(evaluation.outcome.status, "allow");
+  assert.equal(evaluation.outcome.rule.ruleName, "Default Internet");
+});
+
+test("skipped GeoIP firewall rule does not demand VPN client IP", () => {
+  const geoVpnRule = rule("Geo block by client subnet", "block", [cond("umbrella.source.composite_inline_ip", "IN", [{ ip: ["10.99.0.0/16"], port: ["0-65535"], protocol: "ANY" }]), cond("umbrella.destination.geolocations", "INTERSECT", ["AQ"])], { trafficScope: "private_network" });
+  const evaluation = run({ connection: "vpn", sources: { identity: "sourceUsers:7" }, destination: "10.20.1.5", port: "443" }, [geoVpnRule]);
+  assert.deepEqual(states(evaluation), ["firewall:matched:Default Private"]);
+  assert.equal(evaluation.outcome.status, "block");
+});
+
+test("missing tunnel identity cannot select a later generic branch rule", () => {
+  const den = rule("Secure DIA for DEN branch", "allow", [cond("umbrella.source.identity_ids", "INTERSECT", [644963088]), DST_ALL], { ruleId: 398936, rulePriority: 31 });
+  const branches = rule("Secure DIA for all branch locations_Copy 1", "allow", [cond("umbrella.source.identity_type_ids", "INTERSECT", [40]), DST_ALL], { ruleId: 2118553, rulePriority: 32 });
+  const catalog = { ...lookups, sourceTunnelGroups: { 644963088: "den1", 615488204: "SJ 1" } };
+  const evaluate = sources => model.evaluate(model.buildRequest({ connection: "tunnel", sources, destination: "example.com" }, catalog).request, [den, branches, internetDefault], catalog, Matcher);
+  assert.match(evaluate({ internalIp: "10.1.2.3" }).error, /Select the network tunnel or branch/);
+  assert.equal(evaluate({ tunnel: "sourceTunnelGroups:644963088" }).outcome.rule.ruleId, 398936);
+  assert.equal(evaluate({ tunnel: "sourceTunnelGroups:615488204" }).outcome.rule.ruleId, 2118553);
+  const earlier = rule("Known earlier winner", "block", [SRC_ALL, DST_ALL], { rulePriority: 1 });
+  const request = model.buildRequest({ connection: "tunnel", sources: { internalIp: "10.1.2.3" }, destination: "example.com" }, catalog).request;
+  assert.equal(model.evaluate(request, [earlier, den, branches], catalog, Matcher).outcome.status, "block");
+  assert.equal(model.evaluate(request, [earlier, den, branches], catalog, Matcher).outcome.rule.ruleId, earlier.ruleId);
+  assert.equal(model.evaluate(request, [{ ...den, ruleIsEnabled: false }, branches, internetDefault], catalog, Matcher).outcome.rule.ruleId, branches.ruleId);
+  const unrelated = { ...den, ruleConditions: [den.ruleConditions[0], cond("umbrella.destination.composite_inline_ip", "IN", [{ ip: ["203.0.113.99"], port: ["0-65535"], protocol: "ANY" }])] };
+  assert.equal(model.evaluate(request, [unrelated, branches, internetDefault], catalog, Matcher).outcome.rule.ruleId, branches.ruleId);
+  const privateTunnel = { ...den, trafficScope: "private_network" };
+  assert.equal(model.evaluate(request, [privateTunnel, branches, internetDefault], catalog, Matcher).outcome.rule.ruleId, branches.ruleId);
+});
+
+test("explicit SD-WAN or SGT identity does not demand a missing tunnel", () => {
+  const den = rule("Secure DIA for DEN branch", "allow", [cond("umbrella.source.identity_ids", "INTERSECT", [644963088]), DST_ALL], { ruleId: 398936, rulePriority: 31 });
+  const branches = rule("Secure DIA for all branch locations_Copy 1", "allow", [cond("umbrella.source.identity_type_ids", "INTERSECT", [40]), DST_ALL], { ruleId: 2118553, rulePriority: 32 });
+  const catalog = { ...lookups, sourceTunnelGroups: { 644963088: "den1" } };
+  for (const sources of [
+    { sdwan: "sourceCatalystSdwan:66", sgt: "sourceSecurityGroupTags:77" },
+    { sdwan: "sourceCatalystSdwan:66" },
+    { sgt: "sourceSecurityGroupTags:77" },
+  ]) {
+    const request = model.buildRequest({ connection: "tunnel", sources, destination: "https://example.com/" }, catalog).request;
+    assert.ok(!request.testInput.sourceTunnelGroupId);
+    const evaluation = model.evaluate(request, [den, branches, internetDefault], catalog, Matcher);
+    assert.ok(!evaluation.error, evaluation.error);
+    assert.equal(evaluation.outcome.status, "allow");
+    assert.equal(evaluation.outcome.rule.ruleId, 2118553);
+    assert.deepEqual(states(evaluation), ["firewall:skipped", "web:matched:Secure DIA for all branch locations_Copy 1"]);
+  }
 });
 
 test("category rule asks, then resolves from the answer", () => {

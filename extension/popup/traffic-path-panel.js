@@ -355,6 +355,7 @@
       const config = model.CONNECTIONS[key];
       connectionHint.textContent = config ? config.description : "Choose how the traffic reaches Secure Access.";
       for (const [kind, field] of Object.entries(fieldWraps)) field.hidden = !config || !config.sources.includes(kind);
+      fieldWraps.internalIp.querySelector("label").textContent = key === "vpn" ? "VPN-assigned client IP" : model.SOURCES.internalIp.label;
       // Order the visible fields the way the connection lists them.
       if (config) config.sources.forEach(kind => sourceFields.append(fieldWraps[kind]));
       sourceStep.disabled = !config;
@@ -495,9 +496,6 @@
         results.append(banner);
         if (question) results.append(questionCard(question, pending.match.rule));
         else if (pending) results.append(node("p", "tp-note", pending.match.reason));
-      }
-      if (pending && pending.match.geoUnsupported) {
-        results.append(node("p", "tp-note", "GeoIP matching isn’t supported yet. This rule also depends on Cisco’s location for the destination IP."));
       }
       const answers = answersStrip(hostLabel, evaluation);
       if (answers) results.append(answers);
