@@ -439,16 +439,28 @@
         threatCheck: null,
       };
     }
-    const needsVpnClientIp = request.connection === "vpn" && scope.scope === "private_network" && !request.testInput.source && (rules || []).some(rule => {
+    const directIds = request.identities.filter(identity => identity.id !== undefined).map(identity => identity.id);
+    const groups = groupsContaining(directIds, lookups.memberMaps);
+    const firewallInput = stageInput(request, scope, groups, STAGES.firewall);
+    const orderedRules = (rules || []).filter(rule => !hasDestinationGeoCondition(rule)).sort((a, b) =>
+      Number((a.ruleIsDefault ?? a.is_default) === true) - Number((b.ruleIsDefault ?? b.is_default) === true) ||
+      (a.rulePriority ?? a.order) - (b.rulePriority ?? b.order));
+    const knownMatch = matcher.matchPolicy(orderedRules, firewallInput, lookups);
+    const winnerIndex = knownMatch.rule ? orderedRules.indexOf(knownMatch.rule) : orderedRules.length;
+    const needsVpnClientIp = request.connection === "vpn" && scope.scope === "private_network" && !request.testInput.source && orderedRules.slice(0, winnerIndex).some(rule => {
       if (hasDestinationGeoCondition(rule)) return false;
       const privateScope = rule.trafficScope || rule.ruleAccess || (rule.raw && rule.raw.ruleAccess);
       const originalConditions = rule.ruleConditions || rule.conditions || [];
-      const sourceNetwork = originalConditions.find(condition => String(condition.attributeName || "").toLowerCase() === "umbrella.source.composite_inline_ip");
-      if (privateScope !== "private_network" || !sourceNetwork) return false;
-      const conditions = originalConditions.map(condition => condition === sourceNetwork
+      const sourceNetworks = originalConditions.filter(condition => {
+        const name = String(condition.attributeName || "").toLowerCase();
+        return name === "umbrella.source.composite_inline_ip" ||
+          (name.startsWith("umbrella.source.") && name.includes("networkobject"));
+      });
+      if (privateScope !== "private_network" || !sourceNetworks.length) return false;
+      const conditions = originalConditions.map(condition => sourceNetworks.includes(condition)
         ? { attributeName: "umbrella.source.all", attributeOperator: "=", attributeValue: true }
         : condition);
-      return matcher.matchPolicy([{ ...rule, ruleConditions: conditions, conditions }], stageInput(request, scope, [], STAGES.firewall), lookups).rule !== undefined;
+      return matcher.matchPolicy([{ ...rule, ruleConditions: conditions, conditions }], firewallInput, lookups).rule !== undefined;
     });
     if (needsVpnClientIp) {
       const reason = "Enter the VPN-assigned client IP to evaluate source/destination subnet direction for this private destination.";
@@ -459,9 +471,6 @@
         threatCheck: null,
       };
     }
-    const directIds = request.identities.filter(identity => identity.id !== undefined).map(identity => identity.id);
-    const groups = groupsContaining(directIds, lookups.memberMaps);
-
     const results = [];
     let blockedAt = null;
     let uncertainBefore = null;

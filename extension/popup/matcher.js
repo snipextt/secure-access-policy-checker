@@ -114,6 +114,7 @@
     // umbrella.source.identity_ids / umbrella.source.identity_type_ids are
     // HAR-verified source conditions, not a separate "identity" dimension.
     // They match against testInput.sourceIdentityIds / sourceIdentityTypeIds.
+    if (an.startsWith("umbrella.source.") && an.includes("networkobject")) return "source";
     if (an === "umbrella.source.identity_ids") return "source";
     if (an === "umbrella.source.identity_type_ids") return "source";
     // HAR-confirmed destination attributes are evaluated in the destination
@@ -497,8 +498,8 @@
         an.includes("private_resource_types") ? flattenSelectedIds(testInput.privateResourceType) :
         an.includes("private_resource") ? flattenSelectedIds(testInput.privateResourceId) :
         an.includes("destination_list") ? flattenSelectedIds(testInput.destinationListId) :
-        an.includes("networkobjectgroup") ? flattenSelectedIds([testInput.networkObjectGroupId, testInput.sourceNetworkObjectGroupId]) :
-        an.includes("networkobject") ? flattenSelectedIds([testInput.networkObjectId, testInput.sourceNetworkObjectId]) :
+        an.includes("networkobjectgroup") ? flattenSelectedIds(an.startsWith("umbrella.source.") ? testInput.sourceNetworkObjectGroupId : testInput.networkObjectGroupId) :
+        an.includes("networkobject") ? flattenSelectedIds(an.startsWith("umbrella.source.") ? testInput.sourceNetworkObjectId : testInput.networkObjectId) :
         an.includes("serviceobjectgroup") ? flattenSelectedIds(testInput.serviceObjectGroupId) :
         an.includes("serviceobject") ? flattenSelectedIds(testInput.serviceObjectId) :
         an.includes("application_list") ? flattenSelectedIds(testInput.applicationListId) :

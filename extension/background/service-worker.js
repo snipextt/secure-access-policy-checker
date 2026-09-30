@@ -737,6 +737,7 @@ function compareRulePriority(a, b) {
 function _conditionDimension(attributeName) {
   const an = (attributeName || "").toLowerCase();
   if (an === "umbrella.source.all" || an === "umbrella.source.composite_inline_ip" || an.includes("umbrella.source.identity")) return "source";
+  if (an.startsWith("umbrella.source.") && an.includes("networkobject")) return "source";
   if (an === "umbrella.destination.all" || an === "umbrella.destination.composite_inline_ip") return "destination";
 
   // HAR-confirmed destination attributes. They must be classified before the
