@@ -54,12 +54,22 @@ function evaluate(rules, extra = {}) {
   assert.ok(!built.error, built.error);
   return model.evaluate(built.request, rules, lookups, matcher);
 }
-assert.notEqual(evaluate([r39]).outcome.title, "VPN direction needs client IP");
-assert.equal(evaluate([r39, r40]).outcome.title, "VPN direction needs client IP");
+assert.notEqual(evaluate([r39]).outcome.title, "Source IP needed for candidate rule");
+const pending = evaluate([r39, r40]);
+assert.equal(pending.outcome.status, "pending");
+assert.equal(pending.stages[0].state, "needs-answer");
+assert.equal(pending.outcome.rule, r40);
+assert.equal(pending.stages[0].match.rule, r40);
+assert.equal(model.questionFor(pending.stages[0], "10.141.50.10", lookups), null);
+assert.match(pending.outcome.reason, /This rule requires.*source-address constraints/);
 const earlier = { ruleId: 2, rulePriority: 1, ruleAction: "allow", ruleAccess: "private_network", ruleConditions: [cond("umbrella.source.identity_ids", [99]), { attributeName: "umbrella.destination.all", attributeValue: true }] };
-assert.notEqual(evaluate([earlier, r40]).outcome.title, "VPN direction needs client IP");
+for (const id of [7, 99]) {
+  const winner = { ...earlier, ruleConditions: [cond("umbrella.source.identity_ids", [id]), earlier.ruleConditions[1]] };
+  assert.equal(evaluate([winner, r40]).outcome.rule, winner);
+  assert.equal(evaluate([winner, r40]).stages[0].state, "matched");
+}
 const grouped = { ...r40, ruleConditions: [cond("umbrella.source.networkObjectGroupIds", [500004219]), r40.ruleConditions[1], cond("umbrella.source.identity_ids", [99])] };
-assert.equal(evaluate([grouped]).outcome.title, "VPN direction needs client IP");
+assert.equal(evaluate([grouped]).outcome.title, "Source IP needed for candidate rule");
 const wrongIdentity = { ...grouped, ruleConditions: [...grouped.ruleConditions.slice(0, 2), cond("umbrella.source.identity_ids", [100])] };
-assert.notEqual(evaluate([wrongIdentity]).outcome.title, "VPN direction needs client IP");
+assert.notEqual(evaluate([wrongIdentity]).outcome.title, "Source IP needed for candidate rule");
 console.log("source network object regressions passed");

@@ -290,11 +290,20 @@ test("VPN firewall rules preserve source and destination direction", () => {
   const outbound = rule("VPN client to internal resource", "allow", [sourceNetwork("10.99.1.0/24"), destinationNetwork("10.20.0.0/16")], { trafficScope: "private_network" });
   const inbound = rule("Internal resource to VPN client", "block", [sourceNetwork("10.20.0.0/16"), destinationNetwork("10.99.1.0/24")], { trafficScope: "private_network" });
   const missingIp = run({ connection: "vpn", sources: { identity: "sourceUsers:7" }, destination: "10.20.1.5", port: "443" }, [outbound]);
-  assert.deepEqual(states(missingIp), ["firewall:unsupported"]);
+  assert.deepEqual(states(missingIp), ["firewall:needs-answer"]);
+  assert.equal(missingIp.outcome.status, "pending");
+  assert.equal(missingIp.outcome.rule, outbound);
+  assert.equal(missingIp.stages[0].match.rule, outbound);
+  assert.equal(model.questionFor(missingIp.stages[0], "10.20.1.5", lookups), null);
   assert.match(missingIp.outcome.reason, /VPN-assigned client IP/);
   const identityOnlyRule = rule("Private app for user", "allow", [cond("umbrella.source.identity_ids", "INTERSECT", [7]), cond("umbrella.destination.private_resource_ids", "IN", [8627])], { trafficScope: "private_network" });
   const identityOnly = run({ connection: "vpn", sources: { identity: "sourceUsers:7" }, destination: "hr.internal.example" }, [identityOnlyRule]);
   assert.deepEqual(states(identityOnly), ["firewall:matched:Private app for user"]);
+  for (const id of [7, 3]) {
+    const earlier = rule("Earlier identity winner", "allow", [cond("umbrella.source.identity_ids", "INTERSECT", [id]), destinationNetwork("10.20.0.0/16")], { trafficScope: "private_network", rulePriority: outbound.rulePriority - 1 });
+    const control = run({ connection: "vpn", sources: { identity: "sourceUsers:7" }, destination: "10.20.1.5" }, [earlier, outbound]);
+    assert.deepEqual(states(control), ["firewall:matched:Earlier identity winner"]);
+  }
   const unrelatedSourceRule = rule("Other source range", "block", [sourceNetwork("10.80.0.0/16"), destinationNetwork("10.20.0.0/16")], { trafficScope: "private_network" });
   const unrelated = run({ connection: "vpn", sources: { identity: "sourceUsers:7" }, destination: "hr.internal.example" }, [unrelatedSourceRule, identityOnlyRule]);
   assert.deepEqual(states(unrelated), ["firewall:matched:Private app for user"]);

@@ -355,7 +355,7 @@
       const config = model.CONNECTIONS[key];
       connectionHint.textContent = config ? config.description : "Choose how the traffic reaches Secure Access.";
       for (const [kind, field] of Object.entries(fieldWraps)) field.hidden = !config || !config.sources.includes(kind);
-      fieldWraps.internalIp.querySelector("label").textContent = key === "vpn" ? "VPN-assigned client IP" : model.SOURCES.internalIp.label;
+      fieldWraps.internalIp.querySelector("label").textContent = key === "vpn" ? "VPN-assigned client IP (optional)" : model.SOURCES.internalIp.label;
       // Order the visible fields the way the connection lists them.
       if (config) config.sources.forEach(kind => sourceFields.append(fieldWraps[kind]));
       sourceStep.disabled = !config;
@@ -465,7 +465,7 @@
       const blockedBy = stages.find(result => result.security && result.stage.key === outcome.stage);
       const summary = blockedBy
         ? `${blockedBy.security.category} · ${blockedBy.security.profile ? `security profile “${blockedBy.security.profile}” on ${ruleTitle(outcome.rule)}` : `DNS security setting “${blockedBy.security.setting}”`}`
-        : outcome.status === "unsupported" ? `${outcome.rule ? ruleTitle(outcome.rule) : "Connection path"} · ${outcome.reason}`
+        : outcome.reason ? `${outcome.rule ? ruleTitle(outcome.rule) : "Connection path"} · ${outcome.reason}`
         : outcome.rule
         ? `${ruleTitle(outcome.rule)} · ${rulePriority(outcome.rule)}${outcome.unlessFlagged ? " · unless flagged as a threat" : ""}`
         : outcome.status === "pending" ? "Answer the question below to finish the check." : "Default rules should always match. Refresh the dashboard data and try again.";
@@ -604,7 +604,7 @@
           : result.state === "needs-answer"
             ? ["Waiting on your answer", result.match.pending && result.match.pending.length
               ? `Decided by ${ruleTitle(result.match.rule)} (${rulePriority(result.match.rule)}) or a later rule.`
-              : `${ruleTitle(result.match.rule)} (${rulePriority(result.match.rule)}) depends on the traffic port or protocol.`]
+              : result.reason || `${ruleTitle(result.match.rule)} (${rulePriority(result.match.rule)}) depends on the traffic port or protocol.`]
           : result.state === "no-match" ? ["No rule matched", "No loaded rule covers this stage."]
             : result.state === "not-reached" ? ["Not reached", result.reason]
               : ["Not evaluated", result.reason || ""];

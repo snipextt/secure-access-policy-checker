@@ -447,7 +447,7 @@
       (a.rulePriority ?? a.order) - (b.rulePriority ?? b.order));
     const knownMatch = matcher.matchPolicy(orderedRules, firewallInput, lookups);
     const winnerIndex = knownMatch.rule ? orderedRules.indexOf(knownMatch.rule) : orderedRules.length;
-    const needsVpnClientIp = request.connection === "vpn" && scope.scope === "private_network" && !request.testInput.source && orderedRules.slice(0, winnerIndex).some(rule => {
+    const needsVpnClientIp = request.connection === "vpn" && scope.scope === "private_network" && !request.testInput.source && orderedRules.slice(0, winnerIndex).find(rule => {
       if (hasDestinationGeoCondition(rule)) return false;
       const privateScope = rule.trafficScope || rule.ruleAccess || (rule.raw && rule.raw.ruleAccess);
       const originalConditions = rule.ruleConditions || rule.conditions || [];
@@ -463,11 +463,11 @@
       return matcher.matchPolicy([{ ...rule, ruleConditions: conditions, conditions }], firewallInput, lookups).rule !== undefined;
     });
     if (needsVpnClientIp) {
-      const reason = "Enter the VPN-assigned client IP to evaluate source/destination subnet direction for this private destination.";
+      const reason = "This rule requires the VPN-assigned client IP to check its source-address constraints. VPN user/group checks alone do not require it.";
       return {
-        scope, groups: [],
-        stages: [{ stage: STAGES.firewall, state: "unsupported", reason }],
-        outcome: { status: "unsupported", title: "VPN direction needs client IP", stage: STAGES.firewall.key, reason },
+        scope, groups,
+        stages: [{ stage: STAGES.firewall, state: "needs-answer", match: { rule: needsVpnClientIp, indeterminate: true, pending: [] }, reason }],
+        outcome: { status: "pending", title: "Source IP needed for candidate rule", stage: STAGES.firewall.key, rule: needsVpnClientIp, reason },
         threatCheck: null,
       };
     }
